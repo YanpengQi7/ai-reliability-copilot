@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import ReactMarkdown from "react-markdown";
 import { getIncidentWithAnalyses, hasSupabase, type AnalysisRow } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -153,7 +154,9 @@ function AnalysisCard({ a }: { a: AnalysisRow }) {
       {a.customer_impact && <Card title="Customer impact"><p className="text-neutral-200 whitespace-pre-wrap">{a.customer_impact}</p></Card>}
       {a.postmortem_draft && (
         <Card title="Postmortem draft">
-          <pre className="whitespace-pre-wrap text-sm text-neutral-300 font-mono">{a.postmortem_draft}</pre>
+          <div className="prose prose-invert prose-sm max-w-none prose-headings:text-neutral-100 prose-p:text-neutral-300 prose-li:text-neutral-300 prose-strong:text-neutral-100">
+            <ReactMarkdown>{a.postmortem_draft}</ReactMarkdown>
+          </div>
         </Card>
       )}
       {follow.length > 0 && (

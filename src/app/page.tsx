@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { experimental_useObject as useObject } from "@ai-sdk/react";
+import ReactMarkdown from "react-markdown";
 import { AnalysisSchema } from "@/lib/schema";
 
 const SAMPLE = `Time: 14:02 UTC. payment-svc p99 latency jumped from 120ms to 4.8s.
@@ -17,9 +19,39 @@ export default function Home() {
   const [service, setService] = useState("payment-svc");
   const [symptoms, setSymptoms] = useState("p99 latency 4.8s, 12% 500s, checkouts failing");
 
+  const router = useRouter();
+  const startedRef = useRef<number>(0);
+  const [saving, setSaving] = useState(false);
+
   const { object, submit, isLoading, error } = useObject({
     api: "/api/analyze",
     schema: AnalysisSchema,
+    onFinish: async ({ object }) => {
+      if (!object) return;
+      setSaving(true);
+      try {
+        const res = await fetch("/api/incidents/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            service,
+            symptoms,
+            raw_context: raw,
+            analysis: object,
+            latency_ms: Date.now() - startedRef.current,
+          }),
+        });
+        if (res.ok) {
+          const { incident_id } = await res.json();
+          router.push(`/incidents/${incident_id}`);
+        }
+      } catch (e) {
+        console.error("save failed", e);
+      } finally {
+        setSaving(false);
+      }
+    },
   });
 
   return (
@@ -78,13 +110,17 @@ export default function Home() {
           </label>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => submit({ title, service, symptoms, raw_context: raw, persist: true })}
-              disabled={isLoading || raw.length < 20}
+              onClick={() => {
+                startedRef.current = Date.now();
+                submit({ title, service, symptoms, raw_context: raw });
+              }}
+              disabled={isLoading || saving || raw.length < 20}
               className="bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-md"
             >
-              {isLoading ? "Streaming..." : "Analyze incident"}
+              {isLoading ? "Streaming..." : saving ? "Saving..." : "Analyze incident"}
             </button>
             {isLoading && <span className="text-xs text-neutral-500 animate-pulse">AI is generating sections...</span>}
+            {saving && <span className="text-xs text-neutral-500">Saving and redirecting...</span>}
           </div>
           {error && (
             <p className="text-red-400 text-sm">
@@ -207,7 +243,9 @@ function AnalysisView({ a }: { a: PartialAnalysis }) {
 
       {a.postmortem_draft && (
         <Section title="Postmortem draft">
-          <pre className="whitespace-pre-wrap text-sm text-neutral-300 font-mono">{a.postmortem_draft}</pre>
+          <div className="prose prose-invert prose-sm max-w-none prose-headings:text-neutral-100 prose-p:text-neutral-300 prose-li:text-neutral-300 prose-strong:text-neutral-100">
+            <ReactMarkdown>{a.postmortem_draft}</ReactMarkdown>
+          </div>
         </Section>
       )}
 
