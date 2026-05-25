@@ -15,6 +15,7 @@ export function Nav() {
         <Link className="hover:text-white" href="/scenarios">{t("nav.scenarios")}</Link>
         <Link className="hover:text-white" href="/evals">{t("nav.evals")}</Link>
         <Link className="hover:text-white" href="/kb">{t("nav.kb")}</Link>
+        <Link className="hover:text-white" href="/mcp-usage">{t("nav.mcpUsage")}</Link>
       </nav>
     </div>
   );

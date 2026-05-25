@@ -159,6 +159,31 @@ npm run kb:ingest -- ./docs --kind=runbook   # 强制全部当 runbook
 
 ---
 
+### 工作流 B-bis：直接接 webhook，alert 触发即分析（无需打开 UI）
+
+最贴近 production on-call 的形态：Datadog/PagerDuty/Sentry 直发 `POST /api/webhook/alert`，自动建 incident，**202 立即返回**，**后台跑分析**，~15s 后访问返回的 url 看结果。
+
+```bash
+# 设个 secret（可选但生产强烈建议）
+TOKEN=$(openssl rand -hex 32)
+printf '%s' "$TOKEN" | vercel env add WEBHOOK_SECRET production
+vercel --prod
+```
+
+在 alerter 里配 webhook URL：
+```
+https://your-deployment/api/webhook/alert?secret=<TOKEN>
+# 或者 header 形式：
+X-Webhook-Secret: <TOKEN>
+```
+
+行为：
+- 自动 parser 识别 Datadog / PagerDuty / Sentry payload（任何 JSON 都接，识别不出来就当 raw text）
+- **fast ACK**：< 100ms 返回 `{ status: "accepted", incident_id, url }`
+- **后台**：跑 KB 检索 + LLM 分析 + embedding，~15s 完成
+- 失败也会写一条 "Background analysis failed: ..." 的 placeholder analysis，方便排查
+- 配上 Slack：alerter 用 webhook 同时发 Slack（with 这个 url）→ thread 里点开就有完整分析
+
 ### 工作流 D-bis：在自己的 Claude Code 里用（MCP 模式 — 推荐给团队内部）
 
 **为什么这是杀手锏**：用户用**自己的 Claude 订阅**（Opus 4.7 比 DeepSeek 强很多）做分析，KB / similar incidents / scenarios / 持久化都从这个 server 走。**LLM 成本归零给你，质量更高给用户**。

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { supabaseAdmin } from "./supabase";
 import { hasSupabase } from "./db";
 import { embed, hasEmbeddingProvider } from "./embeddings";
+import { scanForSecrets } from "./secretScan";
 
 export type KbKind = "runbook" | "postmortem" | "service" | "architecture" | "other";
 
@@ -70,8 +71,20 @@ export async function ingestDocument(input: {
   kind: KbKind;
   title?: string;
   raw_text: string;
-}): Promise<{ document_id: string; chunks_written: number; skipped: boolean }> {
+  allowSecrets?: boolean;  // override the guard (use only if you know what you're doing)
+}): Promise<{ document_id: string; chunks_written: number; skipped: boolean; secret_findings?: ReturnType<typeof scanForSecrets> }> {
   if (!hasSupabase()) throw new Error("Supabase not configured");
+
+  // Refuse to ingest content that looks like it has secrets. Stops the most
+  // common "engineer pasted a runbook with the prod DB password in it" failure mode.
+  if (!input.allowSecrets) {
+    const findings = scanForSecrets(input.raw_text);
+    if (findings.length > 0) {
+      const summary = findings.slice(0, 5).map((f) => `  - ${f.pattern} at line ${f.line ?? "?"} (${f.match})`).join("\n");
+      throw new Error(`Refusing to ingest "${input.source_path}" — secret-like patterns found:\n${summary}\n\nRedact the file or pass allowSecrets=true if you're certain these are example tokens.`);
+    }
+  }
+
   const sb = supabaseAdmin();
   const hash = hashContent(input.raw_text);
 

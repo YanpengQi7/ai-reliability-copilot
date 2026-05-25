@@ -9,6 +9,7 @@ import { useT } from "@/lib/i18n/client";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/messages";
 import { Nav } from "@/components/Nav";
 import { tryParseAlert } from "@/lib/alertParsers";
+import { SAMPLE_ALERTS } from "@/lib/sampleAlerts";
 
 const SAMPLE = `Time: 14:02 UTC. payment-svc p99 latency jumped from 120ms to 4.8s.
 Error rate climbed from 0.1% to 12% (mostly 500s).
@@ -142,6 +143,23 @@ export default function Home() {
               />
             </label>
           </div>
+          <div className="flex items-center gap-2 flex-wrap text-xs">
+            <span className="text-neutral-500">{t("home.trySample")}</span>
+            {SAMPLE_ALERTS.map((s) => (
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => {
+                  setRaw(JSON.stringify(s.payload, null, 2));
+                  setParseNotice(null);
+                }}
+                className="px-2 py-1 rounded border border-neutral-700 text-neutral-300 hover:border-neutral-500"
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+
           <label className="flex flex-col gap-1 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-neutral-400">{t("home.field.rawContext")}</span>

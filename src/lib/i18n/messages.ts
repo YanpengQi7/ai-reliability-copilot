@@ -20,6 +20,7 @@ export const MESSAGES: Messages = {
   "nav.scenarios": { en: "Scenarios", zh: "场景库" },
   "nav.evals": { en: "Evals", zh: "评估" },
   "nav.kb": { en: "KB", zh: "知识库" },
+  "nav.mcpUsage": { en: "MCP", zh: "MCP" },
 
   // Common
   "common.loading": { en: "Loading...", zh: "加载中..." },
@@ -44,6 +45,7 @@ export const MESSAGES: Messages = {
     zh: "原始上下文（日志、指标、on-call 笔记）—— 或粘贴 Datadog / PagerDuty / Sentry alert JSON",
   },
   "home.parseAlert": { en: "Parse alert JSON", zh: "解析告警 JSON" },
+  "home.trySample": { en: "Load sample:", zh: "试用样例：" },
   "home.parsed": { en: "Parsed from", zh: "已解析" },
   "home.notRecognized": { en: "Not a recognized alert payload", zh: "未识别的告警格式" },
   "home.uploadScreenshot": { en: "📷 Attach screenshot (Grafana, error page, stack trace…)", zh: "📷 附加截图（Grafana、错误页、堆栈…）" },
@@ -118,6 +120,20 @@ export const MESSAGES: Messages = {
   "kb.totalDocs": { en: "Documents", zh: "文档数" },
   "kb.totalChunks": { en: "Chunks", zh: "Chunk 数" },
   "kb.totalEmbedded": { en: "Embedded chunks", zh: "已 embedded 的 chunk" },
+
+  // MCP usage dashboard
+  "mcp.title": { en: "MCP usage", zh: "MCP 用量" },
+  "mcp.subtitle": {
+    en: "Every tool call to /api/mcp is logged here (audit). No input/output content stored — just shape + timing.",
+    zh: "每次 /api/mcp 工具调用都记在这里（审计）。不存完整 input/output —— 只存形状 + 耗时。",
+  },
+  "mcp.totalCalls": { en: "Calls (7d)", zh: "调用数 (7d)" },
+  "mcp.errorRate": { en: "Error rate", zh: "错误率" },
+  "mcp.avgLatency": { en: "Avg latency", zh: "平均延迟" },
+  "mcp.uniqueIps": { en: "Unique IPs (7d)", zh: "独立 IP (7d)" },
+  "mcp.byTool": { en: "By tool (last 7 days)", zh: "按工具（最近 7 天）" },
+  "mcp.recentFailures": { en: "Recent failures", zh: "最近失败" },
+  "mcp.noData": { en: "No tool calls yet. Wire up your Claude Code and call a tool.", zh: "暂无调用记录。把你的 Claude Code 接上来调一次工具试试。" },
   "detail.evaluate": { en: "Evaluate with rubric", zh: "用 rubric 评估" },
   "detail.judging": { en: "Judging...", zh: "评分中..." },
   "detail.scored": { en: "Scored", zh: "得分" },
