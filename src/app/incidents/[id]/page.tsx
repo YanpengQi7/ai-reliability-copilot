@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { getIncidentWithAnalyses, hasSupabase, type AnalysisRow } from "@/lib/db";
+import { CopyButton } from "@/components/CopyButton";
+import { ReRunButton } from "@/components/ReRunButton";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,9 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
 
       <Card title="Raw incident context">
         <pre className="text-xs text-neutral-300 whitespace-pre-wrap font-mono">{incident.raw_context}</pre>
+        <div className="mt-3">
+          <ReRunButton incidentId={incident.id} />
+        </div>
       </Card>
 
       {!latest && <p className="text-neutral-400">No analyses yet.</p>}
@@ -130,7 +135,12 @@ function AnalysisCard({ a }: { a: AnalysisRow }) {
               <li key={i}>
                 <span className="font-medium">{s.step}</span>
                 {s.command && (
-                  <pre className="mt-1 bg-neutral-950 border border-neutral-800 rounded p-2 text-xs overflow-x-auto"><code>{s.command}</code></pre>
+                  <div className="mt-1 relative group">
+                    <pre className="bg-neutral-950 border border-neutral-800 rounded p-2 text-xs overflow-x-auto"><code>{s.command}</code></pre>
+                    <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <CopyButton text={s.command} />
+                    </div>
+                  </div>
                 )}
                 <p className="text-xs text-neutral-400 mt-1">Expected: {s.expected}</p>
               </li>
