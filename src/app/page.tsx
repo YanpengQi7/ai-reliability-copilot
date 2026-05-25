@@ -64,12 +64,15 @@ export default function Home() {
               Paste an incident. Get a structured 9-section response: summary, severity, root cause hypotheses, investigation checklist, mitigation, postmortem, follow-ups.
             </p>
           </div>
-          <nav className="flex gap-3 text-sm text-neutral-400">
-            <a className="hover:text-white" href="/">New</a>
-            <a className="hover:text-white" href="/incidents">Incidents</a>
-            <a className="hover:text-white" href="/scenarios">Scenarios</a>
-            <a className="hover:text-white" href="/evals">Evals</a>
-          </nav>
+          <div className="flex flex-col items-end gap-2">
+            <span className="text-xs px-2 py-1 rounded border border-amber-500/40 bg-amber-500/10 text-amber-300">Demo · 5 req/min</span>
+            <nav className="flex gap-3 text-sm text-neutral-400">
+              <a className="hover:text-white" href="/">New</a>
+              <a className="hover:text-white" href="/incidents">Incidents</a>
+              <a className="hover:text-white" href="/scenarios">Scenarios</a>
+              <a className="hover:text-white" href="/evals">Evals</a>
+            </nav>
+          </div>
         </header>
 
         <section className="grid gap-4 bg-neutral-900 border border-neutral-800 rounded-xl p-5">

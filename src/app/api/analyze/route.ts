@@ -4,6 +4,7 @@ import { z } from "zod";
 import { AnalysisSchema } from "@/lib/schema";
 import { deepseek, ANALYSIS_MODEL } from "@/lib/ai";
 import { SYSTEM_PROMPT_V1, buildUserPrompt } from "@/lib/prompts";
+import { rateLimit, clientKey } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -25,6 +26,10 @@ function jsonError(status: number, code: string, message: string) {
 export async function POST(req: NextRequest) {
   if (!process.env.DEEPSEEK_API_KEY) {
     return jsonError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY is not configured on the server.");
+  }
+  const rl = rateLimit(clientKey(req));
+  if (!rl.allowed) {
+    return jsonError(429, "RATE_LIMITED", `Demo limit: 5 requests/min. Retry in ${rl.retryAfterSec}s.`);
   }
 
   let body: unknown;
