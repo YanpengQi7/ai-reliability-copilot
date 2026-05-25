@@ -9,6 +9,7 @@ import { hasSupabase } from "@/lib/db";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { calcCost, normalizeUsage } from "@/lib/cost";
 import { embed, buildSignature } from "@/lib/embeddings";
+import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -36,6 +37,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   }
 
   const started = Date.now();
+  const queryText = [scenario.title, scenario.service, scenario.symptoms, scenario.context].filter(Boolean).join(" ").slice(0, 4000);
+  const retrieved = await retrieveContext(queryText, { limit: 5 });
+  const internal_context = formatChunksForPrompt(retrieved.chunks);
   let object;
   let tokens_in = 0;
   let tokens_out = 0;
@@ -49,6 +53,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
         symptoms: scenario.symptoms,
         raw_context: scenario.context,
         language,
+        internal_context,
       }),
       temperature: 0.2,
     });
@@ -84,7 +89,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     .single();
   if (e1) return NextResponse.json({ error: "DB_ERROR", message: e1.message, statusCode: 500 }, { status: 500 });
 
-  await sb.from("analyses").insert({
+  const { data: anaRow } = await sb.from("analyses").insert({
     incident_id: inc.id,
     model: ANALYSIS_MODEL,
     prompt_version: version,
@@ -102,7 +107,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     tokens_in,
     tokens_out,
     cost_usd,
-  });
+  }).select("id").single();
+  if (anaRow) await recordRetrievedChunks(anaRow.id, retrieved.chunks);
 
   return NextResponse.json({ incident_id: inc.id, latency_ms: latency });
 }

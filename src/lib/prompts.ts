@@ -124,6 +124,7 @@ export function buildUserPrompt(input: {
   symptoms?: string;
   raw_context: string;
   language?: OutputLanguage;
+  internal_context?: string;  // pre-formatted markdown block from RAG retrieval
 }) {
   const lang = input.language ?? "en";
   return `# Incident Context
@@ -135,7 +136,7 @@ export function buildUserPrompt(input: {
 \`\`\`
 ${input.raw_context}
 \`\`\`
-${languageInstruction(lang)}
+${input.internal_context ?? ""}${languageInstruction(lang)}
 
 Produce the structured 9-section incident response now.`;
 }

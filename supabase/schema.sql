@@ -102,3 +102,43 @@ language sql stable as $$
 $$;
 create index if not exists analyses_incident_id_idx on analyses (incident_id);
 create index if not exists evaluations_analysis_id_idx on evaluations (analysis_id);
+
+-- Knowledge base (RAG: runbooks / postmortems / service catalog / architecture)
+create table if not exists kb_documents (
+  id uuid primary key default gen_random_uuid(),
+  source_path text not null unique,
+  kind text not null,                  -- runbook | postmortem | service | architecture | other
+  title text,
+  content_hash text not null,          -- sha256 of raw_text, gates re-embedding
+  raw_text text not null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table if not exists kb_chunks (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid not null references kb_documents(id) on delete cascade,
+  chunk_index int not null,
+  text text not null,
+  embedding vector(1536),
+  signature text,
+  token_count int,
+  created_at timestamptz default now()
+);
+create index if not exists kb_chunks_document_id_idx on kb_chunks (document_id);
+create index if not exists kb_chunks_embedding_hnsw_idx on kb_chunks using hnsw (embedding vector_cosine_ops) with (m = 16, ef_construction = 64);
+create index if not exists kb_chunks_signature_trgm_idx on kb_chunks using gin (signature gin_trgm_ops);
+
+-- Junction: which chunks fed which analysis (audit trail)
+create table if not exists analysis_kb_chunks (
+  analysis_id uuid references analyses(id) on delete cascade,
+  chunk_id uuid references kb_chunks(id) on delete cascade,
+  similarity float,
+  rank int,
+  primary key (analysis_id, chunk_id)
+);
+create index if not exists analysis_kb_chunks_analysis_idx on analysis_kb_chunks (analysis_id);
+
+-- KB retrieval RPCs (see kb.ts retrieveContext())
+-- match_kb_chunks_by_embedding / match_kb_chunks_by_signature
+-- (definitions in migration add_knowledge_base; mirrored here for reference setup)

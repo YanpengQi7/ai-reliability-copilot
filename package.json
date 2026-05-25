@@ -9,7 +9,8 @@
     "lint": "eslint",
     "seed:scenarios": "tsx scripts/seed-scenarios.ts",
     "evals:run": "tsx scripts/run-evals.ts",
-    "backfill:similar": "tsx scripts/backfill-similar.ts"
+    "backfill:similar": "tsx scripts/backfill-similar.ts",
+    "kb:ingest": "tsx scripts/ingest-kb.ts"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.35",

@@ -19,6 +19,7 @@ export const MESSAGES: Messages = {
   "nav.incidents": { en: "Incidents", zh: "故障" },
   "nav.scenarios": { en: "Scenarios", zh: "场景库" },
   "nav.evals": { en: "Evals", zh: "评估" },
+  "nav.kb": { en: "KB", zh: "知识库" },
 
   // Common
   "common.loading": { en: "Loading...", zh: "加载中..." },
@@ -99,6 +100,17 @@ export const MESSAGES: Messages = {
   "detail.similar.none": { en: "No similar incidents found in the library yet.", zh: "知识库中暂无相似故障。" },
   "detail.similar.mode.vector": { en: "semantic match (pgvector)", zh: "语义匹配 (pgvector)" },
   "detail.similar.mode.trigram": { en: "lexical match (pg_trgm)", zh: "词法匹配 (pg_trgm)" },
+  "detail.kb.title": { en: "Internal docs used by the AI", zh: "AI 参考的内部文档" },
+  "detail.kb.empty": { en: "No KB chunks were used (knowledge base may be empty).", zh: "本次未使用任何知识库片段（知识库可能为空）。" },
+  "kb.title": { en: "Knowledge base", zh: "知识库" },
+  "kb.subtitle": {
+    en: "Internal docs (runbooks, postmortems, service catalog) ingested as chunks + embeddings. The AI retrieves the top 5 most relevant chunks for every incident analysis.",
+    zh: "已摄入的内部文档（runbook、postmortem、服务目录）切分为 chunk + embedding。AI 每次分析时会检索最相关的 5 个 chunk。",
+  },
+  "kb.empty": { en: "No docs ingested yet. Run npm run kb:ingest from the project root.", zh: "知识库为空。在项目根目录运行 npm run kb:ingest。" },
+  "kb.totalDocs": { en: "Documents", zh: "文档数" },
+  "kb.totalChunks": { en: "Chunks", zh: "Chunk 数" },
+  "kb.totalEmbedded": { en: "Embedded chunks", zh: "已 embedded 的 chunk" },
   "detail.evaluate": { en: "Evaluate with rubric", zh: "用 rubric 评估" },
   "detail.judging": { en: "Judging...", zh: "评分中..." },
   "detail.scored": { en: "Scored", zh: "得分" },

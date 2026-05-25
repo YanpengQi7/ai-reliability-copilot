@@ -10,6 +10,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
 import { findSimilarIncidents } from "@/lib/similar";
 import { buildSignature } from "@/lib/embeddings";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,19 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
     severity: latest?.severity,
   });
   const similar = await findSimilarIncidents(similarQuery, { excludeId: incident.id, limit: 5 });
+
+  // Knowledge chunks that the latest analysis used (audit trail from analysis_kb_chunks)
+  type UsedChunk = { chunk_id: string; similarity: number; rank: number; kb_chunks: { text: string; kb_documents: { title: string | null; source_path: string; kind: string } } };
+  let usedChunks: UsedChunk[] = [];
+  if (latest) {
+    const sb = supabaseAdmin();
+    const { data } = await sb
+      .from("analysis_kb_chunks")
+      .select("chunk_id, similarity, rank, kb_chunks(text, kb_documents(title, source_path, kind))")
+      .eq("analysis_id", latest.id)
+      .order("rank");
+    usedChunks = (data ?? []) as unknown as UsedChunk[];
+  }
 
   return (
     <Shell>
@@ -61,6 +75,24 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
           </div>
           <AnalysisCard a={latest} locale={locale} />
         </>
+      )}
+
+      {usedChunks.length > 0 && (
+        <Card title={tr("detail.kb.title")}>
+          <ul className="space-y-3">
+            {usedChunks.map((u) => (
+              <li key={u.chunk_id} className="border-l-2 border-emerald-500/40 pl-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300">[{u.rank + 1}]</span>
+                  <span className="text-xs px-1.5 py-0.5 rounded border border-emerald-500/30 text-emerald-300">{u.kb_chunks.kb_documents.kind}</span>
+                  <span className="font-medium text-neutral-200 truncate">{u.kb_chunks.kb_documents.title || u.kb_chunks.kb_documents.source_path}</span>
+                  <span className="ml-auto text-xs text-neutral-500">{(u.similarity * 100).toFixed(0)}%</span>
+                </div>
+                <pre className="text-xs text-neutral-400 mt-1 whitespace-pre-wrap line-clamp-4">{u.kb_chunks.text}</pre>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
 
       {similar.hits.length > 0 && (

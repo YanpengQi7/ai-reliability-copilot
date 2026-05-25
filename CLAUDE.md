@@ -76,6 +76,14 @@ All server inserts go through `supabaseAdmin()` (service-role key). Browser neve
 1. Append to `SCENARIOS` array in `src/lib/scenarios.ts`
 2. Run `npm run seed:scenarios` to upsert it to Supabase
 
+### Ingest internal docs into the KB (RAG)
+1. Drop markdown files into `sample-kb/` (or any directory)
+2. `npm run kb:ingest -- ./your-docs-dir` (defaults to `./sample-kb`)
+3. Filename heuristic sets `kind`: postmortem/runbook/service/architecture/other.
+   Force a kind for the whole batch: `--kind=runbook`
+4. With `OPENAI_API_KEY` set → semantic retrieval (text-embedding-3-small); without → pg_trgm fallback
+5. View ingested docs at `/kb`; chunks used per analysis shown on incident detail page
+
 ### Add a new rubric dimension
 1. Extend `RubricDim` enum + `DimensionScore` + `RubricScores` + `RUBRIC_DEFINITIONS` in `src/lib/eval/rubric.ts`
 2. Update `overallScore()` if weighting changes
@@ -130,6 +138,8 @@ npm run evals:run       # 20 evals, ~$0.03 DeepSeek
 
 > Update this section after each push. Keep to one line per commit. Older history lives in git log + `notes/day-*.md`.
 
+- `feat(kb)` — RAG knowledge base (runbooks/postmortems/service catalog); ingest CLI; retrieved chunks injected into every analysis prompt; audit trail in `analysis_kb_chunks`; `/kb` management page
+- `fix(supabase)` — defer admin client init (same module-load env bug pattern as ai.ts)
 - `feat(similar)` — pgvector HNSW + pg_trgm fallback; "Similar past incidents" section on detail page; backfill script
 - `feat(ops)` — GitHub Actions CI (tsc + lint + build on push/PR) + `/api/healthz` (readiness probe)
 - `feat(cost)` — tokens_in/tokens_out/cost_usd on every non-streaming analysis; rollup in `/evals` dashboard

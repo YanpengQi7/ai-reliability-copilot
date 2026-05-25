@@ -6,6 +6,7 @@ import { hasSupabase } from "@/lib/db";
 import { ANALYSIS_MODEL } from "@/lib/ai";
 import { DEFAULT_PROMPT_VERSION } from "@/lib/prompts";
 import { embed, buildSignature } from "@/lib/embeddings";
+import { retrieveContext, recordRetrievedChunks } from "@/lib/kb";
 
 export const runtime = "nodejs";
 
@@ -84,6 +85,17 @@ export async function POST(req: NextRequest) {
     .select("id")
     .single();
   if (e2) return NextResponse.json({ error: "DB_ERROR", message: e2.message, statusCode: 500 }, { status: 500 });
+
+  // Record which KB chunks the streaming /api/analyze pipeline retrieved.
+  // We re-run retrieval with the same query so the junction is consistent
+  // — slight cost (1 extra embed call), but the audit trail is now complete.
+  try {
+    const queryText = [input.title, input.service, input.symptoms, input.raw_context].filter(Boolean).join(" ").slice(0, 4000);
+    const r = await retrieveContext(queryText, { limit: 5 });
+    await recordRetrievedChunks(ana.id, r.chunks);
+  } catch (err) {
+    console.error("[save] recordRetrievedChunks failed:", err);
+  }
 
   return NextResponse.json({ incident_id: inc.id, analysis_id: ana.id });
 }

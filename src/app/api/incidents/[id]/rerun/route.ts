@@ -6,6 +6,7 @@ import { getSystemPrompt, buildUserPrompt, DEFAULT_PROMPT_VERSION, type PromptVe
 import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { calcCost, normalizeUsage } from "@/lib/cost";
+import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -30,6 +31,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const started = Date.now();
+  const queryText = [incident.title, incident.service, incident.symptoms, incident.raw_context].filter(Boolean).join(" ").slice(0, 4000);
+  const retrieved = await retrieveContext(queryText, { limit: 5 });
+  const internal_context = formatChunksForPrompt(retrieved.chunks);
   try {
     const { object, usage } = await generateObject({
       model: deepseek(ANALYSIS_MODEL),
@@ -40,13 +44,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         symptoms: incident.symptoms ?? undefined,
         raw_context: incident.raw_context,
         language,
+        internal_context,
       }),
       temperature: 0.2,
     });
     const latency = Date.now() - started;
     const { tokens_in, tokens_out } = normalizeUsage(usage);
     const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
-    const { error: e1 } = await sb.from("analyses").insert({
+    const { data: anaRow, error: e1 } = await sb.from("analyses").insert({
       incident_id: id,
       model: ANALYSIS_MODEL,
       prompt_version: version,
@@ -64,8 +69,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       tokens_in,
       tokens_out,
       cost_usd,
-    });
+    }).select("id").single();
     if (e1) throw e1;
+    if (anaRow) await recordRetrievedChunks(anaRow.id, retrieved.chunks);
     return NextResponse.json({ ok: true, latency_ms: latency });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

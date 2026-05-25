@@ -92,6 +92,18 @@ See [EVALUATION.md](./EVALUATION.md) for the full methodology, including limitat
 
 Each has enough context (metrics, logs, deploy history, on-call notes) to differentiate prompt versions. Browse them at `/scenarios`.
 
+## Knowledge base (internal RAG)
+
+Make the AI understand **your company**: drop your runbooks, postmortems, and service catalog into `sample-kb/` (or any directory), then `npm run kb:ingest`. Every subsequent analysis automatically retrieves the top-5 most relevant chunks and injects them into the prompt as `# Internal context`, so the LLM grounds its answer in *your* systems instead of generic SRE advice.
+
+- **Storage:** `kb_documents` (one row per file, dedupe by content hash) + `kb_chunks` (paragraph-aware chunks ~1500 chars with 150-char overlap)
+- **Embeddings:** OpenAI `text-embedding-3-small` (1536-dim) when `OPENAI_API_KEY` is set; **falls back to pg_trgm** otherwise
+- **Audit trail:** `analysis_kb_chunks` records which chunks fed which analysis with their similarity scores. Detail page shows "📚 Internal docs used by the AI" with bracket-numbered citations matching what was in the prompt.
+- **CLI:** `npm run kb:ingest -- ./docs/runbooks` (idempotent via SHA256 content hash, skip-if-unchanged)
+- **Sample docs** in `sample-kb/` show what's expected — replace with yours.
+
+The signature for similarity retrieval is the chunk text itself. Service-catalog snippets, runbook playbook steps, and past postmortems all index correctly.
+
 ## Similar-incident search
 
 Every incident gets a **signature** (concatenation of title + service + symptoms + summary + severity) and, when `OPENAI_API_KEY` is configured, a **1536-dim embedding**. The detail page shows up to 5 past incidents ranked by similarity.

@@ -5,6 +5,7 @@ import { AnalysisSchema } from "@/lib/schema";
 import { deepseek, ANALYSIS_MODEL } from "@/lib/ai";
 import { getSystemPrompt, buildUserPrompt, DEFAULT_PROMPT_VERSION, type PromptVersion } from "@/lib/prompts";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { retrieveContext, formatChunksForPrompt } from "@/lib/kb";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -47,11 +48,18 @@ export async function POST(req: NextRequest) {
   const input = parsed.data;
 
   const version: PromptVersion = input.prompt_version ?? DEFAULT_PROMPT_VERSION;
+
+  // RAG: retrieve relevant internal docs based on what the user typed.
+  // Best-effort — if KB is empty or retrieval fails, we still produce a response.
+  const queryText = [input.title, input.service, input.symptoms, input.raw_context].filter(Boolean).join(" ").slice(0, 4000);
+  const retrieved = await retrieveContext(queryText, { limit: 5 });
+  const internal_context = formatChunksForPrompt(retrieved.chunks);
+
   const result = streamObject({
     model: deepseek(ANALYSIS_MODEL),
     schema: AnalysisSchema,
     system: getSystemPrompt(version),
-    prompt: buildUserPrompt({ ...input, language: input.output_language ?? "en" }),
+    prompt: buildUserPrompt({ ...input, language: input.output_language ?? "en", internal_context }),
     temperature: 0.2,
   });
 
