@@ -49,8 +49,19 @@ export default async function EvalsPage() {
   const rows = (evals ?? []) as EvalRow[];
   const analysisIds = [...new Set(rows.map((r) => r.analysis_id))];
   const { data: analyses } = analysisIds.length
-    ? await sb.from("analyses").select("id, incident_id, prompt_version, output_language, severity, model").in("id", analysisIds)
+    ? await sb.from("analyses").select("id, incident_id, prompt_version, output_language, severity, model, tokens_in, tokens_out, cost_usd, latency_ms").in("id", analysisIds)
     : { data: [] };
+
+  // Cost rollup across all analyses (not just judged ones)
+  const { data: costRows } = await sb.from("analyses").select("model, tokens_in, tokens_out, cost_usd, latency_ms");
+  type CostRow = { model: string | null; tokens_in: number | null; tokens_out: number | null; cost_usd: string | number | null; latency_ms: number | null };
+  const costAll = (costRows ?? []) as CostRow[];
+  const costWithData = costAll.filter((r) => r.cost_usd != null);
+  const totalCostUsd = costWithData.reduce((acc, r) => acc + Number(r.cost_usd ?? 0), 0);
+  const totalTokensIn = costWithData.reduce((acc, r) => acc + (r.tokens_in ?? 0), 0);
+  const totalTokensOut = costWithData.reduce((acc, r) => acc + (r.tokens_out ?? 0), 0);
+  const avgLatency = costWithData.length ? costWithData.reduce((acc, r) => acc + (r.latency_ms ?? 0), 0) / costWithData.length : 0;
+  const avgCostUsd = costWithData.length ? totalCostUsd / costWithData.length : 0;
   const aMap = new Map<string, AnalysisLite>();
   for (const a of (analyses ?? []) as AnalysisLite[]) aMap.set(a.id, a);
 
@@ -99,6 +110,23 @@ export default async function EvalsPage() {
         </div>
         <Nav />
       </header>
+
+      <section className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+        <h2 className="text-lg font-semibold mb-3">{tr("evals.cost.title")}</h2>
+        {costWithData.length === 0 ? (
+          <p className="text-neutral-400 text-sm">{tr("evals.runHint")}</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <Stat label={tr("evals.cost.totalCost")} value={`$${totalCostUsd.toFixed(4)}`} sub={`${tr("evals.cost.sample")} ${costWithData.length}`} highlight />
+              <Stat label={tr("evals.cost.avgCost")} value={`$${avgCostUsd.toFixed(5)}`} />
+              <Stat label={tr("evals.cost.avgLatency")} value={`${Math.round(avgLatency)}ms`} />
+              <Stat label="↑ / ↓ tokens" value={`${(totalTokensIn / 1000).toFixed(1)}k / ${(totalTokensOut / 1000).toFixed(1)}k`} />
+            </div>
+            <p className="text-xs text-neutral-500 mt-3">{tr("evals.cost.note")}</p>
+          </>
+        )}
+      </section>
 
       <AggSection title={tr("evals.byVersion")} agg={byVersion} dims={dims} dimLabelKey={dimLabelKey} locale={locale} />
       <AggSection title={tr("evals.byLanguage")} agg={byLanguage} dims={dims} dimLabelKey={dimLabelKey} locale={locale} />
@@ -192,6 +220,16 @@ function AggSection({
         </div>
       )}
     </section>
+  );
+}
+
+function Stat({ label, value, sub, highlight = false }: { label: string; value: string; sub?: string; highlight?: boolean }) {
+  return (
+    <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3">
+      <p className="text-xs text-neutral-400">{label}</p>
+      <p className={`font-bold ${highlight ? "text-indigo-300" : "text-neutral-100"} text-lg mt-1`}>{value}</p>
+      {sub && <p className="text-xs text-neutral-500 mt-0.5">{sub}</p>}
+    </div>
   );
 }
 

@@ -25,6 +25,9 @@ export type AnalysisRow = {
   postmortem_draft: string | null;
   follow_ups: unknown;
   latency_ms: number | null;
+  tokens_in?: number | null;
+  tokens_out?: number | null;
+  cost_usd?: number | string | null;  // numeric returned as string by supabase-js
   created_at: string;
 };
 

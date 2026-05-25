@@ -5,6 +5,7 @@ import { deepseek, ANALYSIS_MODEL } from "@/lib/ai";
 import { getSystemPrompt, buildUserPrompt, DEFAULT_PROMPT_VERSION, type PromptVersion } from "@/lib/prompts";
 import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
+import { calcCost, normalizeUsage } from "@/lib/cost";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -30,7 +31,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const started = Date.now();
   try {
-    const { object } = await generateObject({
+    const { object, usage } = await generateObject({
       model: deepseek(ANALYSIS_MODEL),
       schema: AnalysisSchema,
       system: getSystemPrompt(version),
@@ -43,6 +44,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       temperature: 0.2,
     });
     const latency = Date.now() - started;
+    const { tokens_in, tokens_out } = normalizeUsage(usage);
+    const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
     const { error: e1 } = await sb.from("analyses").insert({
       incident_id: id,
       model: ANALYSIS_MODEL,
@@ -58,6 +61,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       postmortem_draft: object.postmortem_draft,
       follow_ups: object.follow_ups,
       latency_ms: latency,
+      tokens_in,
+      tokens_out,
+      cost_usd,
     });
     if (e1) throw e1;
     return NextResponse.json({ ok: true, latency_ms: latency });

@@ -13,6 +13,7 @@ import { deepseek, ANALYSIS_MODEL, JUDGE_MODEL } from "../src/lib/ai";
 import { getSystemPrompt, buildUserPrompt, type PromptVersion, type OutputLanguage } from "../src/lib/prompts";
 import { judge } from "../src/lib/eval/judge";
 import { RUBRIC_VERSION, overallScore } from "../src/lib/eval/rubric";
+import { calcCost, normalizeUsage } from "../src/lib/cost";
 
 const VERSIONS: PromptVersion[] = ["v1", "v2"];
 const LANGUAGES: OutputLanguage[] = ["en", "zh"];
@@ -34,7 +35,7 @@ async function main() {
         console.log(`\n→ ${scenario.slug} · ${version} · ${language}`);
         try {
           const started = Date.now();
-          const { object: analysis } = await generateObject({
+          const { object: analysis, usage } = await generateObject({
             model: deepseek(ANALYSIS_MODEL),
             schema: AnalysisSchema,
             system: getSystemPrompt(version),
@@ -47,6 +48,8 @@ async function main() {
             temperature: 0.2,
           });
           const latency_ms = Date.now() - started;
+          const { tokens_in, tokens_out } = normalizeUsage(usage);
+          const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
 
           const { data: inc, error: e1 } = await sb
             .from("incidents")
@@ -76,6 +79,9 @@ async function main() {
               postmortem_draft: analysis.postmortem_draft,
               follow_ups: analysis.follow_ups,
               latency_ms,
+              tokens_in,
+              tokens_out,
+              cost_usd,
             })
             .select("id")
             .single();

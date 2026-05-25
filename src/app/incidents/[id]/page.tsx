@@ -133,7 +133,7 @@ function AnalysisCard({ a, locale }: { a: AnalysisRow; locale: "en" | "zh" }) {
         {a.severity_reasoning && (
           <p className="text-sm text-neutral-400 mt-2">{tr("section.severityReasoning")} {a.severity_reasoning}</p>
         )}
-        <p className="text-xs text-neutral-500 mt-3 flex items-center gap-2">
+        <p className="text-xs text-neutral-500 mt-3 flex items-center gap-2 flex-wrap">
           <span>{a.model}</span>
           <span>·</span>
           <span>prompt {a.prompt_version}</span>
@@ -145,6 +145,18 @@ function AnalysisCard({ a, locale }: { a: AnalysisRow; locale: "en" | "zh" }) {
           )}
           <span>·</span>
           <span>{a.latency_ms}ms</span>
+          {(a.tokens_in != null || a.tokens_out != null) && (
+            <>
+              <span>·</span>
+              <span>{a.tokens_in ?? 0}↑ / {a.tokens_out ?? 0}↓ tok</span>
+            </>
+          )}
+          {a.cost_usd != null && (
+            <>
+              <span>·</span>
+              <span>${Number(a.cost_usd).toFixed(5)}</span>
+            </>
+          )}
         </p>
       </Card>
       {rcs.length > 0 && (

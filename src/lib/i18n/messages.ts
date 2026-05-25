@@ -123,6 +123,17 @@ export const MESSAGES: Messages = {
     zh: "暂无评估。运行 npm run evals:run。",
   },
   "evals.individual": { en: "Individual evaluations", zh: "单次评估" },
+  "evals.cost.title": { en: "Cost & usage", zh: "成本 & 用量" },
+  "evals.cost.totalCost": { en: "Total spend", zh: "总花费" },
+  "evals.cost.avgCost": { en: "Avg per analysis", zh: "单次平均" },
+  "evals.cost.totalTokensIn": { en: "Total input tokens", zh: "输入 token 总计" },
+  "evals.cost.totalTokensOut": { en: "Total output tokens", zh: "输出 token 总计" },
+  "evals.cost.avgLatency": { en: "Avg latency", zh: "平均延迟" },
+  "evals.cost.sample": { en: "n =", zh: "样本数 =" },
+  "evals.cost.note": {
+    en: "Excludes the streaming /api/analyze path — usage isn't reachable from that flow (limitation, not a bug). Includes batch evals + scenario runs + re-runs.",
+    zh: "不含流式 /api/analyze 路径（该路径无法获取 usage，是已知限制）。仅含 batch eval + scenario run + re-run。",
+  },
 
   // Rubric dim labels
   "rubric.specificity": { en: "Specificity", zh: "具体性" },

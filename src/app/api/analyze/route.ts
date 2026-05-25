@@ -55,5 +55,10 @@ export async function POST(req: NextRequest) {
     temperature: 0.2,
   });
 
+  // KNOWN LIMITATION: token usage is not captured on the streaming path.
+  // `experimental_useObject` on the client doesn't expose usage, and the response
+  // headers are already flushed by the time onFinish fires. The rerun, scenario-run,
+  // and batch-eval paths (which use generateObject) do capture usage correctly.
+  // Cost on this path is back-fillable via DeepSeek's usage export if needed.
   return result.toTextStreamResponse();
 }

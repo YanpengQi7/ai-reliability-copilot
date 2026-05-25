@@ -7,6 +7,7 @@ import { SCENARIOS } from "@/lib/scenarios";
 import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { calcCost, normalizeUsage } from "@/lib/cost";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -35,6 +36,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
 
   const started = Date.now();
   let object;
+  let tokens_in = 0;
+  let tokens_out = 0;
   try {
     const result = await generateObject({
       model: deepseek(ANALYSIS_MODEL),
@@ -49,11 +52,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       temperature: 0.2,
     });
     object = result.object;
+    ({ tokens_in, tokens_out } = normalizeUsage(result.usage));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "LLM_ERROR", message: msg, statusCode: 502 }, { status: 502 });
   }
   const latency = Date.now() - started;
+  const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
 
   const sb = supabaseAdmin();
   const { data: inc, error: e1 } = await sb
@@ -83,6 +88,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     postmortem_draft: object.postmortem_draft,
     follow_ups: object.follow_ups,
     latency_ms: latency,
+    tokens_in,
+    tokens_out,
+    cost_usd,
   });
 
   return NextResponse.json({ incident_id: inc.id, latency_ms: latency });
