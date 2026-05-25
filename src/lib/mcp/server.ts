@@ -23,6 +23,7 @@ import { AnalysisSchema } from "@/lib/schema";
 import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { embed, buildSignature } from "@/lib/embeddings";
+import { withTelemetry } from "./telemetry";
 
 const SEVERITY_RUBRIC = `# Severity rubric (from src/lib/prompts.ts SYSTEM_PROMPT_V2)
 
@@ -75,13 +76,17 @@ export function buildMcpServer() {
         limit: z.number().int().min(1).max(20).optional().default(5),
       },
     },
-    async ({ query, limit }) => {
-      const r = await retrieveContext(query, { limit });
-      const body = r.chunks.length === 0
-        ? `No KB chunks matched (mode=${r.mode}). The KB may be empty or your threshold is too tight.`
-        : r.chunks.map((c, i) => `[${i + 1}] ${c.document_title ?? c.source_path} (${c.document_kind}) · similarity ${(c.similarity * 100).toFixed(0)}%\n${c.text}`).join("\n\n---\n\n");
-      return { content: [{ type: "text", text: `# KB search (mode=${r.mode}) — ${r.chunks.length} hits\n\n${body}` }] };
-    },
+    withTelemetry(
+      "search_kb",
+      (a) => `q=${a.query}`,
+      async ({ query, limit }) => {
+        const r = await retrieveContext(query, { limit });
+        const body = r.chunks.length === 0
+          ? `No KB chunks matched (mode=${r.mode}). The KB may be empty or your threshold is too tight.`
+          : r.chunks.map((c, i) => `[${i + 1}] ${c.document_title ?? c.source_path} (${c.document_kind}) · similarity ${(c.similarity * 100).toFixed(0)}%\n${c.text}`).join("\n\n---\n\n");
+        return { content: [{ type: "text", text: `# KB search (mode=${r.mode}) — ${r.chunks.length} hits\n\n${body}` }] };
+      },
+    ),
   );
 
   server.registerTool(
@@ -94,13 +99,17 @@ export function buildMcpServer() {
         limit: z.number().int().min(1).max(20).optional().default(5),
       },
     },
-    async ({ text, limit }) => {
-      const r = await findSimilarIncidents(text, { limit });
-      const body = r.hits.length === 0
-        ? `No similar incidents found (mode=${r.mode}).`
-        : r.hits.map((h, i) => `[${i + 1}] ${h.title ?? h.service ?? h.id} · similarity ${(h.similarity * 100).toFixed(0)}%\n  service: ${h.service ?? "n/a"} · symptoms: ${h.symptoms ?? "n/a"}\n  incident_id: ${h.id}`).join("\n\n");
-      return { content: [{ type: "text", text: `# Similar incidents (mode=${r.mode})\n\n${body}` }] };
-    },
+    withTelemetry(
+      "find_similar_incidents",
+      (a) => `text=${String(a.text ?? "").slice(0, 200)}`,
+      async ({ text, limit }) => {
+        const r = await findSimilarIncidents(text, { limit });
+        const body = r.hits.length === 0
+          ? `No similar incidents found (mode=${r.mode}).`
+          : r.hits.map((h, i) => `[${i + 1}] ${h.title ?? h.service ?? h.id} · similarity ${(h.similarity * 100).toFixed(0)}%\n  service: ${h.service ?? "n/a"} · symptoms: ${h.symptoms ?? "n/a"}\n  incident_id: ${h.id}`).join("\n\n");
+        return { content: [{ type: "text", text: `# Similar incidents (mode=${r.mode})\n\n${body}` }] };
+      },
+    ),
   );
 
   server.registerTool(
@@ -110,10 +119,14 @@ export function buildMcpServer() {
       description: "Returns the 5-scenario regression library (DB pool exhaustion, OOM deploy, dependency timeout, DNS, cache stampede). Use to test analysis output or as practice incidents.",
       inputSchema: {},
     },
-    async () => {
-      const body = SCENARIOS.map((s) => `- **${s.slug}** (${s.category}, expected ${s.expected_severity}) — ${s.title}\n  service: ${s.service}\n  symptoms: ${s.symptoms}`).join("\n\n");
-      return { content: [{ type: "text", text: `# Scenario library\n\n${body}\n\nUse get_scenario(slug) for full context.` }] };
-    },
+    withTelemetry(
+      "list_scenarios",
+      () => "",
+      async () => {
+        const body = SCENARIOS.map((s) => `- **${s.slug}** (${s.category}, expected ${s.expected_severity}) — ${s.title}\n  service: ${s.service}\n  symptoms: ${s.symptoms}`).join("\n\n");
+        return { content: [{ type: "text", text: `# Scenario library\n\n${body}\n\nUse get_scenario(slug) for full context.` }] };
+      },
+    ),
   );
 
   server.registerTool(
@@ -123,13 +136,17 @@ export function buildMcpServer() {
       description: "Returns the complete raw_context for a scenario by slug, including realistic metrics, logs, deploy history, and on-call notes. Use as input to your analysis.",
       inputSchema: { slug: z.string() },
     },
-    async ({ slug }) => {
-      const s = SCENARIOS.find((x) => x.slug === slug);
-      if (!s) return { content: [{ type: "text", text: `No scenario with slug "${slug}". Call list_scenarios first.` }], isError: true };
-      return {
-        content: [{ type: "text", text: `# ${s.title}\n\nservice: ${s.service}\nsymptoms: ${s.symptoms}\ncategory: ${s.category}\nexpected severity: ${s.expected_severity}\nexpected root cause: ${s.expected_root_cause}\n\n## Raw context\n\n${s.context}` }],
-      };
-    },
+    withTelemetry(
+      "get_scenario",
+      (a) => `slug=${a.slug}`,
+      async ({ slug }) => {
+        const s = SCENARIOS.find((x) => x.slug === slug);
+        if (!s) return { content: [{ type: "text", text: `No scenario with slug "${slug}". Call list_scenarios first.` }], isError: true };
+        return {
+          content: [{ type: "text", text: `# ${s.title}\n\nservice: ${s.service}\nsymptoms: ${s.symptoms}\ncategory: ${s.category}\nexpected severity: ${s.expected_severity}\nexpected root cause: ${s.expected_root_cause}\n\n## Raw context\n\n${s.context}` }],
+        };
+      },
+    ),
   );
 
   server.registerTool(
@@ -139,13 +156,17 @@ export function buildMcpServer() {
       description: "Detect alert provider and extract structured fields (service, title, symptoms, raw_context) from a webhook JSON payload. Returns null-ish text if not recognized.",
       inputSchema: { json: z.string().describe("Raw JSON string from a Datadog/PagerDuty/Sentry webhook") },
     },
-    async ({ json }) => {
-      const parsed = tryParseAlert(json);
-      if (!parsed) return { content: [{ type: "text", text: "Not a recognized alert payload (Datadog/PagerDuty/Sentry). Treat as raw text." }] };
-      return {
-        content: [{ type: "text", text: `# Parsed from ${parsed.source}\n\ntitle: ${parsed.title ?? "(none)"}\nservice: ${parsed.service ?? "(none)"}\nsymptoms: ${parsed.symptoms ?? "(none)"}\n\n## raw_context\n${parsed.raw_context}` }],
-      };
-    },
+    withTelemetry(
+      "parse_alert_json",
+      (a) => `len=${String(a.json ?? "").length}`,
+      async ({ json }) => {
+        const parsed = tryParseAlert(json);
+        if (!parsed) return { content: [{ type: "text", text: "Not a recognized alert payload (Datadog/PagerDuty/Sentry). Treat as raw text." }] };
+        return {
+          content: [{ type: "text", text: `# Parsed from ${parsed.source}\n\ntitle: ${parsed.title ?? "(none)"}\nservice: ${parsed.service ?? "(none)"}\nsymptoms: ${parsed.symptoms ?? "(none)"}\n\n## raw_context\n${parsed.raw_context}` }],
+        };
+      },
+    ),
   );
 
   server.registerTool(
@@ -163,7 +184,10 @@ export function buildMcpServer() {
         client_model: z.string().optional().describe("Name of the LLM that generated this analysis (e.g. claude-opus-4-5), recorded for audit"),
       },
     },
-    async (input) => {
+    withTelemetry(
+      "save_incident_analysis",
+      (a) => `service=${a.service ?? "?"} title=${a.title ?? "?"} model=${a.client_model ?? "?"}`,
+      async (input) => {
       if (!hasSupabase()) return { content: [{ type: "text", text: "Database not configured (Supabase env missing)." }], isError: true };
       const sb = supabaseAdmin();
       const signature = buildSignature({
@@ -206,7 +230,8 @@ export function buildMcpServer() {
       return {
         content: [{ type: "text", text: `Saved.\n  incident_id: ${inc.id}\n  analysis_id: ${ana.id}\n  url: ${base}/incidents/${inc.id}` }],
       };
-    },
+      },
+    ),
   );
 
   server.registerTool(
@@ -216,9 +241,13 @@ export function buildMcpServer() {
       description: "Returns a description of the expected analysis JSON schema with field semantics, validation rules, and the severity rubric. Use this before producing an analysis to ensure your output is shape-compatible with save_incident_analysis.",
       inputSchema: {},
     },
-    async () => {
-      return { content: [{ type: "text", text: `${STRUCTURED_OUTPUT_GUIDE}\n\n${SEVERITY_RUBRIC}` }] };
-    },
+    withTelemetry(
+      "get_output_schema",
+      () => "",
+      async () => {
+        return { content: [{ type: "text", text: `${STRUCTURED_OUTPUT_GUIDE}\n\n${SEVERITY_RUBRIC}` }] };
+      },
+    ),
   );
 
   // ── Resources ──────────────────────────────────────────────────────

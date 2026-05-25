@@ -3,31 +3,64 @@
 //   claude mcp add ai-reliability-copilot --transport http https://<your-deployment>/api/mcp
 // and the tools we expose become callable from their local Claude session,
 // driven by whichever model they have configured. Zero LLM cost to us.
+//
+// Auth model (optional):
+//   - If MCP_AUTH_TOKEN is set in env → require Authorization: Bearer <token> on every request
+//   - If unset → public (development / open-source self-hosting default)
+//
+// Rate limit: 50 req/min per IP, in-memory (cold-start reset acceptable here
+// because abuse mitigation is the goal, not pixel-perfect billing).
 
 import { buildMcpServer } from "@/lib/mcp/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { withClientIp } from "@/lib/mcp/telemetry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Stateless mode: spin up a fresh server+transport per request.
-// Trade-off: no SSE-resumable sessions, but works seamlessly behind
-// Vercel's serverless model (no shared state needed). For our tools
-// (KB lookup, similar incidents, save) every call is independent —
-// no streaming-required workflows.
+const RATE_LIMIT_PER_MIN = 50;
+
+function unauthorized(): Response {
+  return new Response(
+    JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: "Unauthorized — set Authorization: Bearer <token>" } }),
+    { status: 401, headers: { "content-type": "application/json", "WWW-Authenticate": 'Bearer realm="mcp"' } },
+  );
+}
+
+function rateLimited(retryAfterSec: number): Response {
+  return new Response(
+    JSON.stringify({ jsonrpc: "2.0", error: { code: -32001, message: `Rate limited. Retry in ${retryAfterSec}s.` } }),
+    { status: 429, headers: { "content-type": "application/json", "Retry-After": String(retryAfterSec) } },
+  );
+}
+
+function checkAuth(req: Request): boolean {
+  const required = process.env.MCP_AUTH_TOKEN;
+  if (!required) return true; // public mode
+  const header = req.headers.get("authorization") ?? "";
+  const match = /^Bearer\s+(.+)$/i.exec(header);
+  return Boolean(match && match[1] === required);
+}
+
 async function handle(req: Request): Promise<Response> {
-  const server = buildMcpServer();
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // stateless
-    enableJsonResponse: true,
+  if (!checkAuth(req)) return unauthorized();
+  const ip = clientKey(req);
+  const rl = rateLimit(ip, { max: RATE_LIMIT_PER_MIN, namespace: "mcp" });
+  if (!rl.allowed) return rateLimited(rl.retryAfterSec);
+
+  return withClientIp(ip, async () => {
+    const server = buildMcpServer();
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: undefined, // stateless — Vercel-friendly
+      enableJsonResponse: true,
+    });
+    await server.connect(transport);
+    const res = await transport.handleRequest(req);
+    transport.close();
+    return res;
   });
-  await server.connect(transport);
-  const res = await transport.handleRequest(req);
-  // Clean up — server.connect retains a reference, drop it now that the
-  // single request/response is done.
-  transport.close();
-  return res;
 }
 
 export async function GET(req: Request) {

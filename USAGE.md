@@ -311,6 +311,36 @@ GET /api/healthz
 
 ---
 
+## 6a. MCP server 安全设置（公网部署必看）
+
+**默认是 public 模式** —— 没设 `MCP_AUTH_TOKEN` 时谁都能调。本地开发 / 内网 OK；**任何公网部署强烈建议加 token**：
+
+```bash
+# 生成一个随机 token
+openssl rand -hex 32   # 比如 a1b2c3...
+
+# 加到 Vercel
+vercel env add MCP_AUTH_TOKEN production
+# 粘 token，回车
+
+vercel --prod   # redeploy
+```
+
+用户加 MCP 时带 header：
+
+```bash
+claude mcp add --transport http ai-reliability \
+  --header "Authorization: Bearer a1b2c3..." \
+  https://你的部署/api/mcp
+```
+
+**其他默认防御**：
+- **50 req/min/IP rate limit**（in-memory，cold-start 重置）
+- **每次 tool call 记 audit log** 到 `mcp_tool_calls` 表：tool / ok / 延迟 / IP / 输入预览（前 200 字符）/ 响应字节数。**不存完整输入或输出**。
+- 想看用量：`select tool_name, count(*), avg(latency_ms)::int from mcp_tool_calls where created_at > now() - interval '1 day' group by 1 order by 2 desc;`
+
+---
+
 ## 6. 数据隐私 & 安全
 
 | 谁能看到什么 |  |

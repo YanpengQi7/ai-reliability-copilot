@@ -140,6 +140,7 @@ npm run evals:run       # 20 evals, ~$0.03 DeepSeek
 
 > Update this section after each push. Keep to one line per commit. Older history lives in git log + `notes/day-*.md`.
 
+- `feat(mcp-ops)` — bearer-token auth (env-gated via `MCP_AUTH_TOKEN`, public when unset), 50 req/min rate limit per IP, audit logging of every tool call to `mcp_tool_calls` (tool/ok/latency/ip/summary/size — no full input or output stored)
 - `feat(mcp)` — expose the app as an **MCP server** at `/api/mcp` (Streamable HTTP). 7 tools (search_kb, find_similar_incidents, list_scenarios, get_scenario, parse_alert_json, get_output_schema, save_incident_analysis). Lets users drive analysis from their own Claude Code with zero LLM cost to the platform.
 - `feat(vision)` — screenshot upload → OpenAI gpt-4o-mini → description appended to raw_context
 - `feat(alerts)` — parse Datadog / PagerDuty / Sentry webhook JSON via "Parse alert JSON" button; auto-fills service/title/symptoms + structures the raw_context
