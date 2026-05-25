@@ -53,7 +53,7 @@ Enforced by Zod ([`src/lib/schema.ts`](./src/lib/schema.ts)):
 
 ## Prompt engineering, measured
 
-Every prompt iteration is tracked against the same 5-scenario regression suite, scored by an LLM judge against a 5-dimension rubric:
+Every prompt iteration is tracked against the same 5-scenario regression suite × 2 output languages (en/zh), scored by an LLM judge against a 5-dimension rubric.
 
 | Dimension | What it measures |
 |---|---|
@@ -62,6 +62,19 @@ Every prompt iteration is tracked against the same 5-scenario regression suite, 
 | Actionability | Can on-call execute in <5 min without further research? |
 | Domain correctness | Right SRE mechanism? No invented evidence? |
 | Completeness | All 9 sections substantively filled? |
+
+### Latest results (n=18, deepseek-chat for both analyzer and judge)
+
+| | overall (1–5) |
+|---|---|
+| **Prompt v1** (rules-only) | **4.64** |
+| **Prompt v2** (rules + anchors + few-shot) | **4.44** |
+| **English output** | **4.60** |
+| **Chinese output** | **4.47** |
+
+**Surprising finding:** v2 — which I wrote specifically to fix v1's known failure modes (vague commands, missing rollbacks, severity under-rating) — scored *worse* on average. Likely cause: the additional constraints (mandatory rollback fields, required postmortem H2 list, etc.) over-narrow the model and it produces shorter, more checklist-y responses that the judge marks down on completeness. This is exactly the kind of regression you can only catch with a measured rubric — eyeballing v2 output it "looks more disciplined," but the judge disagrees. Investigating in v3.
+
+**Cross-lingual finding:** Chinese output scored ~0.13 lower on average. Per-dim breakdown points the loss to `actionability` (Chinese explanations are slightly more verbose, pushing commands into walls of prose). Codes/commands themselves were correctly kept in English (the prompt's `languageInstruction()` works).
 
 See [EVALUATION.md](./EVALUATION.md) for the full methodology, including limitations and roadmap.
 

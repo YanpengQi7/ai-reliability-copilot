@@ -8,7 +8,7 @@
 
 **AI Reliability Copilot** — Next.js 16, TypeScript, AI SDK, DeepSeek, Supabase, Vercel
 - Designed and shipped an LLM-powered incident response assistant that turns raw production incidents into a structured 9-section response (RCA hypotheses, mitigation with rollback, postmortem skeleton, follow-ups), reducing on-call cognitive load in early triage.
-- Built a **prompt evaluation pipeline** with a 5-dimension rubric (specificity/safety/actionability/domain-correctness/completeness) using LLM-as-judge; iterated prompts v1 → v2, improving average rubric score from 2.8 → 4.3 / 5 across a 5-scenario regression suite.
+- Built a **prompt evaluation pipeline** with a 5-dimension rubric (specificity/safety/actionability/domain-correctness/completeness) using LLM-as-judge; ran a 5-scenario × 2-prompt × 2-language regression matrix (n=18) and discovered v2 — written to fix v1's known failure modes — actually scored *worse* (4.44 vs 4.64), a regression invisible to eyeballing that the rubric caught.
 - Curated a **versioned SRE scenario library** (DB pool exhaustion, OOM deploy, dependency timeout, DNS, cache stampede) used as a regression suite for every prompt change.
 - Implemented streaming structured output (AI SDK `streamObject` + Zod schemas) with progressive per-section rendering, reducing perceived latency ~60%.
 - Deployed on Vercel with auto-deploy from main; full 30-day build log in repo.
@@ -24,9 +24,9 @@
 2. A 5-scenario regression suite covering the most common SRE failure modes (DB connection pool, OOM, dependency timeout, DNS, cache stampede), each with realistic context and curated ground truth.
 3. A 5-dimension rubric (specificity, safety, actionability, domain correctness, completeness) with 1/3/5 anchors per dim, scored by an LLM-as-judge at temperature 0. The judge is required to cite a concrete element of the response to justify each score.
 
-**R — Result.** I went from prompt v1 to v2 by deliberately targeting the 5 failure modes I saw in v1 outputs. Average rubric score improved from 2.8 to 4.3. More importantly, I could *explain why* in code review — instead of "v2 feels better," it was "v2 improved specificity from 2.4 to 4.6, completeness from 3.0 to 4.4, no regression on safety."
+**R — Result.** The first batch (n=18) produced a finding I did NOT expect: prompt v2, which I'd written specifically to fix v1's known failure modes (vague commands, missing rollbacks, under-rated severity), scored *worse* than v1 (4.44 vs 4.64). Eyeballing v2 it looked more disciplined; the judge said otherwise. Investigation pointed to over-constraint — v2's mandatory rollback fields and required postmortem H2 list narrowed the model into shorter, more checklist-y outputs that lost completeness points. I'd have shipped v2 thinking it was an improvement.
 
-**L — Learning.** The eval pipeline is the product, not the prompt. The prompt is the artifact you ship; the eval pipeline is the engineering that lets you keep shipping it. This changed how I think about AI engineering — it's a reliability problem, not a creative-writing problem. I want to bring that mindset to a team building user-facing LLM features.
+**L — Learning.** Two things. (1) **The eval pipeline is the product** — without it I'd have shipped a regression. The prompt is the artifact you ship; the rubric + suite is the engineering that lets you keep shipping it. (2) **My intuition about prompts is unreliable.** Adding constraints to fix specific failures can degrade the average. This changed how I think about AI engineering — it's a measurement problem, not a creative-writing problem.
 
 ---
 
@@ -50,7 +50,7 @@ This forced a clean separation: anonymous demo mode is trivial (just don't call 
 >
 > The most important thing I built wasn't the prompt. It was the **eval pipeline**.
 >
-> A 5-dimension rubric (specificity, safety, actionability, domain correctness, completeness) + LLM-as-judge + a 5-scenario regression suite (DB pool exhaustion, OOM deploy, dependency timeout, DNS, cache stampede). Prompt v1 → v2 went from 2.8 to 4.3 / 5.
+> A 5-dimension rubric (specificity, safety, actionability, domain correctness, completeness) + LLM-as-judge + a 5-scenario × 2-language regression matrix. First batch (n=18) caught something I did NOT expect: my "improved" prompt v2 actually scored *lower* than v1 (4.44 vs 4.64), because the added constraints over-narrowed the model. I would have shipped a regression without the eval loop.
 >
 > Three takeaways for anyone building LLM features in production:
 > 1. **Structured output > free text.** Zod schemas + `generateObject` removes 80% of "the AI said something weird" bugs.

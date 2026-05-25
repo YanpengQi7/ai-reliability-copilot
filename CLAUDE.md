@@ -130,6 +130,8 @@ npm run evals:run       # 20 evals, ~$0.03 DeepSeek
 
 > Update this section after each push. Keep to one line per commit. Older history lives in git log + `notes/day-*.md`.
 
+- `eval-run` — First successful 20-eval batch: v1=4.64, v2=4.44, en=4.60, zh=4.47. v2 *regressed*; investigate over-constraint in v3.
+- `fix(ai)` — defer DeepSeek provider init; tsx scripts can now load env before module-time client capture
 - `day-31` — i18n (zh/en UI) + LLM output language toggle + cross-lingual eval matrix (20 evals)
 - `fix` — persist `severity_reasoning` end-to-end (was silently dropped on save, biasing judge low)
 - `day-22-30` — README/blog drafts/portfolio.md; production build green; 11 routes
