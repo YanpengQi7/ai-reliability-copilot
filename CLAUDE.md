@@ -14,6 +14,8 @@ This file is read first by Claude Code / agents joining the project. Skim top-to
 
 **Live:** https://ai-reliability-copilot.vercel.app · **Repo:** https://github.com/YanpengQi7/ai-reliability-copilot
 
+**For users (not contributors):** point them at [USAGE.md](./USAGE.md) — 5 workflows, env setup, deploy guide, all in Chinese.
+
 **Stack:** Next.js 16 App Router, TS, Tailwind v4, AI SDK 6, DeepSeek, Supabase, Vercel. **i18n: zh/en** (UI + LLM output, independent toggles).
 
 ---

@@ -7,6 +7,7 @@ Paste a production incident — logs, metrics, on-call notes. The copilot stream
 But the real story isn't the prompt. It's the **eval pipeline** — a 5-dimension rubric, a 5-scenario regression suite, and an LLM-as-judge that scores every change, so prompt iteration is measured instead of vibes-based.
 
 **Live demo:** [ai-reliability-copilot.vercel.app](https://ai-reliability-copilot.vercel.app)
+**📖 Usage guide (中文):** [USAGE.md](./USAGE.md) — how to actually use it, end-to-end
 **Methodology deep-dive:** [EVALUATION.md](./EVALUATION.md)
 **30-day build log:** [`notes/`](./notes/)
 
