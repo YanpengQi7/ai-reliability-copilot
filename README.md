@@ -93,6 +93,16 @@ See [EVALUATION.md](./EVALUATION.md) for the full methodology, including limitat
 
 Each has enough context (metrics, logs, deploy history, on-call notes) to differentiate prompt versions. Browse them at `/scenarios`.
 
+## Use it from your own Claude Code (MCP server mode)
+
+This project ships as **both a web app and an MCP server**. Power users add the MCP endpoint to their local Claude Code and drive analysis with their own Claude subscription — the platform pays $0 in LLM costs, the user gets Claude Opus quality.
+
+```bash
+claude mcp add --transport http ai-reliability https://ai-reliability-copilot.vercel.app/api/mcp
+```
+
+7 tools exposed: `search_kb`, `find_similar_incidents`, `list_scenarios`, `get_scenario`, `parse_alert_json`, `get_output_schema`, `save_incident_analysis`. See [USAGE.md](./USAGE.md) workflow D-bis for the full pattern.
+
 ## Knowledge base (internal RAG)
 
 Make the AI understand **your company**: drop your runbooks, postmortems, and service catalog into `sample-kb/` (or any directory), then `npm run kb:ingest`. Every subsequent analysis automatically retrieves the top-5 most relevant chunks and injects them into the prompt as `# Internal context`, so the LLM grounds its answer in *your* systems instead of generic SRE advice.

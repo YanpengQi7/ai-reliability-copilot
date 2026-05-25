@@ -159,6 +159,43 @@ npm run kb:ingest -- ./docs --kind=runbook   # 强制全部当 runbook
 
 ---
 
+### 工作流 D-bis：在自己的 Claude Code 里用（MCP 模式 — 推荐给团队内部）
+
+**为什么这是杀手锏**：用户用**自己的 Claude 订阅**（Opus 4.7 比 DeepSeek 强很多）做分析，KB / similar incidents / scenarios / 持久化都从这个 server 走。**LLM 成本归零给你，质量更高给用户**。
+
+```bash
+# 一次性 setup（每个用户跑一次）
+claude mcp add --transport http ai-reliability https://ai-reliability-copilot.vercel.app/api/mcp
+
+# 然后在任何 Claude Code 会话里
+claude
+> 我手上有个 payment-svc 的 incident，p99 飙到 4.8s，error rate 12%。
+> 用 ai-reliability MCP 查一下相关 runbook 和过去类似事件，按 9 段格式输出分析，然后保存。
+```
+
+Claude 会自动调：
+- `search_kb` 拿相关 runbook 片段
+- `find_similar_incidents` 找历史类似事件
+- `get_output_schema` 拿 9 段输出 schema 规范
+- 自己（用你的 Claude 订阅）生成分析
+- `save_incident_analysis` 持久化，返回 url
+
+暴露的 7 个工具（在 [src/lib/mcp/server.ts](src/lib/mcp/server.ts)）：
+
+| 工具 | 用途 |
+|---|---|
+| `search_kb(query, limit?)` | 搜内部 runbook / postmortem / service catalog |
+| `find_similar_incidents(text, limit?)` | 找历史类似事故 |
+| `list_scenarios()` | 列 5 个 demo 场景 |
+| `get_scenario(slug)` | 拿完整场景上下文 |
+| `parse_alert_json(json)` | 解析 Datadog/PagerDuty/Sentry webhook |
+| `get_output_schema()` | 拿 9 段输出规范 + 严重程度 rubric |
+| `save_incident_analysis(...)` | 保存用户生成的分析到 DB，返回 url |
+
+**两种使用方式可以共存**：web UI（demo / 给没装 Claude Code 的人看）+ MCP server（给真在工作流里用的工程师）。
+
+---
+
 ### 工作流 E：查看 / 分析数据
 
 #### `/incidents` — 所有跑过的事故
