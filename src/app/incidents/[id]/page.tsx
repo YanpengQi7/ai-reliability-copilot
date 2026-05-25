@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import { getIncidentWithAnalyses, hasSupabase, type AnalysisRow } from "@/lib/db";
 import { CopyButton } from "@/components/CopyButton";
 import { ReRunButton } from "@/components/ReRunButton";
+import { EvaluateButton } from "@/components/EvaluateButton";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,14 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
       </Card>
 
       {!latest && <p className="text-neutral-400">No analyses yet.</p>}
-      {latest && <AnalysisCard a={latest} />}
+      {latest && (
+        <>
+          <div className="flex items-center justify-end">
+            <EvaluateButton analysisId={latest.id} />
+          </div>
+          <AnalysisCard a={latest} />
+        </>
+      )}
 
       {analyses.length > 1 && (
         <details className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-sm">
