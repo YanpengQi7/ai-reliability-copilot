@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       analysis: {
         summary: a.summary ?? "",
         severity: (a.severity ?? "SEV3") as "SEV1" | "SEV2" | "SEV3",
-        severity_reasoning: "",
+        severity_reasoning: a.severity_reasoning ?? "",
         root_causes: (a.root_causes as never) ?? [],
         investigation_checklist: (a.investigation_checklist as never) ?? [],
         mitigation_plan: (a.mitigation_plan as never) ?? [],

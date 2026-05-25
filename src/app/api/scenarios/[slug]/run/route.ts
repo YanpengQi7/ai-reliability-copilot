@@ -71,6 +71,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     prompt_version: version,
     summary: object.summary,
     severity: object.severity,
+    severity_reasoning: object.severity_reasoning,
     root_causes: object.root_causes,
     investigation_checklist: object.investigation_checklist,
     mitigation_plan: object.mitigation_plan,

@@ -55,6 +55,7 @@ export async function POST(req: NextRequest) {
       prompt_version: input.prompt_version ?? DEFAULT_PROMPT_VERSION,
       summary: a.summary,
       severity: a.severity,
+      severity_reasoning: a.severity_reasoning,
       root_causes: a.root_causes,
       investigation_checklist: a.investigation_checklist,
       mitigation_plan: a.mitigation_plan,

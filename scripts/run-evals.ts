@@ -65,6 +65,7 @@ async function main() {
             prompt_version: version,
             summary: analysis.summary,
             severity: analysis.severity,
+            severity_reasoning: analysis.severity_reasoning,
             root_causes: analysis.root_causes,
             investigation_checklist: analysis.investigation_checklist,
             mitigation_plan: analysis.mitigation_plan,

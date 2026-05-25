@@ -20,6 +20,7 @@ create table if not exists analyses (
   prompt_version text,
   summary text,
   severity text,
+  severity_reasoning text,
   root_causes jsonb,
   investigation_checklist jsonb,
   mitigation_plan jsonb,

@@ -124,6 +124,9 @@ function AnalysisCard({ a }: { a: AnalysisRow }) {
           <SeverityBadge s={a.severity} />
           <p className="text-neutral-200">{a.summary}</p>
         </div>
+        {a.severity_reasoning && (
+          <p className="text-sm text-neutral-400 mt-2">Severity reasoning: {a.severity_reasoning}</p>
+        )}
         <p className="text-xs text-neutral-500 mt-3">
           {a.model} · prompt {a.prompt_version} · {a.latency_ms}ms
         </p>
