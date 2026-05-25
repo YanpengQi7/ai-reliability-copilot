@@ -1,36 +1,129 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Reliability Copilot
 
-## Getting Started
+> Turn incident chaos into a structured 9-section response in seconds.
 
-First, run the development server:
+Paste a production incident — logs, metrics, on-call notes. The copilot streams back a structured analysis: severity, ranked root-cause hypotheses with evidence, a copy-pasteable investigation checklist, a mitigation plan with rollback steps, customer-facing impact, postmortem skeleton, and prioritized follow-ups.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+But the real story isn't the prompt. It's the **eval pipeline** — a 5-dimension rubric, a 5-scenario regression suite, and an LLM-as-judge that scores every change, so prompt iteration is measured instead of vibes-based.
+
+**Live demo:** [ai-reliability-copilot.vercel.app](https://ai-reliability-copilot.vercel.app)
+**Methodology deep-dive:** [EVALUATION.md](./EVALUATION.md)
+**30-day build log:** [`notes/`](./notes/)
+
+---
+
+## Architecture
+
+```
+   ┌───────────────────┐      ┌───────────────────┐      ┌──────────────────┐
+   │   Browser (RSC)   │◀────▶│  Next.js 16 App   │◀────▶│ DeepSeek (AI SDK)│
+   │   experimental_   │      │  Router on Vercel │      │  generate/stream │
+   │   useObject hook  │      │  (Fluid Compute)  │      │      Object      │
+   └───────────────────┘      └─────────┬─────────┘      └──────────────────┘
+                                        │
+                                        ▼
+                              ┌───────────────────┐
+                              │   Supabase (PG)   │
+                              │  incidents /      │
+                              │  analyses /       │
+                              │  scenarios /      │
+                              │  evaluations      │
+                              └───────────────────┘
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Next.js 16** App Router, RSC for read-heavy pages (incident list/detail, evals dashboard); client components only where needed (streaming form, copy buttons)
+- **AI SDK** with `streamObject` + Zod schema for guaranteed structured output
+- **DeepSeek** for both analyzer and judge (provider-swappable in one file)
+- **Supabase Postgres** for persistence; service-role client server-side only
+- **Vercel** auto-deploys on push to `main`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## The 9-section output schema
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Enforced by Zod ([`src/lib/schema.ts`](./src/lib/schema.ts)):
 
-## Learn More
+1. **Summary** + severity badge with quantitative reasoning
+2. **Severity** (SEV1/2/3) — apply rubric strictly
+3. **Root cause hypotheses** (3–5, ranked by likelihood with cited evidence)
+4. **Investigation checklist** (copy-pasteable commands, expected outputs)
+5. **Mitigation plan** (with risk + mandatory rollback per step)
+6. **Customer impact** (externally-facing)
+7. **Postmortem draft** (markdown, all H2 sections in order)
+8. **Follow-ups** (P0–P2, tied to owner roles)
+9. **Severity reasoning** (citing the rubric rule applied)
 
-To learn more about Next.js, take a look at the following resources:
+## Prompt engineering, measured
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Every prompt iteration is tracked against the same 5-scenario regression suite, scored by an LLM judge against a 5-dimension rubric:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Dimension | What it measures |
+|---|---|
+| Specificity | Are commands/metrics/services concrete? |
+| Safety | Is every mitigation reversible? Are destructive ops gated? |
+| Actionability | Can on-call execute in <5 min without further research? |
+| Domain correctness | Right SRE mechanism? No invented evidence? |
+| Completeness | All 9 sections substantively filled? |
 
-## Deploy on Vercel
+See [EVALUATION.md](./EVALUATION.md) for the full methodology, including limitations and roadmap.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scenario library
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+5 curated SRE scenarios cover the most common production failure modes:
+
+| Scenario | Category |
+|---|---|
+| Payment-svc connection pool exhausted | Database |
+| Order-svc OOM crashloop after deploy | Deploy |
+| Stripe API timeout cascading into checkout outage | Dependency |
+| Regional 5xx after DNS misconfiguration | Network |
+| Black Friday cache stampede | Capacity |
+
+Each has enough context (metrics, logs, deploy history, on-call notes) to differentiate prompt versions. Browse them at `/scenarios`.
+
+## Run locally
+
+```bash
+git clone https://github.com/YanpengQi7/ai-reliability-copilot
+cd ai-reliability-copilot
+npm install
+
+# env: create .env.local with
+#   DEEPSEEK_API_KEY=
+#   NEXT_PUBLIC_SUPABASE_URL=
+#   NEXT_PUBLIC_SUPABASE_ANON_KEY=
+#   SUPABASE_SERVICE_ROLE_KEY=
+
+# DB: in Supabase SQL editor, run supabase/schema.sql
+
+# seed the scenario library
+npm run seed:scenarios
+
+# dev
+npm run dev   # → http://localhost:3000
+
+# run the eval batch (writes to your Supabase)
+npm run evals:run
+```
+
+## Known limitations
+
+- **In-memory rate limiter** (`src/lib/rateLimit.ts`) — resets on cold start. Production swap: Upstash Redis.
+- **Judge ≠ ground truth** — same model family judges the analyzer. ~10–20% optimistic bias likely. Mitigation: periodic human review (see EVALUATION.md).
+- **No per-scenario repeats** — single-shot evaluation. Doesn't capture run-to-run variance.
+- **5 scenarios is narrow** — real production has long tails.
+
+## Tech stack
+
+- Next.js 16 (App Router, RSC, Turbopack), TypeScript, Tailwind v4
+- Vercel AI SDK 6 (`streamObject`, `generateObject`, `experimental_useObject`)
+- DeepSeek API (analyzer + judge)
+- Supabase (Postgres, service-role client on server)
+- Zod (schemas everywhere — DB inserts, LLM outputs, API inputs)
+- react-markdown + `@tailwindcss/typography` for postmortem rendering
+
+## License
+
+MIT
+
+---
+
+Built in 30 days as a side project to learn AI engineering and evaluation methodology. The full daily build log lives in [`notes/`](./notes/).
