@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
-import { RUBRIC_DEFINITIONS, type RubricDim } from "@/lib/eval/rubric";
+import { type RubricDim } from "@/lib/eval/rubric";
 import { Nav } from "@/components/Nav";
 import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
