@@ -26,6 +26,29 @@ export default function Home() {
   const [version, setVersion] = useState<"v1" | "v2">("v2");
   const [outputLang, setOutputLang] = useState<Locale>("en");
   const [parseNotice, setParseNotice] = useState<string | null>(null);
+  const [visionStatus, setVisionStatus] = useState<{ kind: "idle" | "uploading" | "ok" | "err"; msg?: string }>({ kind: "idle" });
+
+  async function handleScreenshotUpload(file: File) {
+    setVisionStatus({ kind: "uploading" });
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = String(reader.result);
+      try {
+        const res = await fetch("/api/vision", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: dataUrl }) });
+        const j = await res.json();
+        if (!res.ok) {
+          setVisionStatus({ kind: "err", msg: j.error === "MISSING_API_KEY" ? t("home.visionMissingKey") : j.message ?? "failed" });
+          return;
+        }
+        const block = `\n\n## Screenshot description (${file.name})\n${j.description}\n`;
+        setRaw((r) => r + block);
+        setVisionStatus({ kind: "ok", msg: t("home.imageDescribed") });
+      } catch (e) {
+        setVisionStatus({ kind: "err", msg: e instanceof Error ? e.message : String(e) });
+      }
+    };
+    reader.readAsDataURL(file);
+  }
 
   function parseAlertFromRaw() {
     const parsed = tryParseAlert(raw);
@@ -144,6 +167,23 @@ export default function Home() {
                 {parseNotice}
               </span>
             )}
+            <div className="flex items-center gap-3 mt-1">
+              <label className="text-xs px-2 py-1 rounded border border-emerald-500/40 text-emerald-300 hover:border-emerald-500/70 cursor-pointer">
+                {t("home.uploadScreenshot")}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleScreenshotUpload(f);
+                  }}
+                />
+              </label>
+              {visionStatus.kind === "uploading" && <span className="text-xs text-neutral-500 animate-pulse">{t("home.describingImage")}</span>}
+              {visionStatus.kind === "ok" && <span className="text-xs text-emerald-400">{visionStatus.msg}</span>}
+              {visionStatus.kind === "err" && <span className="text-xs text-amber-400">{visionStatus.msg}</span>}
+            </div>
           </label>
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-1 text-xs">
