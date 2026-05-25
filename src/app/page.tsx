@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 import { experimental_useObject as useObject } from "@ai-sdk/react";
 import ReactMarkdown from "react-markdown";
 import { AnalysisSchema } from "@/lib/schema";
+import { useT } from "@/lib/i18n/client";
+import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/messages";
+import { Nav } from "@/components/Nav";
 
 const SAMPLE = `Time: 14:02 UTC. payment-svc p99 latency jumped from 120ms to 4.8s.
 Error rate climbed from 0.1% to 12% (mostly 500s).
@@ -14,12 +17,13 @@ Recent change: payment-svc v2.41 deployed 13:50 UTC, added a new batch job.
 On-call notes: customers reporting failed checkouts; CS queue spiking.`;
 
 export default function Home() {
+  const t = useT();
   const [raw, setRaw] = useState(SAMPLE);
   const [title, setTitle] = useState("payment-svc DB connection storm");
   const [service, setService] = useState("payment-svc");
   const [symptoms, setSymptoms] = useState("p99 latency 4.8s, 12% 500s, checkouts failing");
   const [version, setVersion] = useState<"v1" | "v2">("v2");
-
+  const [outputLang, setOutputLang] = useState<Locale>("en");
   const router = useRouter();
   const startedRef = useRef<number>(0);
   const [saving, setSaving] = useState(false);
@@ -42,6 +46,7 @@ export default function Home() {
             analysis: object,
             latency_ms: Date.now() - startedRef.current,
             prompt_version: version,
+            output_language: outputLang,
           }),
         });
         if (res.ok) {
@@ -61,25 +66,20 @@ export default function Home() {
       <div className="max-w-5xl mx-auto space-y-8">
         <header className="flex items-end justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-3xl md:text-4xl font-bold tracking-tight">AI Reliability Copilot</h1>
-            <p className="text-neutral-400 mt-2 max-w-2xl">
-              Paste an incident. Get a structured 9-section response: summary, severity, root cause hypotheses, investigation checklist, mitigation, postmortem, follow-ups.
-            </p>
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight">{t("home.title")}</h1>
+            <p className="text-neutral-400 mt-2 max-w-2xl">{t("home.subtitle")}</p>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <span className="text-xs px-2 py-1 rounded border border-amber-500/40 bg-amber-500/10 text-amber-300">Demo · 5 req/min</span>
-            <nav className="flex gap-3 text-sm text-neutral-400">
-              <a className="hover:text-white" href="/">New</a>
-              <a className="hover:text-white" href="/incidents">Incidents</a>
-              <a className="hover:text-white" href="/scenarios">Scenarios</a>
-              <a className="hover:text-white" href="/evals">Evals</a>
-            </nav>
+            <span className="text-xs px-2 py-1 rounded border border-amber-500/40 bg-amber-500/10 text-amber-300">
+              {t("home.demoLimit")}
+            </span>
+            <Nav />
           </div>
         </header>
 
         <section className="grid gap-4 bg-neutral-900 border border-neutral-800 rounded-xl p-5">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-neutral-400">Title</span>
+            <span className="text-neutral-400">{t("home.field.title")}</span>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -88,7 +88,7 @@ export default function Home() {
           </label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-neutral-400">Affected service</span>
+              <span className="text-neutral-400">{t("home.field.service")}</span>
               <input
                 value={service}
                 onChange={(e) => setService(e.target.value)}
@@ -96,7 +96,7 @@ export default function Home() {
               />
             </label>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="text-neutral-400">Symptoms</span>
+              <span className="text-neutral-400">{t("home.field.symptoms")}</span>
               <input
                 value={symptoms}
                 onChange={(e) => setSymptoms(e.target.value)}
@@ -105,7 +105,7 @@ export default function Home() {
             </label>
           </div>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-neutral-400">Raw context (logs, metrics, on-call notes)</span>
+            <span className="text-neutral-400">{t("home.field.rawContext")}</span>
             <textarea
               value={raw}
               onChange={(e) => setRaw(e.target.value)}
@@ -113,9 +113,9 @@ export default function Home() {
               className="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 font-mono text-sm"
             />
           </label>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-1 text-xs">
-              <span className="text-neutral-400 mr-1">Prompt:</span>
+              <span className="text-neutral-400 mr-1">{t("home.promptLabel")}</span>
               {(["v1", "v2"] as const).map((v) => (
                 <button
                   key={v}
@@ -127,24 +127,35 @@ export default function Home() {
                 </button>
               ))}
             </div>
+            <div className="flex items-center gap-1 text-xs">
+              <span className="text-neutral-400 mr-1">{t("home.outputLanguage")}</span>
+              {LOCALES.map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => setOutputLang(l)}
+                  className={`px-2 py-1 rounded border ${outputLang === l ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-200" : "border-neutral-700 text-neutral-400 hover:border-neutral-500"}`}
+                >
+                  {LOCALE_LABELS[l]}
+                </button>
+              ))}
+            </div>
             <button
               onClick={() => {
                 startedRef.current = Date.now();
-                submit({ title, service, symptoms, raw_context: raw, prompt_version: version });
+                submit({ title, service, symptoms, raw_context: raw, prompt_version: version, output_language: outputLang });
               }}
               disabled={isLoading || saving || raw.length < 20}
               className="bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-md"
             >
-              {isLoading ? "Streaming..." : saving ? "Saving..." : "Analyze incident"}
+              {isLoading ? t("home.streaming") : saving ? t("home.saving") : t("home.analyze")}
             </button>
-            {isLoading && <span className="text-xs text-neutral-500 animate-pulse">AI is generating sections...</span>}
-            {saving && <span className="text-xs text-neutral-500">Saving and redirecting...</span>}
+            {isLoading && <span className="text-xs text-neutral-500 animate-pulse">{t("home.generatingHint")}</span>}
+            {saving && <span className="text-xs text-neutral-500">{t("home.savingHint")}</span>}
           </div>
           {error && (
             <p className="text-red-400 text-sm">
-              {error.message?.includes("MISSING_API_KEY")
-                ? "Server is missing DEEPSEEK_API_KEY. Set it in Vercel → Settings → Environment Variables and redeploy."
-                : `Error: ${error.message}`}
+              {error.message?.includes("MISSING_API_KEY") ? t("home.errorMissingKey") : `${t("common.error")}: ${error.message}`}
             </p>
           )}
         </section>
@@ -173,7 +184,6 @@ function SeverityBadge({ s }: { s?: string }) {
   return <span className={`inline-block text-xs px-2 py-1 rounded border ${color}`}>{s}</span>;
 }
 
-// Partial type — streaming object may have undefined / partial fields
 type PartialAnalysis = Partial<{
   summary: string;
   severity: string;
@@ -187,22 +197,23 @@ type PartialAnalysis = Partial<{
 }>;
 
 function AnalysisView({ a }: { a: PartialAnalysis }) {
+  const t = useT();
   return (
     <div className="grid gap-4">
       {(a.summary || a.severity) && (
-        <Section title="Summary">
+        <Section title={t("section.summary")}>
           <div className="flex items-start gap-3">
             <SeverityBadge s={a.severity} />
             <p className="text-neutral-200">{a.summary || "..."}</p>
           </div>
           {a.severity_reasoning && (
-            <p className="text-sm text-neutral-400 mt-2">Severity reasoning: {a.severity_reasoning}</p>
+            <p className="text-sm text-neutral-400 mt-2">{t("section.severityReasoning")} {a.severity_reasoning}</p>
           )}
         </Section>
       )}
 
       {a.root_causes && a.root_causes.length > 0 && (
-        <Section title="Root cause hypotheses">
+        <Section title={t("section.rootCauses")}>
           <ul className="space-y-3">
             {a.root_causes.map((r, i) =>
               r ? (
@@ -211,7 +222,7 @@ function AnalysisView({ a }: { a: PartialAnalysis }) {
                     {r.likelihood && <span className="text-xs uppercase text-neutral-500">{r.likelihood}</span>}
                     <span className="font-medium">{r.hypothesis}</span>
                   </div>
-                  {r.evidence && <p className="text-sm text-neutral-400 mt-1">Evidence: {r.evidence}</p>}
+                  {r.evidence && <p className="text-sm text-neutral-400 mt-1">{t("section.evidence")} {r.evidence}</p>}
                 </li>
               ) : null
             )}
@@ -220,7 +231,7 @@ function AnalysisView({ a }: { a: PartialAnalysis }) {
       )}
 
       {a.investigation_checklist && a.investigation_checklist.length > 0 && (
-        <Section title="Investigation checklist">
+        <Section title={t("section.investigation")}>
           <ol className="space-y-3 list-decimal list-inside">
             {a.investigation_checklist.map((s, i) =>
               s ? (
@@ -229,7 +240,7 @@ function AnalysisView({ a }: { a: PartialAnalysis }) {
                   {s.command && (
                     <pre className="mt-1 bg-neutral-950 border border-neutral-800 rounded p-2 text-xs overflow-x-auto"><code>{s.command}</code></pre>
                   )}
-                  {s.expected && <p className="text-xs text-neutral-400 mt-1">Expected: {s.expected}</p>}
+                  {s.expected && <p className="text-xs text-neutral-400 mt-1">{t("section.expected")} {s.expected}</p>}
                 </li>
               ) : null
             )}
@@ -238,14 +249,14 @@ function AnalysisView({ a }: { a: PartialAnalysis }) {
       )}
 
       {a.mitigation_plan && a.mitigation_plan.length > 0 && (
-        <Section title="Mitigation plan">
+        <Section title={t("section.mitigation")}>
           <ul className="space-y-3">
             {a.mitigation_plan.map((m, i) =>
               m ? (
                 <li key={i}>
                   <p className="font-medium">{m.action}</p>
-                  {m.risk && <p className="text-xs text-amber-300/80">Risk: {m.risk}</p>}
-                  {m.rollback && <p className="text-xs text-neutral-400">Rollback: {m.rollback}</p>}
+                  {m.risk && <p className="text-xs text-amber-300/80">{t("section.risk")} {m.risk}</p>}
+                  {m.rollback && <p className="text-xs text-neutral-400">{t("section.rollback")} {m.rollback}</p>}
                 </li>
               ) : null
             )}
@@ -254,13 +265,13 @@ function AnalysisView({ a }: { a: PartialAnalysis }) {
       )}
 
       {a.customer_impact && (
-        <Section title="Customer impact">
+        <Section title={t("section.customerImpact")}>
           <p className="text-neutral-200 whitespace-pre-wrap">{a.customer_impact}</p>
         </Section>
       )}
 
       {a.postmortem_draft && (
-        <Section title="Postmortem draft">
+        <Section title={t("section.postmortem")}>
           <div className="prose prose-invert prose-sm max-w-none prose-headings:text-neutral-100 prose-p:text-neutral-300 prose-li:text-neutral-300 prose-strong:text-neutral-100">
             <ReactMarkdown>{a.postmortem_draft}</ReactMarkdown>
           </div>
@@ -268,7 +279,7 @@ function AnalysisView({ a }: { a: PartialAnalysis }) {
       )}
 
       {a.follow_ups && a.follow_ups.length > 0 && (
-        <Section title="Follow-ups">
+        <Section title={t("section.followUps")}>
           <ul className="space-y-2">
             {a.follow_ups.map((f, i) =>
               f ? (

@@ -14,6 +14,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const url = new URL(req.url);
   const requested = url.searchParams.get("version");
   const version: PromptVersion = requested === "v1" || requested === "v2" ? requested : DEFAULT_PROMPT_VERSION;
+  const langParam = url.searchParams.get("language");
+  const language: "en" | "zh" = langParam === "zh" ? "zh" : "en";
   if (!process.env.DEEPSEEK_API_KEY) {
     return NextResponse.json({ error: "MISSING_API_KEY", message: "DEEPSEEK_API_KEY not set", statusCode: 503 }, { status: 503 });
   }
@@ -36,6 +38,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         service: incident.service ?? undefined,
         symptoms: incident.symptoms ?? undefined,
         raw_context: incident.raw_context,
+        language,
       }),
       temperature: 0.2,
     });
@@ -44,6 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       incident_id: id,
       model: ANALYSIS_MODEL,
       prompt_version: version,
+      output_language: language,
       summary: object.summary,
       severity: object.severity,
       severity_reasoning: object.severity_reasoning,

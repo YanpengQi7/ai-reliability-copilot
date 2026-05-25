@@ -18,6 +18,7 @@ create table if not exists analyses (
   incident_id uuid references incidents(id) on delete cascade,
   model text,
   prompt_version text,
+  output_language text default 'en',
   summary text,
   severity text,
   severity_reasoning text,

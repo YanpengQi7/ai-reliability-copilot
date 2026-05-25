@@ -5,13 +5,18 @@ import { getIncidentWithAnalyses, hasSupabase, type AnalysisRow } from "@/lib/db
 import { CopyButton } from "@/components/CopyButton";
 import { ReRunButton } from "@/components/ReRunButton";
 import { EvaluateButton } from "@/components/EvaluateButton";
+import { Nav } from "@/components/Nav";
+import { getLocale } from "@/lib/i18n/server";
+import { t } from "@/lib/i18n/messages";
 
 export const dynamic = "force-dynamic";
 
 export default async function IncidentDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const locale = await getLocale();
+  const tr = (k: string) => t(locale, k);
   if (!hasSupabase()) {
-    return <Shell><p className="text-neutral-400">Supabase not configured.</p></Shell>;
+    return <Shell><p className="text-neutral-400">{tr("incidents.dbMissing.title")}</p></Shell>;
   }
   const data = await getIncidentWithAnalyses(id);
   if (!data) return notFound();
@@ -21,38 +26,41 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
   return (
     <Shell>
       <header>
-        <Link href="/incidents" className="text-sm text-neutral-400 hover:text-white">← All incidents</Link>
-        <h1 className="text-2xl font-bold mt-2">{incident.title || incident.service || "Untitled"}</h1>
+        <Link href="/incidents" className="text-sm text-neutral-400 hover:text-white">{tr("detail.allIncidents")}</Link>
+        <h1 className="text-2xl font-bold mt-2">{incident.title || incident.service || tr("detail.untitled")}</h1>
         <p className="text-sm text-neutral-500 mt-1">
-          {incident.service && <span className="mr-3">service: <span className="text-neutral-300">{incident.service}</span></span>}
-          <span>created: {new Date(incident.created_at).toLocaleString()}</span>
+          {incident.service && <span className="mr-3">{tr("detail.service")} <span className="text-neutral-300">{incident.service}</span></span>}
+          <span>{tr("detail.created")} {new Date(incident.created_at).toLocaleString()}</span>
         </p>
       </header>
 
-      <Card title="Raw incident context">
+      <Card title={tr("detail.rawContext")}>
         <pre className="text-xs text-neutral-300 whitespace-pre-wrap font-mono">{incident.raw_context}</pre>
         <div className="mt-3">
           <ReRunButton incidentId={incident.id} />
         </div>
       </Card>
 
-      {!latest && <p className="text-neutral-400">No analyses yet.</p>}
+      {!latest && <p className="text-neutral-400">{tr("detail.noAnalyses")}</p>}
       {latest && (
         <>
           <div className="flex items-center justify-end">
             <EvaluateButton analysisId={latest.id} />
           </div>
-          <AnalysisCard a={latest} />
+          <AnalysisCard a={latest} locale={locale} />
         </>
       )}
 
       {analyses.length > 1 && (
         <details className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-sm">
-          <summary className="cursor-pointer text-neutral-300">{analyses.length - 1} earlier analysis version(s)</summary>
+          <summary className="cursor-pointer text-neutral-300">{analyses.length - 1} {tr("detail.earlierVersions")}</summary>
           <ul className="mt-3 space-y-2 text-neutral-400">
             {analyses.slice(1).map((a) => (
               <li key={a.id} className="flex items-center gap-2">
                 <span className="text-xs px-1.5 py-0.5 rounded border border-neutral-700">{a.prompt_version}</span>
+                {a.output_language && (
+                  <span className="text-xs px-1.5 py-0.5 rounded border border-emerald-500/30 text-emerald-300">{a.output_language}</span>
+                )}
                 <span>{a.severity}</span>
                 <span>·</span>
                 <span>{a.model}</span>
@@ -73,12 +81,9 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-10">
       <div className="max-w-5xl mx-auto space-y-6">
-        <nav className="flex gap-3 text-sm text-neutral-400 justify-end">
-          <Link className="hover:text-white" href="/">New</Link>
-          <Link className="hover:text-white" href="/incidents">Incidents</Link>
-          <Link className="hover:text-white" href="/scenarios">Scenarios</Link>
-          <Link className="hover:text-white" href="/evals">Evals</Link>
-        </nav>
+        <div className="flex justify-end">
+          <Nav />
+        </div>
         {children}
       </div>
     </main>
@@ -112,27 +117,38 @@ function asArr<T>(v: unknown): T[] {
   return Array.isArray(v) ? (v as T[]) : [];
 }
 
-function AnalysisCard({ a }: { a: AnalysisRow }) {
+function AnalysisCard({ a, locale }: { a: AnalysisRow; locale: "en" | "zh" }) {
+  const tr = (k: string) => t(locale, k);
   const rcs = asArr<RootCause>(a.root_causes);
   const checklist = asArr<Step>(a.investigation_checklist);
   const mitigation = asArr<Mitig>(a.mitigation_plan);
   const follow = asArr<Follow>(a.follow_ups);
   return (
     <div className="grid gap-4">
-      <Card title="Summary">
+      <Card title={tr("section.summary")}>
         <div className="flex items-start gap-3">
           <SeverityBadge s={a.severity} />
           <p className="text-neutral-200">{a.summary}</p>
         </div>
         {a.severity_reasoning && (
-          <p className="text-sm text-neutral-400 mt-2">Severity reasoning: {a.severity_reasoning}</p>
+          <p className="text-sm text-neutral-400 mt-2">{tr("section.severityReasoning")} {a.severity_reasoning}</p>
         )}
-        <p className="text-xs text-neutral-500 mt-3">
-          {a.model} · prompt {a.prompt_version} · {a.latency_ms}ms
+        <p className="text-xs text-neutral-500 mt-3 flex items-center gap-2">
+          <span>{a.model}</span>
+          <span>·</span>
+          <span>prompt {a.prompt_version}</span>
+          {a.output_language && (
+            <>
+              <span>·</span>
+              <span className="text-emerald-300">output: {a.output_language}</span>
+            </>
+          )}
+          <span>·</span>
+          <span>{a.latency_ms}ms</span>
         </p>
       </Card>
       {rcs.length > 0 && (
-        <Card title="Root cause hypotheses">
+        <Card title={tr("section.rootCauses")}>
           <ul className="space-y-3">
             {rcs.map((r, i) => (
               <li key={i} className="border-l-2 border-indigo-500/50 pl-3">
@@ -140,14 +156,14 @@ function AnalysisCard({ a }: { a: AnalysisRow }) {
                   <span className="text-xs uppercase text-neutral-500">{r.likelihood}</span>
                   <span className="font-medium">{r.hypothesis}</span>
                 </div>
-                <p className="text-sm text-neutral-400 mt-1">Evidence: {r.evidence}</p>
+                <p className="text-sm text-neutral-400 mt-1">{tr("section.evidence")} {r.evidence}</p>
               </li>
             ))}
           </ul>
         </Card>
       )}
       {checklist.length > 0 && (
-        <Card title="Investigation checklist">
+        <Card title={tr("section.investigation")}>
           <ol className="space-y-3 list-decimal list-inside">
             {checklist.map((s, i) => (
               <li key={i}>
@@ -160,35 +176,35 @@ function AnalysisCard({ a }: { a: AnalysisRow }) {
                     </div>
                   </div>
                 )}
-                <p className="text-xs text-neutral-400 mt-1">Expected: {s.expected}</p>
+                <p className="text-xs text-neutral-400 mt-1">{tr("section.expected")} {s.expected}</p>
               </li>
             ))}
           </ol>
         </Card>
       )}
       {mitigation.length > 0 && (
-        <Card title="Mitigation plan">
+        <Card title={tr("section.mitigation")}>
           <ul className="space-y-3">
             {mitigation.map((m, i) => (
               <li key={i}>
                 <p className="font-medium">{m.action}</p>
-                <p className="text-xs text-amber-300/80">Risk: {m.risk}</p>
-                <p className="text-xs text-neutral-400">Rollback: {m.rollback}</p>
+                <p className="text-xs text-amber-300/80">{tr("section.risk")} {m.risk}</p>
+                <p className="text-xs text-neutral-400">{tr("section.rollback")} {m.rollback}</p>
               </li>
             ))}
           </ul>
         </Card>
       )}
-      {a.customer_impact && <Card title="Customer impact"><p className="text-neutral-200 whitespace-pre-wrap">{a.customer_impact}</p></Card>}
+      {a.customer_impact && <Card title={tr("section.customerImpact")}><p className="text-neutral-200 whitespace-pre-wrap">{a.customer_impact}</p></Card>}
       {a.postmortem_draft && (
-        <Card title="Postmortem draft">
+        <Card title={tr("section.postmortem")}>
           <div className="prose prose-invert prose-sm max-w-none prose-headings:text-neutral-100 prose-p:text-neutral-300 prose-li:text-neutral-300 prose-strong:text-neutral-100">
             <ReactMarkdown>{a.postmortem_draft}</ReactMarkdown>
           </div>
         </Card>
       )}
       {follow.length > 0 && (
-        <Card title="Follow-ups">
+        <Card title={tr("section.followUps")}>
           <ul className="space-y-2">
             {follow.map((f, i) => (
               <li key={i} className="flex gap-2 text-sm">

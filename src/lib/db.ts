@@ -17,6 +17,7 @@ export type AnalysisRow = {
   summary: string | null;
   severity: string | null;
   severity_reasoning?: string | null;
+  output_language?: string | null;
   root_causes: unknown;
   investigation_checklist: unknown;
   mitigation_plan: unknown;

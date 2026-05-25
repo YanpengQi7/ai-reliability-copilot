@@ -16,6 +16,7 @@ const Body = z.object({
   analysis: AnalysisSchema,
   latency_ms: z.number().optional(),
   prompt_version: z.enum(["v1", "v2"]).optional(),
+  output_language: z.enum(["en", "zh"]).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
       incident_id: inc.id,
       model: ANALYSIS_MODEL,
       prompt_version: input.prompt_version ?? DEFAULT_PROMPT_VERSION,
+      output_language: input.output_language ?? "en",
       summary: a.summary,
       severity: a.severity,
       severity_reasoning: a.severity_reasoning,

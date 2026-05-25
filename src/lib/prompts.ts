@@ -90,11 +90,42 @@ export function getSystemPrompt(version: PromptVersion = DEFAULT_PROMPT_VERSION)
 // Back-compat — some older code imports PROMPT_VERSION directly.
 export const PROMPT_VERSION: PromptVersion = DEFAULT_PROMPT_VERSION;
 
+export type OutputLanguage = "en" | "zh";
+
+// Language instruction appended to the user prompt.
+// Key design: code/commands stay English (universal), prose translates.
+// Enum values (SEV1, P0, high/medium/low) are kept English so eval grouping works across locales.
+function languageInstruction(lang: OutputLanguage): string {
+  if (lang === "zh") {
+    return `
+
+# Output language
+
+Write all NARRATIVE prose fields in **Simplified Chinese** (简体中文):
+- \`summary\`, \`severity_reasoning\`, \`customer_impact\`, \`postmortem_draft\`
+- \`root_causes[].hypothesis\` and \`root_causes[].evidence\`
+- \`investigation_checklist[].step\` and \`investigation_checklist[].expected\`
+- \`mitigation_plan[].action\`, \`mitigation_plan[].risk\`, \`mitigation_plan[].rollback\`
+- \`follow_ups[].item\` and \`follow_ups[].owner_role\`
+
+Keep these fields in **English** regardless of locale (they are machine identifiers / industry-standard):
+- All JSON keys
+- Enum values: \`severity\` (SEV1/SEV2/SEV3), \`likelihood\` (high/medium/low), \`priority\` (P0/P1/P2)
+- The full contents of every \`investigation_checklist[].command\` field — shell commands, SQL, kubectl, etc. stay in English. You may add a brief Chinese comment after the command using # if helpful, but the command itself must be valid and executable.
+- Service/metric/log identifiers quoted from the raw context (e.g., \`payment-svc\`, \`active_connections\`, \`SEV1\`)
+
+Use professional SRE Chinese vocabulary. Don't translate technical terms that are commonly used in English in Chinese SRE contexts (latency, pod, OOM, replica, failover are fine to keep in English when natural).`;
+  }
+  return "";
+}
+
 export function buildUserPrompt(input: {
   service?: string;
   symptoms?: string;
   raw_context: string;
+  language?: OutputLanguage;
 }) {
+  const lang = input.language ?? "en";
   return `# Incident Context
 
 **Affected service:** ${input.service || "(not specified)"}
@@ -104,6 +135,7 @@ export function buildUserPrompt(input: {
 \`\`\`
 ${input.raw_context}
 \`\`\`
+${languageInstruction(lang)}
 
 Produce the structured 9-section incident response now.`;
 }

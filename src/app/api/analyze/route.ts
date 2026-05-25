@@ -15,6 +15,7 @@ const InputSchema = z.object({
   symptoms: z.string().optional(),
   raw_context: z.string().min(20, "raw_context too short — paste real incident details"),
   prompt_version: z.enum(["v1", "v2"]).optional(),
+  output_language: z.enum(["en", "zh"]).optional(),
 });
 
 function jsonError(status: number, code: string, message: string) {
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
     model: deepseek(ANALYSIS_MODEL),
     schema: AnalysisSchema,
     system: getSystemPrompt(version),
-    prompt: buildUserPrompt(input),
+    prompt: buildUserPrompt({ ...input, language: input.output_language ?? "en" }),
     temperature: 0.2,
   });
 
