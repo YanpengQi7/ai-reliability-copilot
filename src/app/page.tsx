@@ -8,6 +8,7 @@ import { AnalysisSchema } from "@/lib/schema";
 import { useT } from "@/lib/i18n/client";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/messages";
 import { Nav } from "@/components/Nav";
+import { tryParseAlert } from "@/lib/alertParsers";
 
 const SAMPLE = `Time: 14:02 UTC. payment-svc p99 latency jumped from 120ms to 4.8s.
 Error rate climbed from 0.1% to 12% (mostly 500s).
@@ -24,6 +25,20 @@ export default function Home() {
   const [symptoms, setSymptoms] = useState("p99 latency 4.8s, 12% 500s, checkouts failing");
   const [version, setVersion] = useState<"v1" | "v2">("v2");
   const [outputLang, setOutputLang] = useState<Locale>("en");
+  const [parseNotice, setParseNotice] = useState<string | null>(null);
+
+  function parseAlertFromRaw() {
+    const parsed = tryParseAlert(raw);
+    if (!parsed) {
+      setParseNotice(t("home.notRecognized"));
+      return;
+    }
+    if (parsed.title) setTitle(parsed.title);
+    if (parsed.service) setService(parsed.service);
+    if (parsed.symptoms) setSymptoms(parsed.symptoms);
+    setRaw(parsed.raw_context || raw);
+    setParseNotice(`${t("home.parsed")} ${parsed.source}`);
+  }
   const router = useRouter();
   const startedRef = useRef<number>(0);
   const [saving, setSaving] = useState(false);
@@ -105,13 +120,30 @@ export default function Home() {
             </label>
           </div>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-neutral-400">{t("home.field.rawContext")}</span>
+            <div className="flex items-center justify-between">
+              <span className="text-neutral-400">{t("home.field.rawContext")}</span>
+              <button
+                type="button"
+                onClick={parseAlertFromRaw}
+                className="text-xs px-2 py-1 rounded border border-emerald-500/40 text-emerald-300 hover:border-emerald-500/70"
+              >
+                {t("home.parseAlert")}
+              </button>
+            </div>
             <textarea
               value={raw}
-              onChange={(e) => setRaw(e.target.value)}
+              onChange={(e) => {
+                setRaw(e.target.value);
+                setParseNotice(null);
+              }}
               rows={10}
               className="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 font-mono text-sm"
             />
+            {parseNotice && (
+              <span className={`text-xs ${parseNotice.includes(t("home.notRecognized")) ? "text-amber-400" : "text-emerald-400"}`}>
+                {parseNotice}
+              </span>
+            )}
           </label>
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-1 text-xs">

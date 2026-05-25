@@ -138,6 +138,7 @@ npm run evals:run       # 20 evals, ~$0.03 DeepSeek
 
 > Update this section after each push. Keep to one line per commit. Older history lives in git log + `notes/day-*.md`.
 
+- `feat(alerts)` — parse Datadog / PagerDuty / Sentry webhook JSON via "Parse alert JSON" button; auto-fills service/title/symptoms + structures the raw_context
 - `feat(kb)` — RAG knowledge base (runbooks/postmortems/service catalog); ingest CLI; retrieved chunks injected into every analysis prompt; audit trail in `analysis_kb_chunks`; `/kb` management page
 - `fix(supabase)` — defer admin client init (same module-load env bug pattern as ai.ts)
 - `feat(similar)` — pgvector HNSW + pg_trgm fallback; "Similar past incidents" section on detail page; backfill script
