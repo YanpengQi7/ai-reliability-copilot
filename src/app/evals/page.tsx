@@ -198,7 +198,7 @@ function AggSection({
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-10">
-      <div className="max-w-6xl mx-auto space-y-6">{children}</div>
+      <div className="max-w-5xl mx-auto space-y-6">{children}</div>
     </main>
   );
 }
