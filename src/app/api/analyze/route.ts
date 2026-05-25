@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { generateObject } from "ai";
+import { NextRequest } from "next/server";
+import { streamObject } from "ai";
 import { z } from "zod";
 import { AnalysisSchema } from "@/lib/schema";
 import { deepseek, ANALYSIS_MODEL } from "@/lib/ai";
@@ -17,94 +17,73 @@ const InputSchema = z.object({
   persist: z.boolean().optional().default(true),
 });
 
+function jsonError(status: number, code: string, message: string) {
+  return new Response(JSON.stringify({ error: code, message, statusCode: status }), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 export async function POST(req: NextRequest) {
+  if (!process.env.DEEPSEEK_API_KEY) {
+    return jsonError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY is not configured on the server.");
+  }
+
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "INVALID_JSON", message: "Body must be JSON", statusCode: 400 }, { status: 400 });
+    return jsonError(400, "INVALID_JSON", "Body must be JSON");
   }
-
   const parsed = InputSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "VALIDATION_ERROR", message: parsed.error.message, statusCode: 400 },
-      { status: 400 }
-    );
+    return jsonError(400, "VALIDATION_ERROR", parsed.error.issues.map((i) => i.message).join("; "));
   }
   const input = parsed.data;
 
   const started = Date.now();
-  let analysis;
-  try {
-    const result = await generateObject({
-      model: deepseek(ANALYSIS_MODEL),
-      schema: AnalysisSchema,
-      system: SYSTEM_PROMPT_V1,
-      prompt: buildUserPrompt(input),
-      temperature: 0.2,
-    });
-    analysis = result.object;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json(
-      { error: "LLM_ERROR", message: msg, statusCode: 502 },
-      { status: 502 }
-    );
-  }
-  const latency_ms = Date.now() - started;
-
-  // Optionally persist to Supabase. If env vars not set yet, just return analysis.
-  let incident_id: string | null = null;
-  let analysis_id: string | null = null;
-  if (input.persist && process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    try {
-      const sb = supabaseAdmin();
-      const { data: inc, error: incErr } = await sb
-        .from("incidents")
-        .insert({
-          title: input.title ?? null,
-          service: input.service ?? null,
-          symptoms: input.symptoms ?? null,
-          raw_context: input.raw_context,
-        })
-        .select("id")
-        .single();
-      if (incErr) throw incErr;
-      incident_id = inc.id;
-
-      const { data: ana, error: anaErr } = await sb
-        .from("analyses")
-        .insert({
-          incident_id,
+  const result = streamObject({
+    model: deepseek(ANALYSIS_MODEL),
+    schema: AnalysisSchema,
+    system: SYSTEM_PROMPT_V1,
+    prompt: buildUserPrompt(input),
+    temperature: 0.2,
+    onFinish: async ({ object }) => {
+      if (!object) return;
+      if (!input.persist) return;
+      if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return;
+      try {
+        const sb = supabaseAdmin();
+        const { data: inc, error: incErr } = await sb
+          .from("incidents")
+          .insert({
+            title: input.title ?? null,
+            service: input.service ?? null,
+            symptoms: input.symptoms ?? null,
+            raw_context: input.raw_context,
+          })
+          .select("id")
+          .single();
+        if (incErr) throw incErr;
+        await sb.from("analyses").insert({
+          incident_id: inc.id,
           model: ANALYSIS_MODEL,
           prompt_version: PROMPT_VERSION,
-          summary: analysis.summary,
-          severity: analysis.severity,
-          root_causes: analysis.root_causes,
-          investigation_checklist: analysis.investigation_checklist,
-          mitigation_plan: analysis.mitigation_plan,
-          customer_impact: analysis.customer_impact,
-          postmortem_draft: analysis.postmortem_draft,
-          follow_ups: analysis.follow_ups,
-          latency_ms,
-        })
-        .select("id")
-        .single();
-      if (anaErr) throw anaErr;
-      analysis_id = ana.id;
-    } catch (err) {
-      // Persistence is best-effort on Day 1 — don't fail the request.
-      console.error("[analyze] persist failed:", err);
-    }
-  }
-
-  return NextResponse.json({
-    incident_id,
-    analysis_id,
-    prompt_version: PROMPT_VERSION,
-    model: ANALYSIS_MODEL,
-    latency_ms,
-    analysis,
+          summary: object.summary,
+          severity: object.severity,
+          root_causes: object.root_causes,
+          investigation_checklist: object.investigation_checklist,
+          mitigation_plan: object.mitigation_plan,
+          customer_impact: object.customer_impact,
+          postmortem_draft: object.postmortem_draft,
+          follow_ups: object.follow_ups,
+          latency_ms: Date.now() - started,
+        });
+      } catch (err) {
+        console.error("[analyze] persist failed:", err);
+      }
+    },
   });
+
+  return result.toTextStreamResponse();
 }

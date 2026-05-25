@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.35",
+    "@ai-sdk/react": "^3.0.193",
     "@supabase/supabase-js": "^2.106.2",
     "ai": "^6.0.191",
     "next": "16.2.6",

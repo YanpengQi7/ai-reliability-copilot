@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { Analysis } from "@/lib/schema";
+import { experimental_useObject as useObject } from "@ai-sdk/react";
+import { AnalysisSchema } from "@/lib/schema";
 
 const SAMPLE = `Time: 14:02 UTC. payment-svc p99 latency jumped from 120ms to 4.8s.
 Error rate climbed from 0.1% to 12% (mostly 500s).
@@ -12,46 +13,42 @@ On-call notes: customers reporting failed checkouts; CS queue spiking.`;
 
 export default function Home() {
   const [raw, setRaw] = useState(SAMPLE);
+  const [title, setTitle] = useState("payment-svc DB connection storm");
   const [service, setService] = useState("payment-svc");
-  const [symptoms, setSymptoms] = useState("p99 latency 4.8s, 12% 500s, customer checkouts failing");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<Analysis | null>(null);
-  const [meta, setMeta] = useState<{ latency_ms: number; model: string; prompt_version: string } | null>(null);
+  const [symptoms, setSymptoms] = useState("p99 latency 4.8s, 12% 500s, checkouts failing");
 
-  async function run() {
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    setMeta(null);
-    try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ raw_context: raw, service, symptoms, persist: false }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "request failed");
-      setResult(data.analysis);
-      setMeta({ latency_ms: data.latency_ms, model: data.model, prompt_version: data.prompt_version });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { object, submit, isLoading, error } = useObject({
+    api: "/api/analyze",
+    schema: AnalysisSchema,
+  });
 
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-10">
       <div className="max-w-5xl mx-auto space-y-8">
-        <header>
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight">AI Reliability Copilot</h1>
-          <p className="text-neutral-400 mt-2">
-            Paste an incident. Get a structured 9-section response: summary, severity, root cause hypotheses, investigation checklist, mitigation plan, customer impact, postmortem draft, follow-ups.
-          </p>
+        <header className="flex items-end justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-bold tracking-tight">AI Reliability Copilot</h1>
+            <p className="text-neutral-400 mt-2 max-w-2xl">
+              Paste an incident. Get a structured 9-section response: summary, severity, root cause hypotheses, investigation checklist, mitigation, postmortem, follow-ups.
+            </p>
+          </div>
+          <nav className="flex gap-3 text-sm text-neutral-400">
+            <a className="hover:text-white" href="/">New</a>
+            <a className="hover:text-white" href="/incidents">Incidents</a>
+            <a className="hover:text-white" href="/scenarios">Scenarios</a>
+            <a className="hover:text-white" href="/evals">Evals</a>
+          </nav>
         </header>
 
         <section className="grid gap-4 bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-neutral-400">Title</span>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2"
+            />
+          </label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-neutral-400">Affected service</span>
@@ -81,22 +78,24 @@ export default function Home() {
           </label>
           <div className="flex items-center gap-3">
             <button
-              onClick={run}
-              disabled={loading || raw.length < 20}
+              onClick={() => submit({ title, service, symptoms, raw_context: raw, persist: true })}
+              disabled={isLoading || raw.length < 20}
               className="bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-md"
             >
-              {loading ? "Analyzing..." : "Analyze incident"}
+              {isLoading ? "Streaming..." : "Analyze incident"}
             </button>
-            {meta && (
-              <span className="text-xs text-neutral-500">
-                {meta.model} · prompt {meta.prompt_version} · {meta.latency_ms}ms
-              </span>
-            )}
+            {isLoading && <span className="text-xs text-neutral-500 animate-pulse">AI is generating sections...</span>}
           </div>
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {error && (
+            <p className="text-red-400 text-sm">
+              {error.message?.includes("MISSING_API_KEY")
+                ? "Server is missing DEEPSEEK_API_KEY. Set it in Vercel → Settings → Environment Variables and redeploy."
+                : `Error: ${error.message}`}
+            </p>
+          )}
         </section>
 
-        {result && <AnalysisView a={result} />}
+        {object && <AnalysisView a={object} />}
       </div>
     </main>
   );
@@ -111,7 +110,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function SeverityBadge({ s }: { s: string }) {
+function SeverityBadge({ s }: { s?: string }) {
+  if (!s) return null;
   const color =
     s === "SEV1" ? "bg-red-500/20 text-red-300 border-red-500/40" :
     s === "SEV2" ? "bg-amber-500/20 text-amber-300 border-amber-500/40" :
@@ -119,74 +119,113 @@ function SeverityBadge({ s }: { s: string }) {
   return <span className={`inline-block text-xs px-2 py-1 rounded border ${color}`}>{s}</span>;
 }
 
-function AnalysisView({ a }: { a: Analysis }) {
+// Partial type — streaming object may have undefined / partial fields
+type PartialAnalysis = Partial<{
+  summary: string;
+  severity: string;
+  severity_reasoning: string;
+  root_causes: Array<{ hypothesis?: string; evidence?: string; likelihood?: string } | undefined>;
+  investigation_checklist: Array<{ step?: string; command?: string; expected?: string } | undefined>;
+  mitigation_plan: Array<{ action?: string; risk?: string; rollback?: string } | undefined>;
+  customer_impact: string;
+  postmortem_draft: string;
+  follow_ups: Array<{ item?: string; owner_role?: string; priority?: string } | undefined>;
+}>;
+
+function AnalysisView({ a }: { a: PartialAnalysis }) {
   return (
     <div className="grid gap-4">
-      <Section title="Summary">
-        <div className="flex items-start gap-3">
-          <SeverityBadge s={a.severity} />
-          <p className="text-neutral-200">{a.summary}</p>
-        </div>
-        <p className="text-sm text-neutral-400 mt-2">Severity reasoning: {a.severity_reasoning}</p>
-      </Section>
+      {(a.summary || a.severity) && (
+        <Section title="Summary">
+          <div className="flex items-start gap-3">
+            <SeverityBadge s={a.severity} />
+            <p className="text-neutral-200">{a.summary || "..."}</p>
+          </div>
+          {a.severity_reasoning && (
+            <p className="text-sm text-neutral-400 mt-2">Severity reasoning: {a.severity_reasoning}</p>
+          )}
+        </Section>
+      )}
 
-      <Section title="Root cause hypotheses">
-        <ul className="space-y-3">
-          {a.root_causes.map((r, i) => (
-            <li key={i} className="border-l-2 border-indigo-500/50 pl-3">
-              <div className="flex gap-2 items-center">
-                <span className="text-xs uppercase text-neutral-500">{r.likelihood}</span>
-                <span className="font-medium">{r.hypothesis}</span>
-              </div>
-              <p className="text-sm text-neutral-400 mt-1">Evidence: {r.evidence}</p>
-            </li>
-          ))}
-        </ul>
-      </Section>
+      {a.root_causes && a.root_causes.length > 0 && (
+        <Section title="Root cause hypotheses">
+          <ul className="space-y-3">
+            {a.root_causes.map((r, i) =>
+              r ? (
+                <li key={i} className="border-l-2 border-indigo-500/50 pl-3">
+                  <div className="flex gap-2 items-center">
+                    {r.likelihood && <span className="text-xs uppercase text-neutral-500">{r.likelihood}</span>}
+                    <span className="font-medium">{r.hypothesis}</span>
+                  </div>
+                  {r.evidence && <p className="text-sm text-neutral-400 mt-1">Evidence: {r.evidence}</p>}
+                </li>
+              ) : null
+            )}
+          </ul>
+        </Section>
+      )}
 
-      <Section title="Investigation checklist">
-        <ol className="space-y-3 list-decimal list-inside">
-          {a.investigation_checklist.map((s, i) => (
-            <li key={i}>
-              <span className="font-medium">{s.step}</span>
-              <pre className="mt-1 bg-neutral-950 border border-neutral-800 rounded p-2 text-xs overflow-x-auto"><code>{s.command}</code></pre>
-              <p className="text-xs text-neutral-400 mt-1">Expected: {s.expected}</p>
-            </li>
-          ))}
-        </ol>
-      </Section>
+      {a.investigation_checklist && a.investigation_checklist.length > 0 && (
+        <Section title="Investigation checklist">
+          <ol className="space-y-3 list-decimal list-inside">
+            {a.investigation_checklist.map((s, i) =>
+              s ? (
+                <li key={i}>
+                  <span className="font-medium">{s.step}</span>
+                  {s.command && (
+                    <pre className="mt-1 bg-neutral-950 border border-neutral-800 rounded p-2 text-xs overflow-x-auto"><code>{s.command}</code></pre>
+                  )}
+                  {s.expected && <p className="text-xs text-neutral-400 mt-1">Expected: {s.expected}</p>}
+                </li>
+              ) : null
+            )}
+          </ol>
+        </Section>
+      )}
 
-      <Section title="Mitigation plan">
-        <ul className="space-y-3">
-          {a.mitigation_plan.map((m, i) => (
-            <li key={i}>
-              <p className="font-medium">{m.action}</p>
-              <p className="text-xs text-amber-300/80">Risk: {m.risk}</p>
-              <p className="text-xs text-neutral-400">Rollback: {m.rollback}</p>
-            </li>
-          ))}
-        </ul>
-      </Section>
+      {a.mitigation_plan && a.mitigation_plan.length > 0 && (
+        <Section title="Mitigation plan">
+          <ul className="space-y-3">
+            {a.mitigation_plan.map((m, i) =>
+              m ? (
+                <li key={i}>
+                  <p className="font-medium">{m.action}</p>
+                  {m.risk && <p className="text-xs text-amber-300/80">Risk: {m.risk}</p>}
+                  {m.rollback && <p className="text-xs text-neutral-400">Rollback: {m.rollback}</p>}
+                </li>
+              ) : null
+            )}
+          </ul>
+        </Section>
+      )}
 
-      <Section title="Customer impact">
-        <p className="text-neutral-200 whitespace-pre-wrap">{a.customer_impact}</p>
-      </Section>
+      {a.customer_impact && (
+        <Section title="Customer impact">
+          <p className="text-neutral-200 whitespace-pre-wrap">{a.customer_impact}</p>
+        </Section>
+      )}
 
-      <Section title="Postmortem draft">
-        <pre className="whitespace-pre-wrap text-sm text-neutral-300 font-mono">{a.postmortem_draft}</pre>
-      </Section>
+      {a.postmortem_draft && (
+        <Section title="Postmortem draft">
+          <pre className="whitespace-pre-wrap text-sm text-neutral-300 font-mono">{a.postmortem_draft}</pre>
+        </Section>
+      )}
 
-      <Section title="Follow-ups">
-        <ul className="space-y-2">
-          {a.follow_ups.map((f, i) => (
-            <li key={i} className="flex gap-2 text-sm">
-              <span className="text-xs px-2 py-0.5 rounded bg-neutral-800 text-neutral-300">{f.priority}</span>
-              <span className="text-neutral-200">{f.item}</span>
-              <span className="text-neutral-500">— {f.owner_role}</span>
-            </li>
-          ))}
-        </ul>
-      </Section>
+      {a.follow_ups && a.follow_ups.length > 0 && (
+        <Section title="Follow-ups">
+          <ul className="space-y-2">
+            {a.follow_ups.map((f, i) =>
+              f ? (
+                <li key={i} className="flex gap-2 text-sm">
+                  {f.priority && <span className="text-xs px-2 py-0.5 rounded bg-neutral-800 text-neutral-300">{f.priority}</span>}
+                  <span className="text-neutral-200">{f.item}</span>
+                  {f.owner_role && <span className="text-neutral-500">— {f.owner_role}</span>}
+                </li>
+              ) : null
+            )}
+          </ul>
+        </Section>
+      )}
     </div>
   );
 }
