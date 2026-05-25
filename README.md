@@ -92,6 +92,18 @@ See [EVALUATION.md](./EVALUATION.md) for the full methodology, including limitat
 
 Each has enough context (metrics, logs, deploy history, on-call notes) to differentiate prompt versions. Browse them at `/scenarios`.
 
+## Similar-incident search
+
+Every incident gets a **signature** (concatenation of title + service + symptoms + summary + severity) and, when `OPENAI_API_KEY` is configured, a **1536-dim embedding**. The detail page shows up to 5 past incidents ranked by similarity.
+
+Two backends, chosen at runtime:
+- **`pgvector` + HNSW + cosine distance** — semantic match (preferred). Embeddings from `text-embedding-3-small` ($0.02/M tokens). Returns matches above `1 - cosine_distance > 0.4`.
+- **`pg_trgm`** — lexical fallback when no embedding provider is configured. Returns matches with trigram similarity > 0.15.
+
+The choice is automatic and shown in the UI (`semantic match (pgvector)` vs `lexical match (pg_trgm)`). Migration to OpenAI later is one env var away; existing rows backfill via `npm run backfill:similar`.
+
+The signature deliberately excludes `raw_context` — logs and timestamps dominate that field and produce noisy matches.
+
 ## Run locally
 
 ```bash

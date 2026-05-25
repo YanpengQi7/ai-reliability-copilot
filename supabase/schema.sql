@@ -2,6 +2,8 @@
 -- Run this in Supabase SQL editor (or via `supabase db push` after `supabase link`)
 
 create extension if not exists "pgcrypto";
+create extension if not exists vector;
+create extension if not exists pg_trgm;
 
 create table if not exists incidents (
   id uuid primary key default gen_random_uuid(),
@@ -10,8 +12,13 @@ create table if not exists incidents (
   raw_context text not null,
   service text,
   symptoms text,
+  signature text,
+  embedding vector(1536),
   created_at timestamptz default now()
 );
+
+create index if not exists incidents_signature_trgm_idx on incidents using gin (signature gin_trgm_ops);
+create index if not exists incidents_embedding_hnsw_idx on incidents using hnsw (embedding vector_cosine_ops) with (m = 16, ef_construction = 64);
 
 create table if not exists analyses (
   id uuid primary key default gen_random_uuid(),
@@ -58,5 +65,40 @@ create table if not exists evaluations (
 );
 
 create index if not exists incidents_created_at_idx on incidents (created_at desc);
+
+-- Similar-incident RPCs (called via supabase-js .rpc(...))
+create or replace function match_incidents_by_embedding(
+  query_embedding vector(1536),
+  match_threshold float,
+  match_count int,
+  exclude_id uuid default null
+) returns table (id uuid, title text, service text, symptoms text, similarity float, created_at timestamptz)
+language sql stable as $$
+  select i.id, i.title, i.service, i.symptoms,
+    1 - (i.embedding <=> query_embedding) as similarity, i.created_at
+  from incidents i
+  where i.embedding is not null
+    and (exclude_id is null or i.id <> exclude_id)
+    and 1 - (i.embedding <=> query_embedding) > match_threshold
+  order by i.embedding <=> query_embedding
+  limit match_count;
+$$;
+
+create or replace function match_incidents_by_signature(
+  query_text text,
+  match_threshold float,
+  match_count int,
+  exclude_id uuid default null
+) returns table (id uuid, title text, service text, symptoms text, similarity float, created_at timestamptz)
+language sql stable as $$
+  select i.id, i.title, i.service, i.symptoms,
+    similarity(i.signature, query_text) as similarity, i.created_at
+  from incidents i
+  where i.signature is not null
+    and (exclude_id is null or i.id <> exclude_id)
+    and similarity(i.signature, query_text) > match_threshold
+  order by similarity(i.signature, query_text) desc
+  limit match_count;
+$$;
 create index if not exists analyses_incident_id_idx on analyses (incident_id);
 create index if not exists evaluations_analysis_id_idx on evaluations (analysis_id);

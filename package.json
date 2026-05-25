@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed:scenarios": "tsx scripts/seed-scenarios.ts",
-    "evals:run": "tsx scripts/run-evals.ts"
+    "evals:run": "tsx scripts/run-evals.ts",
+    "backfill:similar": "tsx scripts/backfill-similar.ts"
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.35",
@@ -16,6 +17,7 @@
     "@supabase/supabase-js": "^2.106.2",
     "ai": "^6.0.191",
     "next": "16.2.6",
+    "openai": "^6.39.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",

@@ -8,6 +8,8 @@ import { EvaluateButton } from "@/components/EvaluateButton";
 import { Nav } from "@/components/Nav";
 import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
+import { findSimilarIncidents } from "@/lib/similar";
+import { buildSignature } from "@/lib/embeddings";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,16 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
   if (!data) return notFound();
   const { incident, analyses } = data;
   const latest = analyses[0];
+
+  // Similar incidents — best-effort, never blocks page render
+  const similarQuery = buildSignature({
+    title: incident.title,
+    service: incident.service,
+    symptoms: incident.symptoms,
+    summary: latest?.summary,
+    severity: latest?.severity,
+  });
+  const similar = await findSimilarIncidents(similarQuery, { excludeId: incident.id, limit: 5 });
 
   return (
     <Shell>
@@ -49,6 +61,29 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
           </div>
           <AnalysisCard a={latest} locale={locale} />
         </>
+      )}
+
+      {similar.hits.length > 0 && (
+        <Card title={tr("detail.similar.title")}>
+          <p className="text-xs text-neutral-500 mb-3">{similar.mode === "vector" ? tr("detail.similar.mode.vector") : tr("detail.similar.mode.trigram")}</p>
+          <ul className="divide-y divide-neutral-800">
+            {similar.hits.map((h) => (
+              <li key={h.id} className="py-2">
+                <Link href={`/incidents/${h.id}`} className="flex items-center justify-between gap-3 group">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-neutral-200 group-hover:text-indigo-300 truncate">
+                      {h.title || h.service || h.id.slice(0, 8)}
+                    </p>
+                    {h.symptoms && <p className="text-xs text-neutral-500 truncate">{h.symptoms}</p>}
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 shrink-0">
+                    {(h.similarity * 100).toFixed(0)}%
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
 
       {analyses.length > 1 && (

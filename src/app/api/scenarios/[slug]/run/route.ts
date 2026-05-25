@@ -8,6 +8,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { calcCost, normalizeUsage } from "@/lib/cost";
+import { embed, buildSignature } from "@/lib/embeddings";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -61,6 +62,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
 
   const sb = supabaseAdmin();
+  const signature = buildSignature({
+    title: scenario.title,
+    service: scenario.service,
+    symptoms: scenario.symptoms,
+    summary: object.summary,
+    severity: object.severity,
+  });
+  const embedding = await embed(signature);
   const { data: inc, error: e1 } = await sb
     .from("incidents")
     .insert({
@@ -68,6 +77,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       service: scenario.service,
       symptoms: scenario.symptoms,
       raw_context: scenario.context,
+      signature,
+      embedding: embedding ? (embedding as unknown as string) : null,
     })
     .select("id")
     .single();

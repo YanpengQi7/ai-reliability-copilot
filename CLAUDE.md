@@ -84,10 +84,10 @@ All server inserts go through `supabaseAdmin()` (service-role key). Browser neve
 
 ### Add a new DB column
 1. `supabase/schema.sql` — add column (keep idempotent with `add column if not exists`)
-2. Apply to live DB (Supabase SQL editor or `mcp__supabase__apply_migration` if MCP works)
+2. Apply to live DB: prefer `mcp__83e1c2f7-…__apply_migration` (project-scoped MCP works). Fallback: paste into Supabase SQL editor.
 3. Update `src/lib/db.ts` row type
 4. Update INSERT statements in **all 4** write endpoints + `scripts/run-evals.ts`
-5. (If reading) update detail page render
+5. (If reading) update detail page render + i18n strings if user-visible
 
 ### Run end-to-end locally
 ```bash
@@ -130,6 +130,9 @@ npm run evals:run       # 20 evals, ~$0.03 DeepSeek
 
 > Update this section after each push. Keep to one line per commit. Older history lives in git log + `notes/day-*.md`.
 
+- `feat(similar)` — pgvector HNSW + pg_trgm fallback; "Similar past incidents" section on detail page; backfill script
+- `feat(ops)` — GitHub Actions CI (tsc + lint + build on push/PR) + `/api/healthz` (readiness probe)
+- `feat(cost)` — tokens_in/tokens_out/cost_usd on every non-streaming analysis; rollup in `/evals` dashboard
 - `eval-run` — First successful 20-eval batch: v1=4.64, v2=4.44, en=4.60, zh=4.47. v2 *regressed*; investigate over-constraint in v3.
 - `fix(ai)` — defer DeepSeek provider init; tsx scripts can now load env before module-time client capture
 - `day-31` — i18n (zh/en UI) + LLM output language toggle + cross-lingual eval matrix (20 evals)

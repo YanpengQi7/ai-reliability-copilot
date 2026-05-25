@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { ANALYSIS_MODEL } from "@/lib/ai";
 import { DEFAULT_PROMPT_VERSION } from "@/lib/prompts";
+import { embed, buildSignature } from "@/lib/embeddings";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,18 @@ export async function POST(req: NextRequest) {
   }
   const input = parsed.data;
   const sb = supabaseAdmin();
+
+  // Build similarity-search artifacts. Both are best-effort: a failure here
+  // must not block the incident write (analysis succeeded, that's the contract).
+  const signature = buildSignature({
+    title: input.title,
+    service: input.service,
+    symptoms: input.symptoms,
+    summary: input.analysis.summary,
+    severity: input.analysis.severity,
+  });
+  const embedding = await embed(signature); // null when no OPENAI_API_KEY or on failure
+
   const { data: inc, error: e1 } = await sb
     .from("incidents")
     .insert({
@@ -42,6 +55,8 @@ export async function POST(req: NextRequest) {
       service: input.service ?? null,
       symptoms: input.symptoms ?? null,
       raw_context: input.raw_context,
+      signature,
+      embedding: embedding ? (embedding as unknown as string) : null,
     })
     .select("id")
     .single();
