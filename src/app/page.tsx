@@ -18,6 +18,7 @@ export default function Home() {
   const [title, setTitle] = useState("payment-svc DB connection storm");
   const [service, setService] = useState("payment-svc");
   const [symptoms, setSymptoms] = useState("p99 latency 4.8s, 12% 500s, checkouts failing");
+  const [version, setVersion] = useState<"v1" | "v2">("v2");
 
   const router = useRouter();
   const startedRef = useRef<number>(0);
@@ -40,6 +41,7 @@ export default function Home() {
             raw_context: raw,
             analysis: object,
             latency_ms: Date.now() - startedRef.current,
+            prompt_version: version,
           }),
         });
         if (res.ok) {
@@ -111,11 +113,24 @@ export default function Home() {
               className="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 font-mono text-sm"
             />
           </label>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1 text-xs">
+              <span className="text-neutral-400 mr-1">Prompt:</span>
+              {(["v1", "v2"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setVersion(v)}
+                  className={`px-2 py-1 rounded border ${version === v ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-200" : "border-neutral-700 text-neutral-400 hover:border-neutral-500"}`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
             <button
               onClick={() => {
                 startedRef.current = Date.now();
-                submit({ title, service, symptoms, raw_context: raw });
+                submit({ title, service, symptoms, raw_context: raw, prompt_version: version });
               }}
               disabled={isLoading || saving || raw.length < 20}
               className="bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-md"

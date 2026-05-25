@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { AnalysisSchema } from "@/lib/schema";
 import { deepseek, ANALYSIS_MODEL } from "@/lib/ai";
-import { SYSTEM_PROMPT_V1, buildUserPrompt, PROMPT_VERSION } from "@/lib/prompts";
+import { getSystemPrompt, buildUserPrompt, DEFAULT_PROMPT_VERSION, type PromptVersion } from "@/lib/prompts";
 import { SCENARIOS } from "@/lib/scenarios";
 import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
@@ -13,6 +13,9 @@ export const maxDuration = 300;
 
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  const url = new URL(req.url);
+  const requested = url.searchParams.get("version");
+  const version: PromptVersion = requested === "v1" || requested === "v2" ? requested : DEFAULT_PROMPT_VERSION;
   if (!process.env.DEEPSEEK_API_KEY) {
     return NextResponse.json({ error: "MISSING_API_KEY", message: "DEEPSEEK_API_KEY not set", statusCode: 503 }, { status: 503 });
   }
@@ -34,7 +37,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     const result = await generateObject({
       model: deepseek(ANALYSIS_MODEL),
       schema: AnalysisSchema,
-      system: SYSTEM_PROMPT_V1,
+      system: getSystemPrompt(version),
       prompt: buildUserPrompt({
         service: scenario.service,
         symptoms: scenario.symptoms,
@@ -65,7 +68,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   await sb.from("analyses").insert({
     incident_id: inc.id,
     model: ANALYSIS_MODEL,
-    prompt_version: PROMPT_VERSION,
+    prompt_version: version,
     summary: object.summary,
     severity: object.severity,
     root_causes: object.root_causes,

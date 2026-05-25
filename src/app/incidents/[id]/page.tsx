@@ -43,8 +43,15 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
           <summary className="cursor-pointer text-neutral-300">{analyses.length - 1} earlier analysis version(s)</summary>
           <ul className="mt-3 space-y-2 text-neutral-400">
             {analyses.slice(1).map((a) => (
-              <li key={a.id}>
-                {a.prompt_version} · {a.model} · {new Date(a.created_at).toLocaleString()} · {a.latency_ms}ms
+              <li key={a.id} className="flex items-center gap-2">
+                <span className="text-xs px-1.5 py-0.5 rounded border border-neutral-700">{a.prompt_version}</span>
+                <span>{a.severity}</span>
+                <span>·</span>
+                <span>{a.model}</span>
+                <span>·</span>
+                <span>{new Date(a.created_at).toLocaleString()}</span>
+                <span>·</span>
+                <span>{a.latency_ms}ms</span>
               </li>
             ))}
           </ul>

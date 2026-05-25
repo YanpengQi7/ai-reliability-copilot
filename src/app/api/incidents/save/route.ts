@@ -4,7 +4,7 @@ import { AnalysisSchema } from "@/lib/schema";
 import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { ANALYSIS_MODEL } from "@/lib/ai";
-import { PROMPT_VERSION } from "@/lib/prompts";
+import { DEFAULT_PROMPT_VERSION } from "@/lib/prompts";
 
 export const runtime = "nodejs";
 
@@ -15,6 +15,7 @@ const Body = z.object({
   raw_context: z.string().min(20),
   analysis: AnalysisSchema,
   latency_ms: z.number().optional(),
+  prompt_version: z.enum(["v1", "v2"]).optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
     .insert({
       incident_id: inc.id,
       model: ANALYSIS_MODEL,
-      prompt_version: PROMPT_VERSION,
+      prompt_version: input.prompt_version ?? DEFAULT_PROMPT_VERSION,
       summary: a.summary,
       severity: a.severity,
       root_causes: a.root_causes,
