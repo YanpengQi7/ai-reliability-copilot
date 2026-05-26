@@ -27,10 +27,12 @@ export default async function KbPage() {
     <Shell title={tr("kb.title")}>
       <p className="text-neutral-400 text-sm">{tr("kb.subtitle")}</p>
 
-      <section className="grid grid-cols-3 gap-4">
-        <Stat label={tr("kb.totalDocs")} value={String(documents.length)} />
-        <Stat label={tr("kb.totalChunks")} value={String(chunkCount ?? 0)} />
-        <Stat label={tr("kb.totalEmbedded")} value={String(embeddedCount ?? 0)} sub={embeddedCount === 0 ? "set OPENAI_API_KEY to enable" : undefined} />
+      <section className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+        <div className="grid grid-cols-3 gap-4">
+          <Stat label={tr("kb.totalDocs")} value={String(documents.length)} />
+          <Stat label={tr("kb.totalChunks")} value={String(chunkCount ?? 0)} />
+          <Stat label={tr("kb.totalEmbedded")} value={String(embeddedCount ?? 0)} sub={embeddedCount === 0 ? "set OPENAI_API_KEY to enable" : undefined} />
+        </div>
       </section>
 
       {documents.length === 0 ? (
@@ -66,10 +68,12 @@ function kindColor(kind: string): string {
 }
 
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  // Inner stat tile — sits inside a parent card, so use the darker bg + smaller padding
+  // to read as "highlighted value" rather than "another card".
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4">
+    <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3">
       <p className="text-xs text-neutral-400">{label}</p>
-      <p className="font-bold text-neutral-100 text-2xl mt-1">{value}</p>
+      <p className="font-bold text-neutral-100 text-lg mt-1">{value}</p>
       {sub && <p className="text-xs text-neutral-500 mt-1">{sub}</p>}
     </div>
   );

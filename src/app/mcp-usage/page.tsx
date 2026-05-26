@@ -64,11 +64,13 @@ export default async function McpUsagePage() {
     <Shell title={tr("mcp.title")}>
       <p className="text-neutral-400 text-sm">{tr("mcp.subtitle")}</p>
 
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Stat label={tr("mcp.totalCalls")} value={String(totalCount)} highlight />
-        <Stat label={tr("mcp.errorRate")} value={`${errorRate.toFixed(1)}%`} tone={errorRate > 5 ? "warn" : "ok"} />
-        <Stat label={tr("mcp.avgLatency")} value={`${Math.round(avgLatency)}ms`} />
-        <Stat label={tr("mcp.uniqueIps")} value={String(ips.size)} />
+      <section className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Stat label={tr("mcp.totalCalls")} value={String(totalCount)} highlight />
+          <Stat label={tr("mcp.errorRate")} value={`${errorRate.toFixed(1)}%`} tone={errorRate > 5 ? "warn" : "ok"} />
+          <Stat label={tr("mcp.avgLatency")} value={`${Math.round(avgLatency)}ms`} />
+          <Stat label={tr("mcp.uniqueIps")} value={String(ips.size)} />
+        </div>
       </section>
 
       <section className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
