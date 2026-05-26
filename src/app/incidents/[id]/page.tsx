@@ -145,9 +145,12 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
+  // Use flex-col instead of space-y-* so every direct child stretches to
+  // full container width by default (align-items: stretch). Eliminates any
+  // chance of a child collapsing to its content width.
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 p-6 md:p-10">
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto flex flex-col gap-6">
         <div className="flex justify-end">
           <Nav />
         </div>
