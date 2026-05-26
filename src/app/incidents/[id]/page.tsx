@@ -190,8 +190,12 @@ function AnalysisCard({ a, locale }: { a: AnalysisRow; locale: "en" | "zh" }) {
   const checklist = asArr<Step>(a.investigation_checklist);
   const mitigation = asArr<Mitig>(a.mitigation_plan);
   const follow = asArr<Follow>(a.follow_ups);
+  // flex+w-full instead of bare `grid gap-4`: eliminates any chance that
+  // Tailwind v4's grid without explicit cols sizes children to content,
+  // and uses gap-6 to match the page-level `space-y-6` so the AI sub-cards
+  // have the same visual rhythm as the raw-context card above them.
   return (
-    <div className="grid gap-4">
+    <div className="flex flex-col gap-6 w-full">
       <Card title={tr("section.summary")}>
         <div className="flex items-start gap-3">
           <SeverityBadge s={a.severity} />

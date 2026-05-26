@@ -289,7 +289,7 @@ type PartialAnalysis = Partial<{
 function AnalysisView({ a }: { a: PartialAnalysis }) {
   const t = useT();
   return (
-    <div className="grid gap-4">
+    <div className="flex flex-col gap-6 w-full">
       {(a.summary || a.severity) && (
         <Section title={t("section.summary")}>
           <div className="flex items-start gap-3">
