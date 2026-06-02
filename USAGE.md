@@ -395,7 +395,7 @@ A: 三种可能：(1) 知识库还没灌 doc — 跑 `npm run kb:ingest`；(2) �
 A: 命令 / SQL / kubectl 故意保持英文（不然 copy-paste 会坏）。Narrative 部分跟选的输出语言走。这是设计，不是 bug。
 
 **Q: prompt v2 怎么反而比 v1 分低？**
-A: 我们也很意外。详细分析在 [notes/eval-run-1.md](notes/eval-run-1.md) 和 [docs/blog-2-eval-is-the-product.md](docs/blog-2-eval-is-the-product.md)。结论是：v2 加的硬约束（必须有 rollback、postmortem 必须有 9 个 H2）让模型产出更"清单化"、丢了 completeness 分。**这就是为什么必须有 eval pipeline** —— 不然这个 regression 就 ship 出去了。
+A: 我们也很意外。结论是：v2 加的硬约束（必须有 rollback、postmortem 必须有 9 个 H2）让模型产出更"清单化"、丢了 completeness 分。**这就是为什么必须有 eval pipeline** —— 不然这个 regression 就 ship 出去了。详细数据在 `/evals` dashboard。
 
 **Q: 想给某段分析加自定义 metadata（比如 ticket ID）？**
 A: 给 `incidents` 表加一列（用 `alter table` 或 MCP 的 `apply_migration`），更新 `src/lib/db.ts` 的 `IncidentRow` 类型，在 save 时存进去，详情页读出来。完整步骤在 [CLAUDE.md](CLAUDE.md) → "Add a new DB column"。
@@ -406,6 +406,3 @@ A: 给 `incidents` 表加一列（用 `alter table` 或 MCP 的 `apply_migration
 
 - **架构 / 文件位置** → [CLAUDE.md](CLAUDE.md)
 - **评估方法论** → [EVALUATION.md](EVALUATION.md)
-- **30 天 build log** → [notes/](notes/)
-- **博客底稿（可发 Substack / dev.to）** → [docs/blog-1-building-the-copilot.md](docs/blog-1-building-the-copilot.md), [docs/blog-2-eval-is-the-product.md](docs/blog-2-eval-is-the-product.md)
-- **简历 / CARL 故事 / LinkedIn 文案** → [docs/portfolio.md](docs/portfolio.md)

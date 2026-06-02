@@ -9,7 +9,6 @@ But the real story isn't the prompt. It's the **eval pipeline** — a 5-dimensio
 **Live demo:** [ai-reliability-copilot.vercel.app](https://ai-reliability-copilot.vercel.app)
 **📖 Usage guide (中文):** [USAGE.md](./USAGE.md) — how to actually use it, end-to-end
 **Methodology deep-dive:** [EVALUATION.md](./EVALUATION.md)
-**30-day build log:** [`notes/`](./notes/)
 
 ---
 
@@ -74,7 +73,7 @@ Every prompt iteration is tracked against the same 5-scenario regression suite �
 | **English output** | **4.55** |
 | **Chinese output** | **4.37** |
 
-**The v2 → v3 story (the actual portfolio point):** In run #1, v2 — which I wrote specifically to fix v1's known failure modes (vague commands, missing rollbacks, severity under-rating) — scored *worse* than v1. Cause: its hard constraints (a rollback-or-it's-unsafe gate, a rigid postmortem H2 list) over-narrowed the model into shorter, checklist-y output the judge marked down on **completeness**. You can't catch that by eyeballing — v2 *looks* more disciplined. v3 keeps v2's wins (quantitative severity, command examples) but reframes the gates as preferences and adds an explicit "brevity is not the goal" substance directive. Result: **v3 recovers to 4.52, the top score**, and posts the best Chinese result of any version. The v2-lowest ordering held across two independent runs; see [`notes/eval-run-2.md`](./notes/eval-run-2.md) for the full breakdown and the honest caveat (absolute deltas under ~0.2 are inside the run-to-run noise floor — which is why `DEFAULT_PROMPT_VERSION` won't flip to v3 until n=3 repeats confirm the edge).
+**The v2 → v3 story (the actual portfolio point):** In run #1, v2 — which I wrote specifically to fix v1's known failure modes (vague commands, missing rollbacks, severity under-rating) — scored *worse* than v1. Cause: its hard constraints (a rollback-or-it's-unsafe gate, a rigid postmortem H2 list) over-narrowed the model into shorter, checklist-y output the judge marked down on **completeness**. You can't catch that by eyeballing — v2 *looks* more disciplined. v3 keeps v2's wins (quantitative severity, command examples) but reframes the gates as preferences and adds an explicit "brevity is not the goal" substance directive. Result: **v3 recovers to 4.52, the top score**, and posts the best Chinese result of any version. The v2-lowest ordering held across two independent runs (absolute deltas under ~0.2 are inside the run-to-run noise floor — which is why `DEFAULT_PROMPT_VERSION` won't flip to v3 until n=3 repeats confirm the edge).
 
 **Cross-lingual finding:** Chinese output scores ~0.18 lower on average. Per-dim breakdown points the loss to `actionability` (Chinese explanations are more verbose, pushing commands into walls of prose). v3 adds a Chinese brevity guard that lifted zh's ceiling — v3·zh (4.44) beats both v1·zh and v2·zh. Codes/commands themselves stay English (the prompt's `languageInstruction()` works).
 
@@ -175,4 +174,4 @@ MIT
 
 ---
 
-Built in 30 days as a side project to learn AI engineering and evaluation methodology. The full daily build log lives in [`notes/`](./notes/).
+Built in 30 days as a side project to learn AI engineering and evaluation methodology.

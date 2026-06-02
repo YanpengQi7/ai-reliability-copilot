@@ -3,10 +3,10 @@
 // Pulls N recent analyses + their judge scores from Supabase, presents each
 // analysis to the user one dimension at a time, collects 1–5 human scores,
 // then computes per-dimension and overall Spearman rank correlation between
-// human and judge. Writes the raw pairs + summary to a markdown file under
-// notes/ for inclusion in EVALUATION.md.
+// human and judge. Writes the raw pairs + summary to a markdown file in the
+// current directory for inclusion in EVALUATION.md.
 //
-// Run: npm run evals:calibrate -- [--n=10] [--out=notes/human-vs-judge-1.md]
+// Run: npm run evals:calibrate -- [--n=10] [--out=./human-vs-judge-1.md]
 
 import { config } from "dotenv";
 config({ path: ".env.local" });
@@ -21,7 +21,7 @@ const DIMS: RubricDim[] = ["specificity", "safety", "actionability", "domain_cor
 
 type Args = { n: number; out: string };
 function parseArgs(): Args {
-  const args: Args = { n: 10, out: `notes/human-vs-judge-${new Date().toISOString().slice(0, 10)}.md` };
+  const args: Args = { n: 10, out: `./human-vs-judge-${new Date().toISOString().slice(0, 10)}.md` };
   for (const a of process.argv.slice(2)) {
     const [k, v] = a.replace(/^--/, "").split("=");
     if (k === "n" && v) args.n = parseInt(v, 10);

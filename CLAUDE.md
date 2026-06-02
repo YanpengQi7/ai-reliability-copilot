@@ -10,7 +10,7 @@ This file is read first by Claude Code / agents joining the project. Skim top-to
 
 **What this is:** Next.js app that turns a production incident (logs + metrics + on-call notes) into a structured 9-section LLM response (severity, root causes, investigation checklist, mitigation, postmortem draft, follow-ups). Ships with a 5-scenario regression suite + LLM-as-judge eval pipeline.
 
-**Why it exists:** Portfolio project for AI Reliability Engineer / Staff Engineer roles. The *product* is the LLM tool; the *engineering* is the eval pipeline.
+**Why it exists:** A side project exploring AI engineering for SRE workflows. The *product* is the LLM tool; the *engineering* is the eval pipeline.
 
 **Live:** https://ai-reliability-copilot.vercel.app · **Repo:** https://github.com/YanpengQi7/ai-reliability-copilot
 
@@ -54,9 +54,7 @@ All server inserts go through `supabaseAdmin()` (service-role key). Browser neve
 | **Supabase schema** | `supabase/schema.sql` | Run in Supabase SQL editor on fresh project |
 | **Eval batch runner** | `scripts/run-evals.ts` | `npm run evals:run` → 5 scenarios × 2 prompts × 2 languages = 20 evals |
 | **Scenario seed** | `scripts/seed-scenarios.ts` | `npm run seed:scenarios` (idempotent upsert by slug) |
-| **Daily build log** | `notes/day-*.md`, `notes/week-*-findings.md` | Read latest one to see current state |
 | **Methodology** | `EVALUATION.md` | Public-facing eval methodology + limitations |
-| **Portfolio assets** | `docs/portfolio.md`, `docs/blog-*.md` | Resume bullets, CARL stories, blog drafts |
 
 ---
 
@@ -131,16 +129,16 @@ npm run evals:run       # 20 evals, ~$0.03 DeepSeek
 - **`supabase/schema.sql` is the source of truth, but you must apply migrations manually.** MCP `apply_migration` has been flaky for this project. Use the Supabase dashboard SQL editor for one-off `alter table` statements; keep the `schema.sql` file updated for fresh setups.
 - **`PROMPT_VERSION` constant is back-compat shim** (aliased to `DEFAULT_PROMPT_VERSION`). Prefer `getSystemPrompt(version)` and `DEFAULT_PROMPT_VERSION` directly.
 - **Old analyses with no `output_language` value default to `'en'`** via the column default. Eval batch will count them as English unless you explicitly filter.
-- **DeepSeek key leak risk:** `.env.local` is gitignored, but be careful with `git log -p` reviews. We had one leak via chat early on.
+- **DeepSeek key leak risk:** `.env.local` is gitignored — be careful with `git log -p` reviews and never paste keys into chats.
 - **`AGENTS.md` says "This is NOT the Next.js you know"** — Next 16 has breaking changes from older versions. If unsure of an App Router API, check `node_modules/next/dist/docs/` first.
 
 ---
 
 ## Recent changes (last 5 commits)
 
-> Update this section after each push. Keep to one line per commit. Older history lives in git log + `notes/day-*.md`.
+> Update this section after each push. Keep to one line per commit. Older history lives in `git log`.
 
-- `eval-run-2` — Prompt **v3** (v2 minus over-constraints + substance directive + zh brevity guard); n=30 batch (v1/v2/v3 × en/zh × 5), retry-on-parse-error (30/30 ok). **v3=4.52 recovers the v2 regression** (v2=4.36, v1=4.50); v3·zh best Chinese score. New `npm run evals:calibrate` (human-vs-judge Spearman/bias tool). DEFAULT still v2 pending n=3 repeats. See `notes/eval-run-2.md`.
+- `eval-run-2` — Prompt **v3** (v2 minus over-constraints + substance directive + zh brevity guard); n=30 batch (v1/v2/v3 × en/zh × 5), retry-on-parse-error (30/30 ok). **v3=4.52 recovers the v2 regression** (v2=4.36, v1=4.50); v3·zh best Chinese score. New `npm run evals:calibrate` (human-vs-judge Spearman/bias tool). DEFAULT still v2 pending n=3 repeats.
 - `feat(integrations)` — POST /api/webhook/alert (Datadog/PagerDuty/Sentry direct webhook, 202 + bg analysis via `after()`); /mcp-usage dashboard reading mcp_tool_calls; sample-alert buttons on home; secret-pattern scan blocks KB ingest of files containing API keys (with `allowSecrets` override)
 - `feat(mcp-ops)` — bearer-token auth (env-gated via `MCP_AUTH_TOKEN`, public when unset), 50 req/min rate limit per IP, audit logging of every tool call to `mcp_tool_calls` (tool/ok/latency/ip/summary/size — no full input or output stored)
 - `feat(mcp)` — expose the app as an **MCP server** at `/api/mcp` (Streamable HTTP). 7 tools (search_kb, find_similar_incidents, list_scenarios, get_scenario, parse_alert_json, get_output_schema, save_incident_analysis). Lets users drive analysis from their own Claude Code with zero LLM cost to the platform.
@@ -164,12 +162,11 @@ npm run evals:run       # 20 evals, ~$0.03 DeepSeek
 ## How to continue work in a new Claude session
 
 ```
-1. cd "/Users/yanpengqi/sre project/copilot"
+1. cd into the repo root
 2. Read CLAUDE.md (this file) — autoloaded
-3. Read the latest notes/day-*.md for the previous session's state
-4. `git log --oneline -10` to see recent commits
-5. `git status` to see uncommitted work
-6. Ask the user what they want next; reference specific files by path (e.g. "I'll edit src/lib/prompts.ts to add v3")
+3. `git log --oneline -10` to see recent commits
+4. `git status` to see uncommitted work
+5. Ask the user what they want next; reference specific files by path (e.g. "I'll edit src/lib/prompts.ts to add v3")
 ```
 
 When you finish a session that ships a commit, update the "Recent changes" section above with one line.

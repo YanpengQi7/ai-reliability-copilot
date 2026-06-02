@@ -20,7 +20,7 @@ You are helping an on-call engineer respond to a live production incident. Your 
 6. **Postmortem draft** should be a blameless markdown skeleton ready for the service owner to fill in within 48 hours.
 7. Output must conform exactly to the provided JSON schema. No prose outside the schema.`;
 
-// v2 targets the 5 recurring failure modes identified in notes/week-1-findings.md:
+// v2 targets the 5 recurring failure modes observed when reviewing v1 output:
 //   1. Generic commands → require exact tool + args + filter
 //   2. Skimpy postmortem → mandate explicit section list
 //   3. Severity under-rating → quantitative thresholds
