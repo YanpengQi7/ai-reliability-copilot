@@ -9,6 +9,7 @@
     "lint": "eslint",
     "seed:scenarios": "tsx scripts/seed-scenarios.ts",
     "evals:run": "tsx scripts/run-evals.ts",
+    "evals:calibrate": "tsx scripts/human-vs-judge.ts",
     "backfill:similar": "tsx scripts/backfill-similar.ts",
     "kb:ingest": "tsx scripts/ingest-kb.ts"
   },

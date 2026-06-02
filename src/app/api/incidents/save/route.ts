@@ -17,7 +17,7 @@ const Body = z.object({
   raw_context: z.string().min(20),
   analysis: AnalysisSchema,
   latency_ms: z.number().optional(),
-  prompt_version: z.enum(["v1", "v2"]).optional(),
+  prompt_version: z.enum(["v1", "v2", "v3"]).optional(),
   output_language: z.enum(["en", "zh"]).optional(),
 });
 

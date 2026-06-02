@@ -15,7 +15,7 @@ const InputSchema = z.object({
   service: z.string().optional(),
   symptoms: z.string().optional(),
   raw_context: z.string().min(20, "raw_context too short — paste real incident details"),
-  prompt_version: z.enum(["v1", "v2"]).optional(),
+  prompt_version: z.enum(["v1", "v2", "v3"]).optional(),
   output_language: z.enum(["en", "zh"]).optional(),
 });
 

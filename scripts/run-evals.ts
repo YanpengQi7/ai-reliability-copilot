@@ -15,7 +15,7 @@ import { judge } from "../src/lib/eval/judge";
 import { RUBRIC_VERSION, overallScore } from "../src/lib/eval/rubric";
 import { calcCost, normalizeUsage } from "../src/lib/cost";
 
-const VERSIONS: PromptVersion[] = ["v1", "v2"];
+const VERSIONS: PromptVersion[] = ["v1", "v2", "v3"];
 const LANGUAGES: OutputLanguage[] = ["en", "zh"];
 
 async function main() {
@@ -35,18 +35,35 @@ async function main() {
         console.log(`\n→ ${scenario.slug} · ${version} · ${language}`);
         try {
           const started = Date.now();
-          const { object: analysis, usage } = await generateObject({
-            model: deepseek(ANALYSIS_MODEL),
-            schema: AnalysisSchema,
-            system: getSystemPrompt(version),
-            prompt: buildUserPrompt({
-              service: scenario.service,
-              symptoms: scenario.symptoms,
-              raw_context: scenario.context,
-              language,
-            }),
-            temperature: 0.2,
-          });
+          // DeepSeek's JSON schema mode occasionally returns invalid JSON — retry once on parse failure.
+          let analysis: import("zod").z.infer<typeof AnalysisSchema>;
+          let usage: Awaited<ReturnType<typeof generateObject>>["usage"];
+          {
+            const attempt = async () => generateObject({
+              model: deepseek(ANALYSIS_MODEL),
+              schema: AnalysisSchema,
+              system: getSystemPrompt(version),
+              prompt: buildUserPrompt({
+                service: scenario.service,
+                symptoms: scenario.symptoms,
+                raw_context: scenario.context,
+                language,
+              }),
+              temperature: 0.2,
+            });
+            try {
+              const r = await attempt();
+              analysis = r.object;
+              usage = r.usage;
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              if (!/parse|invalid json|schema/i.test(msg)) throw err;
+              console.log(`  ↻ retry after parse error: ${msg.slice(0, 80)}`);
+              const r = await attempt();
+              analysis = r.object;
+              usage = r.usage;
+            }
+          }
           const latency_ms = Date.now() - started;
           const { tokens_in, tokens_out } = normalizeUsage(usage);
           const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
@@ -109,29 +126,26 @@ async function main() {
     }
   }
 
-  // Summary tables
+  // Summary tables — columns auto-generated from VERSIONS × LANGUAGES
+  const cells: Array<[PromptVersion, OutputLanguage]> = [];
+  for (const v of VERSIONS) for (const l of LANGUAGES) cells.push([v, l]);
   console.log("\n=== Summary: overall by (version, language) ===");
-  console.log("scenario".padEnd(34), "v1·en".padStart(6), "v1·zh".padStart(6), "v2·en".padStart(6), "v2·zh".padStart(6));
+  console.log("scenario".padEnd(34), ...cells.map(([v, l]) => `${v}·${l}`.padStart(6)));
   for (const scenario of SCENARIOS) {
     const cell = (v: PromptVersion, l: OutputLanguage) =>
       String(results.find((r) => r.scenario === scenario.slug && r.version === v && r.language === l)?.overall ?? "—").padStart(6);
-    console.log(scenario.slug.padEnd(34), cell("v1", "en"), cell("v1", "zh"), cell("v2", "en"), cell("v2", "zh"));
+    console.log(scenario.slug.padEnd(34), ...cells.map(([v, l]) => cell(v, l)));
   }
   const avg = (filter: (r: typeof results[number]) => boolean) => {
     const xs = results.filter(filter).map((r) => r.overall);
     return xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2) : "n/a";
   };
   console.log("AVERAGE".padEnd(34),
-    avg((r) => r.version === "v1" && r.language === "en").padStart(6),
-    avg((r) => r.version === "v1" && r.language === "zh").padStart(6),
-    avg((r) => r.version === "v2" && r.language === "en").padStart(6),
-    avg((r) => r.version === "v2" && r.language === "zh").padStart(6),
+    ...cells.map(([v, l]) => avg((r) => r.version === v && r.language === l).padStart(6)),
   );
   console.log("\n=== Marginal averages ===");
-  console.log("v1 overall:", avg((r) => r.version === "v1"));
-  console.log("v2 overall:", avg((r) => r.version === "v2"));
-  console.log("en overall:", avg((r) => r.language === "en"));
-  console.log("zh overall:", avg((r) => r.language === "zh"));
+  for (const v of VERSIONS) console.log(`${v} overall:`, avg((r) => r.version === v));
+  for (const l of LANGUAGES) console.log(`${l} overall:`, avg((r) => r.language === l));
 }
 
 main();

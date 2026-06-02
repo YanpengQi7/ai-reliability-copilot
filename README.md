@@ -64,18 +64,19 @@ Every prompt iteration is tracked against the same 5-scenario regression suite �
 | Domain correctness | Right SRE mechanism? No invented evidence? |
 | Completeness | All 9 sections substantively filled? |
 
-### Latest results (n=18, deepseek-chat for both analyzer and judge)
+### Latest results (run #2, n=30, deepseek-chat for both analyzer and judge)
 
 | | overall (1–5) |
 |---|---|
-| **Prompt v1** (rules-only) | **4.64** |
-| **Prompt v2** (rules + anchors + few-shot) | **4.44** |
-| **English output** | **4.60** |
-| **Chinese output** | **4.47** |
+| **Prompt v1** (rules-only) | **4.50** |
+| **Prompt v2** (rules + anchors + few-shot) | **4.36** |
+| **Prompt v3** (v2 minus the over-constraints + substance directive) | **4.52** ✅ |
+| **English output** | **4.55** |
+| **Chinese output** | **4.37** |
 
-**Surprising finding:** v2 — which I wrote specifically to fix v1's known failure modes (vague commands, missing rollbacks, severity under-rating) — scored *worse* on average. Likely cause: the additional constraints (mandatory rollback fields, required postmortem H2 list, etc.) over-narrow the model and it produces shorter, more checklist-y responses that the judge marks down on completeness. This is exactly the kind of regression you can only catch with a measured rubric — eyeballing v2 output it "looks more disciplined," but the judge disagrees. Investigating in v3.
+**The v2 → v3 story (the actual portfolio point):** In run #1, v2 — which I wrote specifically to fix v1's known failure modes (vague commands, missing rollbacks, severity under-rating) — scored *worse* than v1. Cause: its hard constraints (a rollback-or-it's-unsafe gate, a rigid postmortem H2 list) over-narrowed the model into shorter, checklist-y output the judge marked down on **completeness**. You can't catch that by eyeballing — v2 *looks* more disciplined. v3 keeps v2's wins (quantitative severity, command examples) but reframes the gates as preferences and adds an explicit "brevity is not the goal" substance directive. Result: **v3 recovers to 4.52, the top score**, and posts the best Chinese result of any version. The v2-lowest ordering held across two independent runs; see [`notes/eval-run-2.md`](./notes/eval-run-2.md) for the full breakdown and the honest caveat (absolute deltas under ~0.2 are inside the run-to-run noise floor — which is why `DEFAULT_PROMPT_VERSION` won't flip to v3 until n=3 repeats confirm the edge).
 
-**Cross-lingual finding:** Chinese output scored ~0.13 lower on average. Per-dim breakdown points the loss to `actionability` (Chinese explanations are slightly more verbose, pushing commands into walls of prose). Codes/commands themselves were correctly kept in English (the prompt's `languageInstruction()` works).
+**Cross-lingual finding:** Chinese output scores ~0.18 lower on average. Per-dim breakdown points the loss to `actionability` (Chinese explanations are more verbose, pushing commands into walls of prose). v3 adds a Chinese brevity guard that lifted zh's ceiling — v3·zh (4.44) beats both v1·zh and v2·zh. Codes/commands themselves stay English (the prompt's `languageInstruction()` works).
 
 See [EVALUATION.md](./EVALUATION.md) for the full methodology, including limitations and roadmap.
 

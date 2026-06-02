@@ -24,7 +24,7 @@ export default function Home() {
   const [title, setTitle] = useState("payment-svc DB connection storm");
   const [service, setService] = useState("payment-svc");
   const [symptoms, setSymptoms] = useState("p99 latency 4.8s, 12% 500s, checkouts failing");
-  const [version, setVersion] = useState<"v1" | "v2">("v2");
+  const [version, setVersion] = useState<"v1" | "v2" | "v3">("v2");
   const [outputLang, setOutputLang] = useState<Locale>("en");
   const [parseNotice, setParseNotice] = useState<string | null>(null);
   const [visionStatus, setVisionStatus] = useState<{ kind: "idle" | "uploading" | "ok" | "err"; msg?: string }>({ kind: "idle" });
@@ -206,7 +206,7 @@ export default function Home() {
           <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-1 text-xs">
               <span className="text-neutral-400 mr-1">{t("home.promptLabel")}</span>
-              {(["v1", "v2"] as const).map((v) => (
+              {(["v1", "v2", "v3"] as const).map((v) => (
                 <button
                   key={v}
                   type="button"

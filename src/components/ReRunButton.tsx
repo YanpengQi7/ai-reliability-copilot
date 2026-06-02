@@ -8,10 +8,10 @@ export function ReRunButton({ incidentId }: { incidentId: string }) {
   const router = useRouter();
   const t = useT();
   const locale = useLocale();
-  const [loading, setLoading] = useState<null | "v1" | "v2">(null);
+  const [loading, setLoading] = useState<null | "v1" | "v2" | "v3">(null);
   const [err, setErr] = useState<string | null>(null);
 
-  async function run(version: "v1" | "v2") {
+  async function run(version: "v1" | "v2" | "v3") {
     setLoading(version);
     setErr(null);
     try {
@@ -30,7 +30,7 @@ export function ReRunButton({ incidentId }: { incidentId: string }) {
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
-      {(["v1", "v2"] as const).map((v) => (
+      {(["v1", "v2", "v3"] as const).map((v) => (
         <button
           key={v}
           type="button"

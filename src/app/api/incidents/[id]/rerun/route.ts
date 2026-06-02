@@ -15,7 +15,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const url = new URL(req.url);
   const requested = url.searchParams.get("version");
-  const version: PromptVersion = requested === "v1" || requested === "v2" ? requested : DEFAULT_PROMPT_VERSION;
+  const version: PromptVersion = requested === "v1" || requested === "v2" || requested === "v3" ? requested : DEFAULT_PROMPT_VERSION;
   const langParam = url.searchParams.get("language");
   const language: "en" | "zh" = langParam === "zh" ? "zh" : "en";
   if (!process.env.DEEPSEEK_API_KEY) {
