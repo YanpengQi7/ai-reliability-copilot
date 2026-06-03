@@ -17,6 +17,23 @@ import { calcCost, normalizeUsage } from "../src/lib/cost";
 
 const VERSIONS: PromptVersion[] = ["v1", "v2", "v3"];
 const LANGUAGES: OutputLanguage[] = ["en", "zh"];
+// Repeats per cell — lets us report mean ± std and tell a real gap from run-to-run noise.
+// Override with EVAL_REPEATS=1 for a quick smoke run.
+const REPEATS = Math.max(1, parseInt(process.env.EVAL_REPEATS ?? "3", 10));
+
+function mean(xs: number[]): number {
+  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN;
+}
+// Sample standard deviation (n−1). With n=1 std is undefined → return 0 for display.
+function std(xs: number[]): number {
+  if (xs.length < 2) return 0;
+  const m = mean(xs);
+  return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / (xs.length - 1));
+}
+function fmtMS(xs: number[]): string {
+  if (!xs.length) return "—".padStart(11);
+  return `${mean(xs).toFixed(2)}±${std(xs).toFixed(2)}`.padStart(11);
+}
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -32,7 +49,8 @@ async function main() {
   for (const scenario of SCENARIOS) {
     for (const version of VERSIONS) {
       for (const language of LANGUAGES) {
-        console.log(`\n→ ${scenario.slug} · ${version} · ${language}`);
+       for (let rep = 0; rep < REPEATS; rep++) {
+        console.log(`\n→ ${scenario.slug} · ${version} · ${language}${REPEATS > 1 ? ` · run ${rep + 1}/${REPEATS}` : ""}`);
         try {
           const started = Date.now();
           // DeepSeek's JSON schema mode occasionally returns invalid JSON — retry once on parse failure.
@@ -122,30 +140,53 @@ async function main() {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`  ✗ ${msg}`);
         }
+       }
       }
     }
   }
 
-  // Summary tables — columns auto-generated from VERSIONS × LANGUAGES
+  // Summary tables — columns auto-generated from VERSIONS × LANGUAGES.
+  // With REPEATS>1 each cell aggregates over its repeats as mean±std.
+  const overallsFor = (filter: (r: typeof results[number]) => boolean) =>
+    results.filter(filter).map((r) => r.overall);
   const cells: Array<[PromptVersion, OutputLanguage]> = [];
   for (const v of VERSIONS) for (const l of LANGUAGES) cells.push([v, l]);
-  console.log("\n=== Summary: overall by (version, language) ===");
-  console.log("scenario".padEnd(34), ...cells.map(([v, l]) => `${v}·${l}`.padStart(6)));
+
+  console.log(`\n=== Summary: overall by (version, language) — mean±std over ${REPEATS} run(s) ===`);
+  console.log("scenario".padEnd(34), ...cells.map(([v, l]) => `${v}·${l}`.padStart(11)));
   for (const scenario of SCENARIOS) {
-    const cell = (v: PromptVersion, l: OutputLanguage) =>
-      String(results.find((r) => r.scenario === scenario.slug && r.version === v && r.language === l)?.overall ?? "—").padStart(6);
-    console.log(scenario.slug.padEnd(34), ...cells.map(([v, l]) => cell(v, l)));
+    console.log(
+      scenario.slug.padEnd(34),
+      ...cells.map(([v, l]) => fmtMS(overallsFor((r) => r.scenario === scenario.slug && r.version === v && r.language === l))),
+    );
   }
-  const avg = (filter: (r: typeof results[number]) => boolean) => {
-    const xs = results.filter(filter).map((r) => r.overall);
-    return xs.length ? (xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(2) : "n/a";
-  };
-  console.log("AVERAGE".padEnd(34),
-    ...cells.map(([v, l]) => avg((r) => r.version === v && r.language === l).padStart(6)),
+  console.log("CELL MEAN".padEnd(34),
+    ...cells.map(([v, l]) => fmtMS(overallsFor((r) => r.version === v && r.language === l))),
   );
-  console.log("\n=== Marginal averages ===");
-  for (const v of VERSIONS) console.log(`${v} overall:`, avg((r) => r.version === v));
-  for (const l of LANGUAGES) console.log(`${l} overall:`, avg((r) => r.language === l));
+
+  console.log("\n=== Marginal averages (mean±std over all runs in the group) ===");
+  for (const v of VERSIONS) {
+    const xs = overallsFor((r) => r.version === v);
+    console.log(`${v} overall:`, `${mean(xs).toFixed(3)} ± ${std(xs).toFixed(3)}  (n=${xs.length})`);
+  }
+  for (const l of LANGUAGES) {
+    const xs = overallsFor((r) => r.language === l);
+    console.log(`${l} overall:`, `${mean(xs).toFixed(3)} ± ${std(xs).toFixed(3)}  (n=${xs.length})`);
+  }
+
+  // Pairwise version deltas with a crude significance flag: is |Δmean| larger than
+  // the pooled std? Not a t-test, but enough to say "inside the noise" vs "stands out".
+  console.log("\n=== Pairwise version deltas (overall) ===");
+  for (let i = 0; i < VERSIONS.length; i++) {
+    for (let j = i + 1; j < VERSIONS.length; j++) {
+      const a = overallsFor((r) => r.version === VERSIONS[i]);
+      const b = overallsFor((r) => r.version === VERSIONS[j]);
+      const delta = mean(a) - mean(b);
+      const pooled = Math.sqrt((std(a) ** 2 + std(b) ** 2) / 2);
+      const verdict = Math.abs(delta) > pooled ? "stands out" : "inside noise";
+      console.log(`${VERSIONS[i]} − ${VERSIONS[j]}: ${delta >= 0 ? "+" : ""}${delta.toFixed(3)}  (pooled std ${pooled.toFixed(3)} → ${verdict})`);
+    }
+  }
 }
 
 main();

@@ -65,19 +65,25 @@ Every prompt iteration is tracked against the same 5-scenario regression suite �
 | Domain correctness | Right SRE mechanism? No invented evidence? |
 | Completeness | All 9 sections substantively filled? |
 
-### Latest results (run #2, n=30, deepseek-chat for both analyzer and judge)
+### Latest results (run #3, n=3 repeats per cell, deepseek-chat for both analyzer and judge)
 
-| | overall (1–5) |
+Reported as **mean ± std** over 3 repeats — because that's the whole point. Balanced subset (4 scenarios all 3 versions completed × 2 languages × 3 repeats, n=24/version):
+
+| version | overall (mean ± std) |
 |---|---|
-| **Prompt v1** (rules-only) | **4.50** |
-| **Prompt v2** (rules + anchors + few-shot) | **4.36** |
-| **Prompt v3** (v2 minus the over-constraints + substance directive) | **4.52** ✅ |
-| **English output** | **4.55** |
-| **Chinese output** | **4.37** |
+| **Prompt v1** (rules-only) | **4.62 ± 0.33** |
+| **Prompt v2** (rules + few-shot, hard gates) | **4.48 ± 0.24** |
+| **Prompt v3** (gates → preferences + substance directive) | **4.60 ± 0.26** |
 
-**The v2 → v3 story (the actual portfolio point):** In run #1, v2 — which I wrote specifically to fix v1's known failure modes (vague commands, missing rollbacks, severity under-rating) — scored *worse* than v1. Cause: its hard constraints (a rollback-or-it's-unsafe gate, a rigid postmortem H2 list) over-narrowed the model into shorter, checklist-y output the judge marked down on **completeness**. You can't catch that by eyeballing — v2 *looks* more disciplined. v3 keeps v2's wins (quantitative severity, command examples) but reframes the gates as preferences and adds an explicit "brevity is not the goal" substance directive. Result: **v3 recovers to 4.52, the top score**, and posts the best Chinese result of any version. The v2-lowest ordering held across two independent runs (absolute deltas under ~0.2 are inside the run-to-run noise floor — which is why `DEFAULT_PROMPT_VERSION` won't flip to v3 until n=3 repeats confirm the edge).
+| pair | Δmean | pooled std | verdict |
+|---|---:|---:|---|
+| v1 − v2 | +0.13 | 0.29 | inside noise |
+| v1 − v3 | +0.02 | 0.30 | inside noise |
+| v2 − v3 | −0.12 | 0.25 | inside noise |
 
-**Cross-lingual finding:** Chinese output scores ~0.18 lower on average. Per-dim breakdown points the loss to `actionability` (Chinese explanations are more verbose, pushing commands into walls of prose). v3 adds a Chinese brevity guard that lifted zh's ceiling — v3·zh (4.44) beats both v1·zh and v2·zh. Codes/commands themselves stay English (the prompt's `languageInstruction()` works).
+**The real finding (and the actual portfolio point): the prompt-version gaps were noise.** Single-shot runs #1 and #2 each produced a clean ranking — v2 "regressed" 0.2, v3 "recovered" to the top. Run #3 with 3 repeats per cell shows the within-cell std (0.2–0.46) is *larger* than every between-version delta (0.02–0.13). For these 5 scenarios and this 1–5 rubric, **all three prompts are statistically tied on overall score.** Claiming "v3 improved quality 4.36 → 4.52" would have been overfitting to sampling noise — and I'd have done exactly that off run #2 if I hadn't added repeats.
+
+**What survives the error bars:** two consistent orderings. (1) **v2 is weakest in every run** — each delta in-noise, but the ordering reproduces across 3 independent runs, enough to say "don't default to v2." (2) **Chinese scores below English in nearly every cell** (en 4.64 ± 0.25 vs zh 4.49 ± 0.29) — the most reproducible effect in the dataset, and where future prompt work has the clearest signal. The default is now **v3** — chosen because it's tied with v1 on quality and strictly better-maintained for the bilingual case (its zh brevity guard makes v3·zh ≥ v2·zh in every scenario), *not* because it scored higher. See [`notes/eval-run-3.md`](./notes/eval-run-3.md).
 
 See [EVALUATION.md](./EVALUATION.md) for the full methodology, including limitations and roadmap.
 

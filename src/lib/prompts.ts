@@ -1,7 +1,12 @@
 // Prompt registry — versioned so we can A/B and track quality over time.
 
 export type PromptVersion = "v1" | "v2" | "v3";
-export const DEFAULT_PROMPT_VERSION: PromptVersion = "v2";
+// Default moved v2 → v3 after eval-run-3 (n=3 repeats). NOT because v3 scored higher —
+// with error bars all three versions are statistically tied on overall (deltas < pooled std).
+// v3 is chosen because: (a) v2 is the weakest in every run (consistent ordering across 3 runs),
+// and (b) between the noise-tied v1 and v3, v3 is the better-maintained prompt and its zh brevity
+// guard makes v3·zh ≥ v2·zh in every scenario at no measured cost. See notes/eval-run-3.md.
+export const DEFAULT_PROMPT_VERSION: PromptVersion = "v3";
 
 export const SYSTEM_PROMPT_V1 = `You are a Senior Site Reliability Engineer and Incident Commander with 10+ years of production experience across distributed systems, databases, networking, and Kubernetes.
 
