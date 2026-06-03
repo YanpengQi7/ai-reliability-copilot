@@ -105,6 +105,26 @@ claude mcp add --transport http ai-reliability https://ai-reliability-copilot.ve
 
 7 tools exposed: `search_kb`, `find_similar_incidents`, `list_scenarios`, `get_scenario`, `parse_alert_json`, `get_output_schema`, `save_incident_analysis`. See [USAGE.md](./USAGE.md) workflow D-bis for the full pattern.
 
+## Use it from your terminal (CLI)
+
+For on-call who live in the shell. Pipe any alert JSON or free-form note in, read the structured analysis out — no tab-switching, no copy-paste into a web form.
+
+```bash
+npm i -g sre-copilot-cli       # or: cd cli && npm link
+
+pbpaste | sre analyze          # macOS — paste a Datadog/PagerDuty alert from clipboard
+sre analyze < alert.json       # pipe a file
+echo "checkout p99 8s" | sre analyze   # free-form
+
+sre analyze --json | jq        # raw analysis JSON for scripting
+sre analyze --no-wait          # submit and exit, print URL only
+sre analyze --open             # also open the web view in browser
+```
+
+Source: [`cli/`](./cli). Zero deps, single-file ESM, Node 20+. Auto-detects Datadog / PagerDuty / Sentry payload shapes via the same parsers the webhook uses; falls back to treating stdin as raw context. Defaults to the hosted instance; point at your self-hosted via `SRE_COPILOT_URL`.
+
+**Why a CLI matters at $WORK:** zero infrastructure approval. No Slack App install, no PagerDuty integration token, no SecOps ticket — it's just an HTTPS call from your laptop. Day-1 deployable into any new job.
+
 ## Knowledge base (internal RAG)
 
 Make the AI understand **your company**: drop your runbooks, postmortems, and service catalog into `sample-kb/` (or any directory), then `npm run kb:ingest`. Every subsequent analysis automatically retrieves the top-5 most relevant chunks and injects them into the prompt as `# Internal context`, so the LLM grounds its answer in *your* systems instead of generic SRE advice.

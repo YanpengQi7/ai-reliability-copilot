@@ -1,0 +1,30 @@
+{
+  "name": "sre-copilot-cli",
+  "version": "0.1.0",
+  "description": "Pipe any incident text (Datadog/PagerDuty/Sentry JSON, or free-form notes) to AI Reliability Copilot and read the structured analysis in your terminal.",
+  "type": "module",
+  "bin": {
+    "sre": "./bin/sre.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YanpengQi7/ai-reliability-copilot",
+    "directory": "cli"
+  },
+  "keywords": [
+    "sre",
+    "incident",
+    "ai",
+    "cli",
+    "oncall",
+    "postmortem"
+  ]
+}
