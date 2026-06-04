@@ -1,5 +1,5 @@
 import { generateObject } from "ai";
-import { deepseek, JUDGE_MODEL } from "@/lib/ai";
+import { deepseek, JUDGE_MODEL, JUDGE_MODEL_GROUNDING } from "@/lib/ai";
 import { RubricScores, RubricScoresWithGrounding, RUBRIC_DEFINITIONS, EVIDENCE_GROUNDING_DEF, type RubricDim } from "./rubric";
 import type { Analysis } from "@/lib/schema";
 
@@ -91,9 +91,16 @@ export async function judge(input: JudgeInput) {
 
 // 6-dimension judge for the agentic arm: the core 5 PLUS evidence_grounding,
 // graded against the supplied investigation trace.
-export async function judgeWithGrounding(input: JudgeInput & { trace: string }) {
+//
+// `judgeModel` override: calibration (notes/calib-grounding.md) showed
+// deepseek-chat returns a flat 5.00 on evidence_grounding with zero variance —
+// too weak to discriminate verbatim-grounded from derived claims even with
+// tightened anchors. The override lets us grade grounding with a stronger model
+// (e.g. deepseek-reasoner) while the core-5 eval keeps deepseek-chat for
+// comparability with the historical single-shot evals.
+export async function judgeWithGrounding(input: JudgeInput & { trace: string }, judgeModel: string = JUDGE_MODEL_GROUNDING) {
   const { object } = await generateObject({
-    model: deepseek(JUDGE_MODEL),
+    model: deepseek(judgeModel),
     schema: RubricScoresWithGrounding,
     system: `${JUDGE_SYSTEM_PROMPT}${groundingRubricBlock()}`,
     prompt: buildJudgeUserPrompt(input),

@@ -87,12 +87,18 @@ export function overallScore(s: RubricScores): number {
 // This dimension requires the judge to see the TOOL TRACE (what was actually
 // queried and returned), not just the final analysis — a claim is only
 // "grounded" if the evidence cited was really retrieved during investigation.
+// Anchors deliberately force the judge to DISCRIMINATE — calibration (see
+// notes/calib-grounding.md) found it returning a flat 5.00 with zero variance,
+// which means the dimension wasn't grading anything. A derived/rounded number
+// (e.g. reporting "~3.2% failures" when the trace shows 99.7%→96.8%) must cost a
+// point; only verbatim-traceable claims earn a 5. Numbers from the severity
+// RUBRIC (">1%", ">5 min") are not trace claims — do not penalize those.
 export const EVIDENCE_GROUNDING_DEF = {
   title: "Evidence grounding",
   anchors: {
-    1: "Conclusions cite metrics/logs/numbers that do NOT appear in the tool trace; fabricated evidence; root cause asserted without any supporting tool result",
-    3: "Most claims trace back to tool outputs; one or two details appear invented or over-stated beyond what the tools returned",
-    5: "Every root-cause claim and key number is traceable to a specific tool observation in the trace; no fabricated evidence; honest about what was not checked",
+    1: "A root-cause claim or key number is NOT supported anywhere in the tool trace (fabricated or contradicted by the observations).",
+    3: "Direction is supported by the trace, but ≥2 numbers are derived/approximated/over-stated beyond what the tools returned, OR a key metric cited was never actually queried.",
+    5: "EVERY root-cause claim and every cited number is VERBATIM traceable to a specific tool observation. Reserve 5 for verbatim grounding only — if even one figure is rounded or derived (not literally in a tool output), the ceiling is 4. (Thresholds quoted from the severity rubric like '>1%' or '>5 min' are rubric references, not trace claims — do not penalize them.)",
   } as Record<1 | 3 | 5, string>,
 };
 

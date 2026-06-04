@@ -1,0 +1,1176 @@
+{
+  "generated_at": "2026-06-04T22:48:52.412Z",
+  "repeats": 3,
+  "rows": [
+    {
+      "mode": "single",
+      "scenario": "db-connection-pool-exhausted",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 3972,
+      "tokens_out": 2888,
+      "cost_usd": 0.00424924,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "db-connection-pool-exhausted",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 3972,
+      "tokens_out": 2334,
+      "cost_usd": 0.00363984,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "db-connection-pool-exhausted",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 3972,
+      "tokens_out": 2983,
+      "cost_usd": 0.00435374,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "db-connection-pool-exhausted",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4383,
+      "tokens_out": 1933,
+      "cost_usd": 0.00330971,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "db-connection-pool-exhausted",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4383,
+      "tokens_out": 2157,
+      "cost_usd": 0.0035561100000000008,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "db-connection-pool-exhausted",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4383,
+      "tokens_out": 1889,
+      "cost_usd": 0.0032613100000000003,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "agentic",
+      "scenario": "db-connection-pool-exhausted",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 11977,
+      "tokens_out": 3029,
+      "cost_usd": 0.006565690000000001,
+      "model_calls": 5,
+      "tool_calls": 5
+    },
+    {
+      "mode": "agentic",
+      "scenario": "db-connection-pool-exhausted",
+      "language": "en",
+      "overall": 4.4,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9327,
+      "tokens_out": 3575,
+      "cost_usd": 0.00645079,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "db-connection-pool-exhausted",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 12707,
+      "tokens_out": 3064,
+      "cost_usd": 0.006801290000000001,
+      "model_calls": 5,
+      "tool_calls": 7
+    },
+    {
+      "mode": "agentic",
+      "scenario": "db-connection-pool-exhausted",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9344,
+      "tokens_out": 2628,
+      "cost_usd": 0.005413680000000001,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "db-connection-pool-exhausted",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9398,
+      "tokens_out": 2857,
+      "cost_usd": 0.00568016,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "db-connection-pool-exhausted",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9348,
+      "tokens_out": 2649,
+      "cost_usd": 0.00543786,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "single",
+      "scenario": "bad-deploy-memory-leak",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": false,
+      "tokens_in": 4067,
+      "tokens_out": 1898,
+      "cost_usd": 0.0031858900000000002,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "bad-deploy-memory-leak",
+      "language": "en",
+      "overall": 4.6,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 4,
+        "completeness": 5
+      },
+      "severity_correct": false,
+      "tokens_in": 4067,
+      "tokens_out": 1684,
+      "cost_usd": 0.00295049,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "bad-deploy-memory-leak",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 5,
+        "actionability": 5,
+        "domain_correctness": 4,
+        "completeness": 5
+      },
+      "severity_correct": false,
+      "tokens_in": 4067,
+      "tokens_out": 1813,
+      "cost_usd": 0.0030923900000000004,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "bad-deploy-memory-leak",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 5,
+        "actionability": 5,
+        "domain_correctness": 4,
+        "completeness": 5
+      },
+      "severity_correct": false,
+      "tokens_in": 4478,
+      "tokens_out": 2067,
+      "cost_usd": 0.00348276,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "bad-deploy-memory-leak",
+      "language": "zh",
+      "overall": 4.6,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 4,
+        "completeness": 5
+      },
+      "severity_correct": false,
+      "tokens_in": 4478,
+      "tokens_out": 1937,
+      "cost_usd": 0.00333976,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "bad-deploy-memory-leak",
+      "language": "zh",
+      "overall": 4.6,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 4
+      },
+      "severity_correct": false,
+      "tokens_in": 4478,
+      "tokens_out": 1461,
+      "cost_usd": 0.0028161600000000003,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "agentic",
+      "scenario": "bad-deploy-memory-leak",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": false,
+      "tokens_in": 12691,
+      "tokens_out": 2951,
+      "cost_usd": 0.00667267,
+      "model_calls": 5,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "bad-deploy-memory-leak",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9309,
+      "tokens_out": 2948,
+      "cost_usd": 0.005756230000000001,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "bad-deploy-memory-leak",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": false,
+      "tokens_in": 12542,
+      "tokens_out": 2777,
+      "cost_usd": 0.00644104,
+      "model_calls": 5,
+      "tool_calls": 5
+    },
+    {
+      "mode": "agentic",
+      "scenario": "bad-deploy-memory-leak",
+      "language": "zh",
+      "overall": 5,
+      "dims": {
+        "specificity": 5,
+        "safety": 5,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 12556,
+      "tokens_out": 2461,
+      "cost_usd": 0.00609722,
+      "model_calls": 5,
+      "tool_calls": 5
+    },
+    {
+      "mode": "agentic",
+      "scenario": "bad-deploy-memory-leak",
+      "language": "zh",
+      "overall": 5,
+      "dims": {
+        "specificity": 5,
+        "safety": 5,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9338,
+      "tokens_out": 2359,
+      "cost_usd": 0.00511616,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "bad-deploy-memory-leak",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9366,
+      "tokens_out": 2658,
+      "cost_usd": 0.00545262,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "single",
+      "scenario": "upstream-dependency-timeout",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4032,
+      "tokens_out": 2334,
+      "cost_usd": 0.00365604,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "upstream-dependency-timeout",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4032,
+      "tokens_out": 2317,
+      "cost_usd": 0.00363734,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "upstream-dependency-timeout",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4032,
+      "tokens_out": 2083,
+      "cost_usd": 0.0033799400000000005,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "upstream-dependency-timeout",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4443,
+      "tokens_out": 2430,
+      "cost_usd": 0.0038726100000000003,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "upstream-dependency-timeout",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4443,
+      "tokens_out": 2388,
+      "cost_usd": 0.00382641,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "upstream-dependency-timeout",
+      "language": "zh",
+      "overall": 4.2,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 4
+      },
+      "severity_correct": true,
+      "tokens_in": 4443,
+      "tokens_out": 2267,
+      "cost_usd": 0.0036933100000000004,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "agentic",
+      "scenario": "upstream-dependency-timeout",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9203,
+      "tokens_out": 3037,
+      "cost_usd": 0.005825510000000001,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "upstream-dependency-timeout",
+      "language": "en",
+      "overall": 4.4,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9193,
+      "tokens_out": 2903,
+      "cost_usd": 0.0056754100000000005,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "upstream-dependency-timeout",
+      "language": "en",
+      "overall": 5,
+      "dims": {
+        "specificity": 5,
+        "safety": 5,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9201,
+      "tokens_out": 3088,
+      "cost_usd": 0.00588107,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "upstream-dependency-timeout",
+      "language": "zh",
+      "overall": 5,
+      "dims": {
+        "specificity": 5,
+        "safety": 5,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 13766,
+      "tokens_out": 2960,
+      "cost_usd": 0.00697282,
+      "model_calls": 5,
+      "tool_calls": 5
+    },
+    {
+      "mode": "agentic",
+      "scenario": "upstream-dependency-timeout",
+      "language": "zh",
+      "overall": 4.4,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 12570,
+      "tokens_out": 3107,
+      "cost_usd": 0.006811600000000001,
+      "model_calls": 5,
+      "tool_calls": 5
+    },
+    {
+      "mode": "agentic",
+      "scenario": "upstream-dependency-timeout",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9226,
+      "tokens_out": 2833,
+      "cost_usd": 0.005607320000000001,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "single",
+      "scenario": "dns-misconfiguration",
+      "language": "en",
+      "overall": 4.4,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4095,
+      "tokens_out": 2120,
+      "cost_usd": 0.00343765,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "dns-misconfiguration",
+      "language": "en",
+      "overall": 4.2,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 4
+      },
+      "severity_correct": true,
+      "tokens_in": 4095,
+      "tokens_out": 2246,
+      "cost_usd": 0.0035762500000000004,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "dns-misconfiguration",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4095,
+      "tokens_out": 2195,
+      "cost_usd": 0.00352015,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "dns-misconfiguration",
+      "language": "zh",
+      "overall": 4.6,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 4
+      },
+      "severity_correct": true,
+      "tokens_in": 4506,
+      "tokens_out": 1561,
+      "cost_usd": 0.0029337200000000003,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "dns-misconfiguration",
+      "language": "zh",
+      "overall": 4.2,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 4
+      },
+      "severity_correct": true,
+      "tokens_in": 4506,
+      "tokens_out": 2044,
+      "cost_usd": 0.0034650200000000005,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "dns-misconfiguration",
+      "language": "zh",
+      "overall": 4.2,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 4
+      },
+      "severity_correct": true,
+      "tokens_in": 4506,
+      "tokens_out": 1730,
+      "cost_usd": 0.0031196200000000005,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "agentic",
+      "scenario": "dns-misconfiguration",
+      "language": "en",
+      "overall": 4.4,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 7338,
+      "tokens_out": 2119,
+      "cost_usd": 0.00431216,
+      "model_calls": 4,
+      "tool_calls": 2
+    },
+    {
+      "mode": "agentic",
+      "scenario": "dns-misconfiguration",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 11575,
+      "tokens_out": 3476,
+      "cost_usd": 0.0069488499999999995,
+      "model_calls": 5,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "dns-misconfiguration",
+      "language": "en",
+      "overall": 4.4,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 12054,
+      "tokens_out": 3247,
+      "cost_usd": 0.0068262800000000005,
+      "model_calls": 5,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "dns-misconfiguration",
+      "language": "zh",
+      "overall": 4.4,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 4,
+      "severity_correct": true,
+      "tokens_in": 11930,
+      "tokens_out": 3005,
+      "cost_usd": 0.0065266000000000005,
+      "model_calls": 5,
+      "tool_calls": 3
+    },
+    {
+      "mode": "agentic",
+      "scenario": "dns-misconfiguration",
+      "language": "zh",
+      "overall": 4,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 4,
+        "completeness": 4
+      },
+      "grounding": 4,
+      "severity_correct": true,
+      "tokens_in": 17156,
+      "tokens_out": 3221,
+      "cost_usd": 0.00817522,
+      "model_calls": 6,
+      "tool_calls": 5
+    },
+    {
+      "mode": "agentic",
+      "scenario": "dns-misconfiguration",
+      "language": "zh",
+      "overall": 4.4,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 11928,
+      "tokens_out": 3108,
+      "cost_usd": 0.00663936,
+      "model_calls": 5,
+      "tool_calls": 3
+    },
+    {
+      "mode": "single",
+      "scenario": "cache-stampede",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4086,
+      "tokens_out": 2427,
+      "cost_usd": 0.00377292,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "cache-stampede",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4086,
+      "tokens_out": 2567,
+      "cost_usd": 0.00392692,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "cache-stampede",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4086,
+      "tokens_out": 2375,
+      "cost_usd": 0.00371572,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "cache-stampede",
+      "language": "zh",
+      "overall": 4.2,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 4
+      },
+      "severity_correct": true,
+      "tokens_in": 4497,
+      "tokens_out": 1857,
+      "cost_usd": 0.00325689,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "cache-stampede",
+      "language": "zh",
+      "overall": 3.8,
+      "dims": {
+        "specificity": 4,
+        "safety": 3,
+        "actionability": 4,
+        "domain_correctness": 4,
+        "completeness": 4
+      },
+      "severity_correct": true,
+      "tokens_in": 4497,
+      "tokens_out": 2405,
+      "cost_usd": 0.0038596900000000003,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "single",
+      "scenario": "cache-stampede",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "severity_correct": true,
+      "tokens_in": 4497,
+      "tokens_out": 1688,
+      "cost_usd": 0.0030709900000000004,
+      "model_calls": 1,
+      "tool_calls": 0
+    },
+    {
+      "mode": "agentic",
+      "scenario": "cache-stampede",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9169,
+      "tokens_out": 2906,
+      "cost_usd": 0.00567223,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "cache-stampede",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9169,
+      "tokens_out": 2891,
+      "cost_usd": 0.00565573,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "cache-stampede",
+      "language": "en",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9169,
+      "tokens_out": 3129,
+      "cost_usd": 0.005917530000000001,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "cache-stampede",
+      "language": "zh",
+      "overall": 4.2,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 4
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9195,
+      "tokens_out": 2871,
+      "cost_usd": 0.005640750000000002,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "cache-stampede",
+      "language": "zh",
+      "overall": 4.8,
+      "dims": {
+        "specificity": 5,
+        "safety": 4,
+        "actionability": 5,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9188,
+      "tokens_out": 2761,
+      "cost_usd": 0.005517860000000001,
+      "model_calls": 4,
+      "tool_calls": 4
+    },
+    {
+      "mode": "agentic",
+      "scenario": "cache-stampede",
+      "language": "zh",
+      "overall": 4.4,
+      "dims": {
+        "specificity": 4,
+        "safety": 4,
+        "actionability": 4,
+        "domain_correctness": 5,
+        "completeness": 5
+      },
+      "grounding": 5,
+      "severity_correct": true,
+      "tokens_in": 9189,
+      "tokens_out": 3022,
+      "cost_usd": 0.005805230000000001,
+      "model_calls": 4,
+      "tool_calls": 4
+    }
+  ]
+}

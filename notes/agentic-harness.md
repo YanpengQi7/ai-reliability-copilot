@@ -100,7 +100,41 @@ and that the agent chooses *which* slice to pull. State the comparison as
 **"one-shot with everything pre-stuffed" vs. "agent that discovers the relevant
 slice"** — that's the honest claim, and the one worth writing about.
 
-> Smoke (n=1, not significant — illustrates the pipeline): single overall 4.80,
-> agentic 5.00 (safety 4→5), grounding 5/5, agentic 1.9× the cost. Run the full
-> matrix with repeats for real error bars before quoting anything.
+### Real results — full matrix, n=3 (2026-06-04)
+
+5 scenarios × {single, agentic} × {en, zh} × 3 repeats = 60 runs. DeepSeek both sides.
+
+| metric | single-shot | agentic | verdict |
+|---|---|---|---|
+| **overall** (mean of core 5) | 4.63 ± 0.28 | 4.67 ± 0.26 | **inside noise** (Δ+0.05, pooled std 0.27) |
+| specificity | 4.77 | 4.67 | inside noise |
+| safety | 4.03 | 4.13 | inside noise |
+| actionability | 4.77 | 4.67 | inside noise |
+| domain_correctness | 4.83 | 4.97 | inside noise (leans agentic) |
+| completeness | 4.73 | 4.93 | inside noise (leans agentic) |
+| **severity accuracy** | **24/30 (80%)** | **28/30 (93%)** | the one real signal |
+| evidence_grounding | n/a (no trace) | ~~4.93~~ VOID | judged by uncalibrated deepseek-chat (flat 5.00) — see below |
+| cost / run | $0.0035 | $0.0061 | agentic **1.7×** |
+| model calls / run | 1.0 | 4.4 | — |
+
+**Honest headline: on rubric quality the agentic version is statistically TIED with
+single-shot, at 1.7× the cost.** Agency did not buy better prose.
+
+**The one real win, and it's concentrated:** every single severity miss — all 6 single
+misses and both agentic misses — is on ONE scenario, `bad-deploy-memory-leak`, the only
+**SEV2** in the suite. Single-shot over-escalates it to SEV1 *every time* (6/6); the
+agentic version, because it actually pulls the metrics and sees "service still serving
+most traffic via remaining pods, success rate 99.7%→96.8%", correctly declines to
+over-escalate (zh 3/3 right, en 1/3). **So the value of agency here is not text quality —
+it's blast-radius judgement: investigating before escalating stops the naive over-react.**
+That's the SRE-meaningful finding worth writing about.
+
+**Caveat that gates the claims:** the 4.93/5 grounding number is **void** — it was graded
+by deepseek-chat, which calibration then showed returns a flat 5.00 with zero variance on
+this dimension (it can't grade it, even with tightened anchors). Switched the grounding
+judge to **deepseek-reasoner**, which discriminates (scores 1/4/5/5/5, tracks a
+deterministic grounded-ratio check) — see `notes/calib-grounding-findings.md`. Re-run the
+full eval with the reasoner judge before quoting any grounding number as a result.
+
+Raw rows: `notes/eval-agentic-latest.json`.
 ```
