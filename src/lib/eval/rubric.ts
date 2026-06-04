@@ -77,3 +77,26 @@ export function overallScore(s: RubricScores): number {
   const sum = dims.reduce((acc, d) => acc + s[d].score, 0);
   return Math.round((sum / dims.length) * 100) / 100;
 }
+
+// ── Evidence grounding (agentic-only, OPTIONAL 6th dimension) ──────────
+// Deliberately NOT part of overallScore(): the single-shot baseline has no
+// investigation trace, so this dimension only applies to the agentic arm.
+// Folding it into `overall` would make the before/after numbers incomparable
+// with the historical single-shot evals. We score and report it separately.
+//
+// This dimension requires the judge to see the TOOL TRACE (what was actually
+// queried and returned), not just the final analysis — a claim is only
+// "grounded" if the evidence cited was really retrieved during investigation.
+export const EVIDENCE_GROUNDING_DEF = {
+  title: "Evidence grounding",
+  anchors: {
+    1: "Conclusions cite metrics/logs/numbers that do NOT appear in the tool trace; fabricated evidence; root cause asserted without any supporting tool result",
+    3: "Most claims trace back to tool outputs; one or two details appear invented or over-stated beyond what the tools returned",
+    5: "Every root-cause claim and key number is traceable to a specific tool observation in the trace; no fabricated evidence; honest about what was not checked",
+  } as Record<1 | 3 | 5, string>,
+};
+
+export const RubricScoresWithGrounding = RubricScores.extend({
+  evidence_grounding: DimensionScore,
+});
+export type RubricScoresWithGrounding = z.infer<typeof RubricScoresWithGrounding>;

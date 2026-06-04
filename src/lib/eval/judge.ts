@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { deepseek, JUDGE_MODEL } from "@/lib/ai";
-import { RubricScores, RUBRIC_DEFINITIONS, type RubricDim } from "./rubric";
+import { RubricScores, RubricScoresWithGrounding, RUBRIC_DEFINITIONS, EVIDENCE_GROUNDING_DEF, type RubricDim } from "./rubric";
 import type { Analysis } from "@/lib/schema";
 
 function rubricDescription(): string {
@@ -36,6 +36,9 @@ export type JudgeInput = {
     expected_severity: string;
     expected_root_cause: string;
   };
+  // Agentic-only: the investigation transcript (tool calls + observations).
+  // When present, the judge ALSO scores evidence_grounding against it.
+  trace?: string;
 };
 
 export function buildJudgeUserPrompt(input: JudgeInput): string {
@@ -47,21 +50,52 @@ export function buildJudgeUserPrompt(input: JudgeInput): string {
 - Expected root cause: ${input.scenario.expected_root_cause}`
     : "";
 
+  const traceBlock = input.trace
+    ? `
+
+# Investigation trace (tool calls + observations the analyst actually saw)
+${input.trace}
+
+Use this trace to score **evidence_grounding**: every numeric claim, log line, or root-cause assertion in the response must be traceable to a tool observation above. Penalize any evidence that does not appear in the trace.`
+    : "";
+
   return `# Incident response to score
 
 \`\`\`json
 ${JSON.stringify(input.analysis, null, 2)}
 \`\`\`
-${expected}
+${expected}${traceBlock}
 
-Score it on the 5-dimension rubric now.`;
+Score it on the ${input.trace ? "6" : "5"}-dimension rubric now.`;
 }
 
+function groundingRubricBlock(): string {
+  const r = EVIDENCE_GROUNDING_DEF;
+  return `\n\n## ${r.title} (1-5)
+- 1: ${r.anchors[1]}
+- 3: ${r.anchors[3]}
+- 5: ${r.anchors[5]}`;
+}
+
+// Core 5-dimension judge (used by the single-shot baseline + historical evals).
 export async function judge(input: JudgeInput) {
   const { object } = await generateObject({
     model: deepseek(JUDGE_MODEL),
     schema: RubricScores,
     system: JUDGE_SYSTEM_PROMPT,
+    prompt: buildJudgeUserPrompt({ ...input, trace: undefined }),
+    temperature: 0,
+  });
+  return object;
+}
+
+// 6-dimension judge for the agentic arm: the core 5 PLUS evidence_grounding,
+// graded against the supplied investigation trace.
+export async function judgeWithGrounding(input: JudgeInput & { trace: string }) {
+  const { object } = await generateObject({
+    model: deepseek(JUDGE_MODEL),
+    schema: RubricScoresWithGrounding,
+    system: `${JUDGE_SYSTEM_PROMPT}${groundingRubricBlock()}`,
     prompt: buildJudgeUserPrompt(input),
     temperature: 0,
   });

@@ -9,7 +9,11 @@
     "lint": "eslint",
     "seed:scenarios": "tsx scripts/seed-scenarios.ts",
     "evals:run": "tsx scripts/run-evals.ts",
+    "agent": "tsx scripts/run-agent.ts",
+    "evals:agentic": "tsx scripts/run-evals-agentic.ts",
     "evals:calibrate": "tsx scripts/human-vs-judge.ts",
+    "calib:dump": "tsx scripts/calib-dump.ts",
+    "calib:report": "tsx scripts/calib-report.ts",
     "backfill:similar": "tsx scripts/backfill-similar.ts",
     "kb:ingest": "tsx scripts/ingest-kb.ts"
   },
