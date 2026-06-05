@@ -1,0 +1,83 @@
+name: Eval (manual)
+
+# Run the agentic before/after eval (and optional grounding calibration) IN THE
+# CLOUD, so it survives a closed laptop. Trigger it from the GitHub UI:
+#   Actions tab → "Eval (manual)" → Run workflow → set inputs → Run.
+# Results are uploaded as a downloadable artifact (no Supabase needed — the
+# agentic eval writes a local JSON; the agent itself only needs DEEPSEEK_API_KEY).
+#
+# One-time setup: repo Settings → Secrets and variables → Actions →
+#   New repository secret → name DEEPSEEK_API_KEY, value <your key>.
+
+on:
+  workflow_dispatch:
+    inputs:
+      repeats:
+        description: 'Repeats per cell (mean±std needs ≥2; n=3 matches prior methodology)'
+        required: true
+        default: '3'
+        type: string
+      english_only:
+        description: 'English only (faster/cheaper). Untick for en+zh.'
+        required: true
+        default: false
+        type: boolean
+      run_calibration:
+        description: 'Also run the grounding-judge calibration audit'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Guard — DEEPSEEK_API_KEY secret must be set
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          if [ -z "$DEEPSEEK_API_KEY" ]; then
+            echo "::error::DEEPSEEK_API_KEY repo secret is not set. Add it in Settings → Secrets → Actions."
+            exit 1
+          fi
+          echo "Secret present."
+
+      - name: Run agentic before/after eval
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          EVAL_REPEATS: ${{ inputs.repeats }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.english_only }}" = "true" ]; then ARGS="-- --en"; fi
+          npm run evals:agentic $ARGS | tee notes/eval-agentic-run.log
+
+      - name: Run grounding calibration (optional)
+        if: ${{ inputs.run_calibration }}
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: npm run calib:grounding | tee notes/calib-grounding-run.log
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: |
+            notes/eval-agentic-latest.json
+            notes/eval-agentic-run.log
+            notes/calib-grounding.md
+            notes/calib-grounding-run.log
+          if-no-files-found: warn
+          retention-days: 30
