@@ -183,7 +183,7 @@ npm run evals:run
 ## Known limitations
 
 - **In-memory rate limiter** (`src/lib/rateLimit.ts`) — resets on cold start. Production swap: Upstash Redis.
-- **Judge ≠ ground truth** — same model family judges the analyzer. ~10–20% optimistic bias likely. Mitigation: periodic human review (see EVALUATION.md).
+- **Judge ≠ ground truth** — same model family judges the analyzer. I guessed "~10–20% optimistic bias"; then I measured it. `npm run evals:crossjudge` holds each analysis fixed and re-scores it with an independent vendor (Claude Sonnet 4.6). Result over 20 analyses: the same-family judge scores **+0.24 higher on overall** (4.48 vs 4.24, ~5% — the guess was an overestimate), worst on `actionability`/`completeness` (−0.40 each), zero bias on `safety` (90% exact agreement). Pearson r 0.59, 70% within ±0.5. So: the bias is real but ~5%, not 10–20%, and it's concentrated, not uniform. Mitigation remains periodic human review (see [EVALUATION.md](./EVALUATION.md)).
 - **No per-scenario repeats** — single-shot evaluation. Doesn't capture run-to-run variance.
 - **5 scenarios is narrow** — real production has long tails.
 

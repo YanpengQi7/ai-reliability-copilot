@@ -60,7 +60,28 @@ open http://localhost:3000/evals
 
 ## Limitations & honesty
 
-- **Judge ≠ ground truth.** The same model family judges the output, so absolute scores carry a same-vendor optimistic bias. Rather than leave this as a hand-waved "~10–20%", it's now *measured*: `npm run evals:crossjudge` holds each analysis fixed and re-scores it with an independent vendor (`JUDGE_MODEL_CROSS`, default `openai:gpt-4o-mini`), reporting per-dimension bias (B−A), MAE, Pearson r, and the share within ±0.5 on overall — the overall bias is the headline self-bias number. (See [`scripts/run-evals-crossjudge.ts`](./scripts/run-evals-crossjudge.ts); latest dump in `notes/crossjudge-latest.json`.) Periodic human review (random sample of N=20 per release) remains the ground-truth anchor.
+- **Judge ≠ ground truth.** The same model family judges the output, so absolute scores carry a same-vendor optimistic bias. Rather than leave this as a hand-waved "~10–20%", it's now *measured* — see the cross-model results below. Periodic human review (random sample of N=20 per release) remains the ground-truth anchor.
+
+### Cross-model judge results (measuring same-family bias)
+
+`npm run evals:crossjudge` holds each analysis fixed and re-scores it with an independent vendor (`JUDGE_MODEL_CROSS`), so any score delta is the judge, not the generation. Run below: prompt v3, 5 scenarios × en/zh × 2 repeats = **n=20**, Judge A = `deepseek-chat` (same family as the analyzer), Judge B = `anthropic:claude-sonnet-4-6` (independent). Raw dump: `notes/crossjudge-latest.json`.
+
+| dimension | meanA (deepseek) | meanB (claude) | bias B−A | MAE | exact-agree |
+|---|---:|---:|---:|---:|---:|
+| specificity | 4.55 | 4.30 | −0.25 | 0.25 | 75% |
+| safety | 3.90 | 3.90 | **0.00** | 0.10 | **90%** |
+| actionability | 4.55 | 4.15 | **−0.40** | 0.40 | 65% |
+| domain_correctness | 4.85 | 4.70 | −0.15 | 0.25 | 75% |
+| completeness | 4.55 | 4.15 | **−0.40** | 0.40 | 60% |
+| **OVERALL** | **4.48** | **4.24** | **−0.24** | 0.28 | 30% |
+
+Overall Pearson r = **0.59**; 70% of items agree within ±0.5 on overall.
+
+**What this says:**
+- **The self-bias is real but small: +0.24 on a 1–5 scale (~5%).** My pre-registered guess of "10–20%" was an *overestimate* — measuring beats guessing in both directions.
+- **It's concentrated, not uniform.** `safety` has zero bias and 90% exact agreement (both judges converge on whether mitigations are reversible); the gap lives in `actionability` and `completeness` (−0.40 each), where DeepSeek is more generous about "could on-call actually run this" than the independent judge.
+- **The bias is consistent across languages** (en −0.22, zh −0.26), so it's a judge property, not a language artifact.
+- **Takeaway for the pipeline:** absolute scores should be read with a ~0.2–0.4 same-family discount on the soft dimensions; *relative* comparisons (prompt v1 vs v3) are safer because the bias is roughly constant across versions. Cross-judging the soft dimensions, or anchoring them to human review, is the next step.
 - **5 scenarios is narrow.** Will expand to 15–20 as the project matures. Real production has long tails.
 - **`temperature: 0.2` on the analyzer** means some run-to-run variance; we don't yet repeat each scenario and average. Roadmap item.
 - **In-memory rate limiter** on `/api/analyze` resets on cold start.

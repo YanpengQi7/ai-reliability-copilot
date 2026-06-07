@@ -1,0 +1,675 @@
+{
+  "generated_at": "2026-06-07T00:56:12.834Z",
+  "prompt_version": "v3",
+  "repeats": 2,
+  "judge_a": "deepseek-chat",
+  "judge_b": "anthropic:claude-sonnet-4-6",
+  "n": 20,
+  "overall": {
+    "meanA": 4.4799999999999995,
+    "meanB": 4.24,
+    "bias": -0.23999999999999994,
+    "mae": 0.27999999999999997,
+    "pearson_r": 0.5943043617697961,
+    "within_half_point": 0.7
+  },
+  "by_dimension": {
+    "specificity": {
+      "meanA": 4.55,
+      "meanB": 4.3,
+      "bias": -0.25,
+      "mae": 0.25,
+      "exact_agree": 0.75
+    },
+    "safety": {
+      "meanA": 3.9,
+      "meanB": 3.9,
+      "bias": 0,
+      "mae": 0.1,
+      "exact_agree": 0.9
+    },
+    "actionability": {
+      "meanA": 4.55,
+      "meanB": 4.15,
+      "bias": -0.4,
+      "mae": 0.4,
+      "exact_agree": 0.65
+    },
+    "domain_correctness": {
+      "meanA": 4.85,
+      "meanB": 4.7,
+      "bias": -0.15,
+      "mae": 0.25,
+      "exact_agree": 0.75
+    },
+    "completeness": {
+      "meanA": 4.55,
+      "meanB": 4.15,
+      "bias": -0.4,
+      "mae": 0.4,
+      "exact_agree": 0.6
+    }
+  },
+  "rows": [
+    {
+      "scenario": "db-connection-pool-exhausted",
+      "language": "en",
+      "rep": 0,
+      "dims": {
+        "specificity": {
+          "a": 4,
+          "b": 4
+        },
+        "safety": {
+          "a": 3,
+          "b": 3
+        },
+        "actionability": {
+          "a": 4,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 4,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4,
+        "b": 4
+      }
+    },
+    {
+      "scenario": "db-connection-pool-exhausted",
+      "language": "en",
+      "rep": 1,
+      "dims": {
+        "specificity": {
+          "a": 5,
+          "b": 5
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 5,
+          "b": 5
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 5,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4.8,
+        "b": 4.6
+      }
+    },
+    {
+      "scenario": "db-connection-pool-exhausted",
+      "language": "zh",
+      "rep": 0,
+      "dims": {
+        "specificity": {
+          "a": 5,
+          "b": 4
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 5,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 5,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4.8,
+        "b": 4.2
+      }
+    },
+    {
+      "scenario": "db-connection-pool-exhausted",
+      "language": "zh",
+      "rep": 1,
+      "dims": {
+        "specificity": {
+          "a": 5,
+          "b": 5
+        },
+        "safety": {
+          "a": 5,
+          "b": 4
+        },
+        "actionability": {
+          "a": 5,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 5,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 5,
+        "b": 4.4
+      }
+    },
+    {
+      "scenario": "bad-deploy-memory-leak",
+      "language": "en",
+      "rep": 0,
+      "dims": {
+        "specificity": {
+          "a": 5,
+          "b": 4
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 5,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 4,
+          "b": 3
+        },
+        "completeness": {
+          "a": 5,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4.6,
+        "b": 3.8
+      }
+    },
+    {
+      "scenario": "bad-deploy-memory-leak",
+      "language": "en",
+      "rep": 1,
+      "dims": {
+        "specificity": {
+          "a": 5,
+          "b": 4
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 5,
+          "b": 3
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 4
+        },
+        "completeness": {
+          "a": 5,
+          "b": 5
+        }
+      },
+      "overall": {
+        "a": 4.8,
+        "b": 4
+      }
+    },
+    {
+      "scenario": "bad-deploy-memory-leak",
+      "language": "zh",
+      "rep": 0,
+      "dims": {
+        "specificity": {
+          "a": 4,
+          "b": 4
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 4,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 4,
+          "b": 3
+        },
+        "completeness": {
+          "a": 4,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4,
+        "b": 3.8
+      }
+    },
+    {
+      "scenario": "bad-deploy-memory-leak",
+      "language": "zh",
+      "rep": 1,
+      "dims": {
+        "specificity": {
+          "a": 4,
+          "b": 4
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 4,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 4
+        },
+        "completeness": {
+          "a": 4,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4.2,
+        "b": 4
+      }
+    },
+    {
+      "scenario": "upstream-dependency-timeout",
+      "language": "en",
+      "rep": 0,
+      "dims": {
+        "specificity": {
+          "a": 5,
+          "b": 5
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 5,
+          "b": 5
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 5,
+          "b": 5
+        }
+      },
+      "overall": {
+        "a": 4.8,
+        "b": 4.8
+      }
+    },
+    {
+      "scenario": "upstream-dependency-timeout",
+      "language": "en",
+      "rep": 1,
+      "dims": {
+        "specificity": {
+          "a": 5,
+          "b": 5
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 5,
+          "b": 5
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 5,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4.8,
+        "b": 4.6
+      }
+    },
+    {
+      "scenario": "upstream-dependency-timeout",
+      "language": "zh",
+      "rep": 0,
+      "dims": {
+        "specificity": {
+          "a": 5,
+          "b": 4
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 5,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 5,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4.8,
+        "b": 4.2
+      }
+    },
+    {
+      "scenario": "upstream-dependency-timeout",
+      "language": "zh",
+      "rep": 1,
+      "dims": {
+        "specificity": {
+          "a": 5,
+          "b": 4
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 5,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 5,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4.8,
+        "b": 4.2
+      }
+    },
+    {
+      "scenario": "dns-misconfiguration",
+      "language": "en",
+      "rep": 0,
+      "dims": {
+        "specificity": {
+          "a": 4,
+          "b": 4
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 4,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 4,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4.2,
+        "b": 4.2
+      }
+    },
+    {
+      "scenario": "dns-misconfiguration",
+      "language": "en",
+      "rep": 1,
+      "dims": {
+        "specificity": {
+          "a": 4,
+          "b": 4
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 4,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 4,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4.2,
+        "b": 4.2
+      }
+    },
+    {
+      "scenario": "dns-misconfiguration",
+      "language": "zh",
+      "rep": 0,
+      "dims": {
+        "specificity": {
+          "a": 4,
+          "b": 4
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 4,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 4,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4.2,
+        "b": 4.2
+      }
+    },
+    {
+      "scenario": "dns-misconfiguration",
+      "language": "zh",
+      "rep": 1,
+      "dims": {
+        "specificity": {
+          "a": 4,
+          "b": 4
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 4,
+          "b": 3
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 4,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4.2,
+        "b": 4
+      }
+    },
+    {
+      "scenario": "cache-stampede",
+      "language": "en",
+      "rep": 0,
+      "dims": {
+        "specificity": {
+          "a": 5,
+          "b": 5
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 5,
+          "b": 5
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 5,
+          "b": 5
+        }
+      },
+      "overall": {
+        "a": 4.8,
+        "b": 4.8
+      }
+    },
+    {
+      "scenario": "cache-stampede",
+      "language": "en",
+      "rep": 1,
+      "dims": {
+        "specificity": {
+          "a": 5,
+          "b": 5
+        },
+        "safety": {
+          "a": 4,
+          "b": 4
+        },
+        "actionability": {
+          "a": 5,
+          "b": 5
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 5,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4.8,
+        "b": 4.6
+      }
+    },
+    {
+      "scenario": "cache-stampede",
+      "language": "zh",
+      "rep": 0,
+      "dims": {
+        "specificity": {
+          "a": 4,
+          "b": 4
+        },
+        "safety": {
+          "a": 3,
+          "b": 3
+        },
+        "actionability": {
+          "a": 4,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 4,
+          "b": 5
+        },
+        "completeness": {
+          "a": 4,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 3.8,
+        "b": 4
+      }
+    },
+    {
+      "scenario": "cache-stampede",
+      "language": "zh",
+      "rep": 1,
+      "dims": {
+        "specificity": {
+          "a": 4,
+          "b": 4
+        },
+        "safety": {
+          "a": 3,
+          "b": 4
+        },
+        "actionability": {
+          "a": 4,
+          "b": 4
+        },
+        "domain_correctness": {
+          "a": 5,
+          "b": 5
+        },
+        "completeness": {
+          "a": 4,
+          "b": 4
+        }
+      },
+      "overall": {
+        "a": 4,
+        "b": 4.2
+      }
+    }
+  ]
+}

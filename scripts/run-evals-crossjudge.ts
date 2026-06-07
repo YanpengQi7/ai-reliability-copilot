@@ -74,7 +74,12 @@ const num = (x: number, d = 2) => (Number.isNaN(x) ? "—".padStart(7) : x.toFix
 
 async function main() {
   if (!process.env.DEEPSEEK_API_KEY) throw new Error("Missing DEEPSEEK_API_KEY in .env.local");
-  if (!process.env.OPENAI_API_KEY) throw new Error("Missing OPENAI_API_KEY in .env.local (needed for the cross judge)");
+  // The cross judge's key requirement depends on its provider, not always OpenAI.
+  const crossProvider = JUDGE_B.includes(":") ? JUDGE_B.slice(0, JUDGE_B.indexOf(":")) : "deepseek";
+  const crossKeyEnv = { openai: "OPENAI_API_KEY", anthropic: "ANTHROPIC_API_KEY", deepseek: "DEEPSEEK_API_KEY" }[crossProvider];
+  if (crossKeyEnv && !process.env[crossKeyEnv]) {
+    throw new Error(`Missing ${crossKeyEnv} in .env.local (needed for cross judge "${JUDGE_B}")`);
+  }
 
   console.log(`Cross-model judge · prompt ${VERSION} · ${REPEATS} repeat(s)`);
   console.log(`  Judge A (same family): ${JUDGE_A}`);
