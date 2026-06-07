@@ -6,6 +6,8 @@ import { deepseek, ANALYSIS_MODEL } from "@/lib/ai";
 import { getSystemPrompt, buildUserPrompt, DEFAULT_PROMPT_VERSION, type PromptVersion } from "@/lib/prompts";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { retrieveContext, formatChunksForPrompt } from "@/lib/kb";
+import { normalizeUsage, calcCost } from "@/lib/cost";
+import { usageTrailer } from "@/lib/streamUsage";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -63,10 +65,30 @@ export async function POST(req: NextRequest) {
     temperature: 0.2,
   });
 
-  // KNOWN LIMITATION: token usage is not captured on the streaming path.
-  // `experimental_useObject` on the client doesn't expose usage, and the response
-  // headers are already flushed by the time onFinish fires. The rerun, scenario-run,
-  // and batch-eval paths (which use generateObject) do capture usage correctly.
-  // Cost on this path is back-fillable via DeepSeek's usage export if needed.
-  return result.toTextStreamResponse();
+  // Stream the object JSON, then append a usage TRAILER once the stream ends
+  // (usage is only known at that point — too late for a response header). The
+  // client's usage-capturing fetch strips the trailer before useObject parses
+  // the JSON, then forwards the captured usage to /api/incidents/save. See
+  // src/lib/streamUsage.ts for the wire format.
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for await (const delta of result.textStream) {
+          controller.enqueue(encoder.encode(delta));
+        }
+        const usage = await result.usage;
+        const { tokens_in, tokens_out } = normalizeUsage(usage);
+        const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
+        controller.enqueue(encoder.encode(usageTrailer({ tokens_in, tokens_out, cost_usd })));
+        controller.close();
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
 }

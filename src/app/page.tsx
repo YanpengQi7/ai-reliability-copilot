@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { experimental_useObject as useObject } from "@ai-sdk/react";
 import ReactMarkdown from "react-markdown";
@@ -10,6 +10,7 @@ import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/messages";
 import { Nav } from "@/components/Nav";
 import { tryParseAlert } from "@/lib/alertParsers";
 import { SAMPLE_ALERTS } from "@/lib/sampleAlerts";
+import { makeUsageCapturingFetch, type StreamUsage } from "@/lib/streamUsage";
 
 const SAMPLE = `Time: 14:02 UTC. payment-svc p99 latency jumped from 120ms to 4.8s.
 Error rate climbed from 0.1% to 12% (mostly 500s).
@@ -65,11 +66,25 @@ export default function Home() {
   }
   const router = useRouter();
   const startedRef = useRef<number>(0);
+  const usageRef = useRef<StreamUsage | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Peel the token-usage trailer off the stream before useObject parses the
+  // JSON; stash it in a ref for the save call below. The write runs only inside
+  // the stream transform's flush(), which the TransformStream contract
+  // guarantees completes before the readable closes — i.e. before useObject's
+  // onFinish reads usageRef. The refs lint rule can't see that deferral, so the
+  // disable below is a documented false positive, not a real render-time read.
+  const onUsage = useCallback((u: StreamUsage | null) => {
+    usageRef.current = u;
+  }, []);
+  // eslint-disable-next-line react-hooks/refs -- onUsage writes the ref only in async flush(), never during render
+  const capturingFetch = useMemo(() => makeUsageCapturingFetch(onUsage), [onUsage]);
 
   const { object, submit, isLoading, error } = useObject({
     api: "/api/analyze",
     schema: AnalysisSchema,
+    fetch: capturingFetch,
     onFinish: async ({ object }) => {
       if (!object) return;
       setSaving(true);
@@ -86,6 +101,7 @@ export default function Home() {
             latency_ms: Date.now() - startedRef.current,
             prompt_version: version,
             output_language: outputLang,
+            usage: usageRef.current ?? undefined,
           }),
         });
         if (res.ok) {

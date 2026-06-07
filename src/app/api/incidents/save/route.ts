@@ -19,6 +19,15 @@ const Body = z.object({
   latency_ms: z.number().optional(),
   prompt_version: z.enum(["v1", "v2", "v3"]).optional(),
   output_language: z.enum(["en", "zh"]).optional(),
+  // Token usage captured from the streaming /api/analyze response trailer.
+  // Optional — older clients / the CLI/webhook paths may omit it.
+  usage: z
+    .object({
+      tokens_in: z.number().int().nonnegative(),
+      tokens_out: z.number().int().nonnegative(),
+      cost_usd: z.number().nullable(),
+    })
+    .optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -81,6 +90,9 @@ export async function POST(req: NextRequest) {
       postmortem_draft: a.postmortem_draft,
       follow_ups: a.follow_ups,
       latency_ms: input.latency_ms ?? null,
+      tokens_in: input.usage?.tokens_in ?? null,
+      tokens_out: input.usage?.tokens_out ?? null,
+      cost_usd: input.usage?.cost_usd ?? null,
     })
     .select("id")
     .single();
