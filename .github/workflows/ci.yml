@@ -28,6 +28,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Pure-function unit tests (control gate, alert parsers, cost, secret scan,
+      # rubric). Deterministic and offline — no API keys, no DB, no LLM calls.
+      - name: Unit tests
+        run: npm test
+
       # Build does not require real env vars — Next.js builds with empty values
       # and our app gracefully degrades when DEEPSEEK_API_KEY / Supabase vars
       # are missing at runtime.
