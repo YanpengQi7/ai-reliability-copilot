@@ -20,6 +20,7 @@
     "kb:ingest": "tsx scripts/ingest-kb.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.81",
     "@ai-sdk/deepseek": "^2.0.35",
     "@ai-sdk/openai": "^3.0.68",
     "@ai-sdk/react": "^3.0.193",

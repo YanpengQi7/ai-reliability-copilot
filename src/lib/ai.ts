@@ -1,5 +1,6 @@
 import { createDeepSeek, type DeepSeekProvider } from "@ai-sdk/deepseek";
 import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
+import { createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
 
 // Deferred init — do NOT capture process.env at module load.
 // In Next.js routes, env vars are loaded before route execution.
@@ -33,11 +34,28 @@ export function openai(modelId: string) {
   return getOpenAI()(modelId);
 }
 
+// Third provider, also usable as the cross-model judge (Claude is a strong,
+// genuinely independent judge). Same lazy-init contract.
+let _anthropic: AnthropicProvider | null = null;
+function getAnthropic(): AnthropicProvider {
+  if (_anthropic) return _anthropic;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  // Pin the baseURL — this provider version otherwise resolves to
+  // api.anthropic.com/messages (missing the /v1 prefix → 404).
+  _anthropic = createAnthropic({ apiKey: apiKey ?? "", baseURL: "https://api.anthropic.com/v1" });
+  return _anthropic;
+}
+
+export function anthropic(modelId: string) {
+  return getAnthropic()(modelId);
+}
+
 // Resolve a "provider:model" spec to an AI SDK model.
 // A bare id (no ":") defaults to DeepSeek — back-compat with the historical
 // single-provider config (JUDGE_MODEL = "deepseek-chat" still works unchanged).
-//   resolveModel("deepseek-chat")        → DeepSeek deepseek-chat
-//   resolveModel("openai:gpt-4o-mini")   → OpenAI gpt-4o-mini
+//   resolveModel("deepseek-chat")              → DeepSeek deepseek-chat
+//   resolveModel("openai:gpt-4o-mini")         → OpenAI gpt-4o-mini
+//   resolveModel("anthropic:claude-sonnet-4-6")→ Anthropic Claude Sonnet 4.6
 export function resolveModel(spec: string) {
   const idx = spec.indexOf(":");
   const [provider, modelId] =
@@ -47,9 +65,11 @@ export function resolveModel(spec: string) {
       return deepseek(modelId);
     case "openai":
       return openai(modelId);
+    case "anthropic":
+      return anthropic(modelId);
     default:
       throw new Error(
-        `Unknown provider "${provider}" in model spec "${spec}". Use "deepseek:<id>" or "openai:<id>".`,
+        `Unknown provider "${provider}" in model spec "${spec}". Use "deepseek:<id>", "openai:<id>", or "anthropic:<id>".`,
       );
   }
 }
