@@ -1,4 +1,5 @@
 import { createDeepSeek, type DeepSeekProvider } from "@ai-sdk/deepseek";
+import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
 
 // Deferred init — do NOT capture process.env at module load.
 // In Next.js routes, env vars are loaded before route execution.
@@ -18,6 +19,41 @@ export function deepseek(modelId: string) {
   return getProvider()(modelId);
 }
 
+// Second provider, used for the cross-model judge (see scripts/run-evals-crossjudge.ts).
+// Same lazy-init contract as the DeepSeek provider above.
+let _openai: OpenAIProvider | null = null;
+function getOpenAI(): OpenAIProvider {
+  if (_openai) return _openai;
+  const apiKey = process.env.OPENAI_API_KEY;
+  _openai = createOpenAI({ apiKey: apiKey ?? "" });
+  return _openai;
+}
+
+export function openai(modelId: string) {
+  return getOpenAI()(modelId);
+}
+
+// Resolve a "provider:model" spec to an AI SDK model.
+// A bare id (no ":") defaults to DeepSeek — back-compat with the historical
+// single-provider config (JUDGE_MODEL = "deepseek-chat" still works unchanged).
+//   resolveModel("deepseek-chat")        → DeepSeek deepseek-chat
+//   resolveModel("openai:gpt-4o-mini")   → OpenAI gpt-4o-mini
+export function resolveModel(spec: string) {
+  const idx = spec.indexOf(":");
+  const [provider, modelId] =
+    idx === -1 ? ["deepseek", spec] : [spec.slice(0, idx), spec.slice(idx + 1)];
+  switch (provider) {
+    case "deepseek":
+      return deepseek(modelId);
+    case "openai":
+      return openai(modelId);
+    default:
+      throw new Error(
+        `Unknown provider "${provider}" in model spec "${spec}". Use "deepseek:<id>" or "openai:<id>".`,
+      );
+  }
+}
+
 export const ANALYSIS_MODEL = "deepseek-chat";
 export const JUDGE_MODEL = "deepseek-chat";
 // Grounding is graded by a stronger (reasoning) judge. Calibration showed
@@ -27,3 +63,10 @@ export const JUDGE_MODEL = "deepseek-chat";
 // grounded-ratio check. See notes/calib-grounding-findings.md. The core-5 eval
 // keeps JUDGE_MODEL for comparability with the historical single-shot evals.
 export const JUDGE_MODEL_GROUNDING = "deepseek-reasoner";
+
+// Independent cross-model judge. The core eval has DeepSeek judging DeepSeek,
+// so its absolute scores carry a same-family optimistic bias (EVALUATION.md).
+// This is a DIFFERENT vendor used to MEASURE that bias, not to replace the
+// primary judge — see scripts/run-evals-crossjudge.ts. Override with
+// JUDGE_MODEL_CROSS in .env.local (e.g. "openai:gpt-4.1-mini").
+export const JUDGE_MODEL_CROSS = process.env.JUDGE_MODEL_CROSS ?? "openai:gpt-4o-mini";

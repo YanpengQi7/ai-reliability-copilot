@@ -60,7 +60,7 @@ open http://localhost:3000/evals
 
 ## Limitations & honesty
 
-- **Judge ≠ ground truth.** The same model family judges the output. We expect a ~10–20% optimistic bias. The plan is periodic human review (random sample of N=20 per release) to keep the judge honest.
+- **Judge ≠ ground truth.** The same model family judges the output, so absolute scores carry a same-vendor optimistic bias. Rather than leave this as a hand-waved "~10–20%", it's now *measured*: `npm run evals:crossjudge` holds each analysis fixed and re-scores it with an independent vendor (`JUDGE_MODEL_CROSS`, default `openai:gpt-4o-mini`), reporting per-dimension bias (B−A), MAE, Pearson r, and the share within ±0.5 on overall — the overall bias is the headline self-bias number. (See [`scripts/run-evals-crossjudge.ts`](./scripts/run-evals-crossjudge.ts); latest dump in `notes/crossjudge-latest.json`.) Periodic human review (random sample of N=20 per release) remains the ground-truth anchor.
 - **5 scenarios is narrow.** Will expand to 15–20 as the project matures. Real production has long tails.
 - **`temperature: 0.2` on the analyzer** means some run-to-run variance; we don't yet repeat each scenario and average. Roadmap item.
 - **In-memory rate limiter** on `/api/analyze` resets on cold start.
@@ -68,6 +68,7 @@ open http://localhost:3000/evals
 
 ## Roadmap
 - Human-vs-judge agreement study (target ≥80% agreement on overall ±0.5)
+- ✅ Cross-model judge to measure same-family bias (`npm run evals:crossjudge`)
 - Per-scenario repeats (N=3) with std-dev reporting
 - Adversarial scenarios (multi-cause incidents, missing data, misleading log lines)
 - Cost-per-quality tracking (overall_score / cents)

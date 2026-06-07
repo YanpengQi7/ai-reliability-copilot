@@ -78,9 +78,15 @@ function groundingRubricBlock(): string {
 }
 
 // Core 5-dimension judge (used by the single-shot baseline + historical evals).
-export async function judge(input: JudgeInput) {
+//
+// `model` override: defaults to the DeepSeek judge for back-compat. Pass a
+// different-vendor model (e.g. resolveModel(JUDGE_MODEL_CROSS)) to run the
+// cross-model judge that measures same-family bias — see
+// scripts/run-evals-crossjudge.ts. The analysis being scored is held fixed,
+// so any score delta is attributable to the judge, not the generation.
+export async function judge(input: JudgeInput, model = deepseek(JUDGE_MODEL)) {
   const { object } = await generateObject({
-    model: deepseek(JUDGE_MODEL),
+    model,
     schema: RubricScores,
     system: JUDGE_SYSTEM_PROMPT,
     prompt: buildJudgeUserPrompt({ ...input, trace: undefined }),

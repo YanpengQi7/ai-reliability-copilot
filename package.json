@@ -9,6 +9,7 @@
     "lint": "eslint",
     "seed:scenarios": "tsx scripts/seed-scenarios.ts",
     "evals:run": "tsx scripts/run-evals.ts",
+    "evals:crossjudge": "tsx scripts/run-evals-crossjudge.ts",
     "agent": "tsx scripts/run-agent.ts",
     "evals:agentic": "tsx scripts/run-evals-agentic.ts",
     "calib:grounding": "tsx scripts/calib-grounding.ts",
@@ -20,6 +21,7 @@
   },
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.35",
+    "@ai-sdk/openai": "^3.0.68",
     "@ai-sdk/react": "^3.0.193",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@supabase/supabase-js": "^2.106.2",
