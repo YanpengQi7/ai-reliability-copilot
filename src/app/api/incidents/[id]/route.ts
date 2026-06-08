@@ -10,6 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { hasSupabase, getIncidentWithAnalyses } from "@/lib/db";
+import { apiError } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,17 +18,11 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!hasSupabase()) {
-    return NextResponse.json(
-      { error: "DB_UNCONFIGURED", message: "Supabase not configured", statusCode: 503 },
-      { status: 503 },
-    );
+    return apiError(503, "DB_UNCONFIGURED", "Supabase not configured");
   }
   const result = await getIncidentWithAnalyses(id);
   if (!result) {
-    return NextResponse.json(
-      { error: "NOT_FOUND", message: "incident not found", statusCode: 404 },
-      { status: 404 },
-    );
+    return apiError(404, "NOT_FOUND", "incident not found");
   }
   const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
   return NextResponse.json({

@@ -8,6 +8,7 @@ import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { retrieveContext, formatChunksForPrompt } from "@/lib/kb";
 import { normalizeUsage, calcCost } from "@/lib/cost";
 import { usageTrailer } from "@/lib/streamUsage";
+import { apiError, validationError, invalidJson } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -21,31 +22,24 @@ const InputSchema = z.object({
   output_language: z.enum(["en", "zh"]).optional(),
 });
 
-function jsonError(status: number, code: string, message: string) {
-  return new Response(JSON.stringify({ error: code, message, statusCode: status }), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
-
 export async function POST(req: NextRequest) {
   if (!process.env.DEEPSEEK_API_KEY) {
-    return jsonError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY is not configured on the server.");
+    return apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY is not configured on the server.");
   }
   const rl = rateLimit(clientKey(req));
   if (!rl.allowed) {
-    return jsonError(429, "RATE_LIMITED", `Demo limit: 5 requests/min. Retry in ${rl.retryAfterSec}s.`);
+    return apiError(429, "RATE_LIMITED", `Demo limit: 5 requests/min. Retry in ${rl.retryAfterSec}s.`);
   }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return jsonError(400, "INVALID_JSON", "Body must be JSON");
+    return invalidJson();
   }
   const parsed = InputSchema.safeParse(body);
   if (!parsed.success) {
-    return jsonError(400, "VALIDATION_ERROR", parsed.error.issues.map((i) => i.message).join("; "));
+    return validationError(parsed.error);
   }
   const input = parsed.data;
 

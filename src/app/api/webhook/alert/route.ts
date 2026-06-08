@@ -29,6 +29,7 @@ import { calcCost, normalizeUsage } from "@/lib/cost";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { apiError } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,22 +48,22 @@ function checkAuth(req: Request): boolean {
 
 export async function POST(req: Request) {
   if (!checkAuth(req)) {
-    return NextResponse.json({ error: "UNAUTHORIZED", message: "Missing or wrong secret" }, { status: 401 });
+    return apiError(401, "UNAUTHORIZED", "Missing or wrong secret");
   }
   const rl = rateLimit(clientKey(req), { max: RATE_LIMIT, namespace: "webhook" });
   if (!rl.allowed) {
-    return NextResponse.json({ error: "RATE_LIMITED", message: `Retry in ${rl.retryAfterSec}s` }, { status: 429 });
+    return apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`);
   }
   if (!hasSupabase()) {
-    return NextResponse.json({ error: "DB_UNCONFIGURED", message: "Supabase env missing" }, { status: 503 });
+    return apiError(503, "DB_UNCONFIGURED", "Supabase env missing");
   }
   if (!process.env.DEEPSEEK_API_KEY) {
-    return NextResponse.json({ error: "MISSING_API_KEY", message: "DEEPSEEK_API_KEY missing" }, { status: 503 });
+    return apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY missing");
   }
 
   const bodyText = await req.text();
   if (bodyText.length < 5) {
-    return NextResponse.json({ error: "EMPTY_BODY", message: "Webhook body empty" }, { status: 400 });
+    return apiError(400, "EMPTY_BODY", "Webhook body empty");
   }
 
   const parsed = tryParseAlert(bodyText) ?? {
@@ -86,7 +87,7 @@ export async function POST(req: Request) {
     })
     .select("id")
     .single();
-  if (e1) return NextResponse.json({ error: "DB_ERROR", message: e1.message }, { status: 500 });
+  if (e1) return apiError(500, "DB_ERROR", e1.message);
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://ai-reliability-copilot.vercel.app";
   const url = `${base}/incidents/${inc.id}`;

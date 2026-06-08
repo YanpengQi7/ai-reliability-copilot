@@ -10,6 +10,7 @@ import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { calcCost, normalizeUsage } from "@/lib/cost";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
+import { apiError } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -22,18 +23,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const langParam = url.searchParams.get("language");
   const language: "en" | "zh" = langParam === "zh" ? "zh" : "en";
   if (!process.env.DEEPSEEK_API_KEY) {
-    return NextResponse.json({ error: "MISSING_API_KEY", message: "DEEPSEEK_API_KEY not set", statusCode: 503 }, { status: 503 });
+    return apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY not set");
   }
   if (!hasSupabase()) {
-    return NextResponse.json({ error: "DB_UNCONFIGURED", message: "Supabase not configured", statusCode: 503 }, { status: 503 });
+    return apiError(503, "DB_UNCONFIGURED", "Supabase not configured");
   }
   const rl = rateLimit(clientKey(req));
   if (!rl.allowed) {
-    return NextResponse.json({ error: "RATE_LIMITED", message: `Retry in ${rl.retryAfterSec}s`, statusCode: 429 }, { status: 429 });
+    return apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`);
   }
   const scenario = SCENARIOS.find((s) => s.slug === slug);
   if (!scenario) {
-    return NextResponse.json({ error: "NOT_FOUND", message: "scenario not found", statusCode: 404 }, { status: 404 });
+    return apiError(404, "NOT_FOUND", "scenario not found");
   }
 
   const started = Date.now();
@@ -61,7 +62,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     ({ tokens_in, tokens_out } = normalizeUsage(result.usage));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: "LLM_ERROR", message: msg, statusCode: 502 }, { status: 502 });
+    return apiError(502, "LLM_ERROR", msg);
   }
   const latency = Date.now() - started;
   const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
@@ -87,7 +88,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     })
     .select("id")
     .single();
-  if (e1) return NextResponse.json({ error: "DB_ERROR", message: e1.message, statusCode: 500 }, { status: 500 });
+  if (e1) return apiError(500, "DB_ERROR", e1.message);
 
   const { data: anaRow } = await sb.from("analyses").insert({
     incident_id: inc.id,

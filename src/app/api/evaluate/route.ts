@@ -6,6 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { JUDGE_MODEL } from "@/lib/ai";
 import { SCENARIOS } from "@/lib/scenarios";
+import { apiError, validationError } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -17,20 +18,20 @@ const Body = z.object({
 
 export async function POST(req: Request) {
   if (!process.env.DEEPSEEK_API_KEY) {
-    return NextResponse.json({ error: "MISSING_API_KEY", message: "DEEPSEEK_API_KEY not set", statusCode: 503 }, { status: 503 });
+    return apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY not set");
   }
   if (!hasSupabase()) {
-    return NextResponse.json({ error: "DB_UNCONFIGURED", message: "Supabase not configured", statusCode: 503 }, { status: 503 });
+    return apiError(503, "DB_UNCONFIGURED", "Supabase not configured");
   }
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json({ error: "VALIDATION_ERROR", message: parsed.error.message, statusCode: 400 }, { status: 400 });
+    return validationError(parsed.error);
   }
   const { analysis_id, scenario_slug } = parsed.data;
   const sb = supabaseAdmin();
   const { data: a, error: e0 } = await sb.from("analyses").select("*").eq("id", analysis_id).single();
   if (e0 || !a) {
-    return NextResponse.json({ error: "NOT_FOUND", message: "analysis not found", statusCode: 404 }, { status: 404 });
+    return apiError(404, "NOT_FOUND", "analysis not found");
   }
 
   const scenario = scenario_slug ? SCENARIOS.find((s) => s.slug === scenario_slug) : undefined;
@@ -67,6 +68,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ evaluation_id: row.id, overall, scores });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: "JUDGE_ERROR", message: msg, statusCode: 502 }, { status: 502 });
+    return apiError(502, "JUDGE_ERROR", msg);
   }
 }

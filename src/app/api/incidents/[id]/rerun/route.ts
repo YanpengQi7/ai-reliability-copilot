@@ -7,6 +7,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { calcCost, normalizeUsage } from "@/lib/cost";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
+import { apiError } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -19,15 +20,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const langParam = url.searchParams.get("language");
   const language: "en" | "zh" = langParam === "zh" ? "zh" : "en";
   if (!process.env.DEEPSEEK_API_KEY) {
-    return NextResponse.json({ error: "MISSING_API_KEY", message: "DEEPSEEK_API_KEY not set", statusCode: 503 }, { status: 503 });
+    return apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY not set");
   }
   if (!hasSupabase()) {
-    return NextResponse.json({ error: "DB_UNCONFIGURED", message: "Supabase not configured", statusCode: 503 }, { status: 503 });
+    return apiError(503, "DB_UNCONFIGURED", "Supabase not configured");
   }
   const sb = supabaseAdmin();
   const { data: incident, error: e0 } = await sb.from("incidents").select("*").eq("id", id).single();
   if (e0 || !incident) {
-    return NextResponse.json({ error: "NOT_FOUND", message: "incident not found", statusCode: 404 }, { status: 404 });
+    return apiError(404, "NOT_FOUND", "incident not found");
   }
 
   const started = Date.now();
@@ -75,6 +76,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ ok: true, latency_ms: latency });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: "LLM_ERROR", message: msg, statusCode: 502 }, { status: 502 });
+    return apiError(502, "LLM_ERROR", msg);
   }
 }

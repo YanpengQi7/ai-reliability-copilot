@@ -7,6 +7,7 @@ import { ANALYSIS_MODEL } from "@/lib/ai";
 import { DEFAULT_PROMPT_VERSION } from "@/lib/prompts";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, recordRetrievedChunks } from "@/lib/kb";
+import { apiError, validationError, invalidJson } from "@/lib/http";
 
 export const runtime = "nodejs";
 
@@ -32,17 +33,17 @@ const Body = z.object({
 
 export async function POST(req: NextRequest) {
   if (!hasSupabase()) {
-    return NextResponse.json({ error: "DB_UNCONFIGURED", message: "Supabase env vars not set", statusCode: 503 }, { status: 503 });
+    return apiError(503, "DB_UNCONFIGURED", "Supabase env vars not set");
   }
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "INVALID_JSON", message: "Body must be JSON", statusCode: 400 }, { status: 400 });
+    return invalidJson();
   }
   const parsed = Body.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ error: "VALIDATION_ERROR", message: parsed.error.message, statusCode: 400 }, { status: 400 });
+    return validationError(parsed.error);
   }
   const input = parsed.data;
   const sb = supabaseAdmin();
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
     })
     .select("id")
     .single();
-  if (e1) return NextResponse.json({ error: "DB_ERROR", message: e1.message, statusCode: 500 }, { status: 500 });
+  if (e1) return apiError(500, "DB_ERROR", e1.message);
 
   const a = input.analysis;
   const { data: ana, error: e2 } = await sb
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
     })
     .select("id")
     .single();
-  if (e2) return NextResponse.json({ error: "DB_ERROR", message: e2.message, statusCode: 500 }, { status: 500 });
+  if (e2) return apiError(500, "DB_ERROR", e2.message);
 
   // Record which KB chunks the streaming /api/analyze pipeline retrieved.
   // We re-run retrieval with the same query so the junction is consistent
