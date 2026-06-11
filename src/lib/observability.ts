@@ -8,15 +8,19 @@ function safeRequestId(value: string | null): string | null {
 export function createRequestContext(req: Request, operation: string) {
   const requestId = safeRequestId(req.headers.get("x-request-id")) ?? crypto.randomUUID();
   const startedAt = Date.now();
+  const method = req.method;
+  const path = new URL(req.url).pathname;
 
   function log(level: LogLevel, event: string, fields: Record<string, unknown> = {}) {
     const entry = JSON.stringify({
+      ...fields,
       level,
       event,
       operation,
       request_id: requestId,
+      method,
+      path,
       duration_ms: Date.now() - startedAt,
-      ...fields,
     });
     if (level === "error") console.error(entry);
     else if (level === "warn") console.warn(entry);
