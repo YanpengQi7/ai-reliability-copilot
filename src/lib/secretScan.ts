@@ -31,6 +31,16 @@ function redact(match: string): string {
   return `${match.slice(0, 4)}…${match.slice(-4)}`;
 }
 
+/** Replace supported credentials before text is sent to a model or persisted. */
+export function redactSecrets(text: string): string {
+  let redacted = text;
+  for (const { name, re } of PATTERNS) {
+    re.lastIndex = 0;
+    redacted = redacted.replace(re, `[REDACTED: ${name}]`);
+  }
+  return redacted;
+}
+
 export function scanForSecrets(text: string): SecretFinding[] {
   const findings: SecretFinding[] = [];
   const lines = text.split("\n");

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scanForSecrets } from "./secretScan";
+import { redactSecrets, scanForSecrets } from "./secretScan";
 
 // This scanner blocks secrets from being persisted into the KB. A miss = a
 // stored credential, so the false-negative tests matter most.
@@ -65,5 +65,15 @@ describe("scanForSecrets — clean input", () => {
     const flood = Array.from({ length: 200 }, (_, i) => `AKIA${"A".repeat(12)}${String(i).padStart(4, "0")}`).join("\n");
     const findings = scanForSecrets(flood);
     expect(findings.length).toBeLessThanOrEqual(20);
+  });
+});
+
+describe("redactSecrets", () => {
+  it("removes credentials while preserving surrounding incident context", () => {
+    const text = `payment-svc failed with token ${FAKE.openai} after deploy`;
+    const redacted = redactSecrets(text);
+    expect(redacted).not.toContain(FAKE.openai);
+    expect(redacted).toContain("[REDACTED: OpenAI API key]");
+    expect(redacted).toContain("payment-svc failed");
   });
 });

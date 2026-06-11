@@ -140,5 +140,79 @@ create table if not exists analysis_kb_chunks (
 create index if not exists analysis_kb_chunks_analysis_idx on analysis_kb_chunks (analysis_id);
 
 -- KB retrieval RPCs (see kb.ts retrieveContext())
--- match_kb_chunks_by_embedding / match_kb_chunks_by_signature
--- (definitions in migration add_knowledge_base; mirrored here for reference setup)
+create or replace function match_kb_chunks_by_embedding(
+  query_embedding vector(1536),
+  match_threshold float,
+  match_count int
+) returns table (
+  chunk_id uuid,
+  document_id uuid,
+  document_title text,
+  document_kind text,
+  source_path text,
+  text text,
+  similarity float
+)
+language sql stable as $$
+  select c.id, c.document_id, d.title, d.kind, d.source_path, c.text,
+    1 - (c.embedding <=> query_embedding) as similarity
+  from kb_chunks c
+  join kb_documents d on d.id = c.document_id
+  where c.embedding is not null
+    and 1 - (c.embedding <=> query_embedding) > match_threshold
+  order by c.embedding <=> query_embedding
+  limit match_count;
+$$;
+
+create or replace function match_kb_chunks_by_signature(
+  query_text text,
+  match_threshold float,
+  match_count int
+) returns table (
+  chunk_id uuid,
+  document_id uuid,
+  document_title text,
+  document_kind text,
+  source_path text,
+  text text,
+  similarity float
+)
+language sql stable as $$
+  select c.id, c.document_id, d.title, d.kind, d.source_path, c.text,
+    similarity(c.signature, query_text) as similarity
+  from kb_chunks c
+  join kb_documents d on d.id = c.document_id
+  where c.signature is not null
+    and similarity(c.signature, query_text) > match_threshold
+  order by similarity(c.signature, query_text) desc
+  limit match_count;
+$$;
+
+-- The application accesses these tables only through the server-side
+-- service-role client. Keep the public Data API closed by default.
+alter table incidents enable row level security;
+alter table analyses enable row level security;
+alter table scenarios enable row level security;
+alter table evaluations enable row level security;
+alter table kb_documents enable row level security;
+alter table kb_chunks enable row level security;
+alter table analysis_kb_chunks enable row level security;
+
+revoke all on table incidents, analyses, scenarios, evaluations,
+  kb_documents, kb_chunks, analysis_kb_chunks from anon, authenticated;
+grant all on table incidents, analyses, scenarios, evaluations,
+  kb_documents, kb_chunks, analysis_kb_chunks to service_role;
+
+revoke execute on function match_incidents_by_embedding(vector, float, int, uuid)
+  from public, anon, authenticated;
+revoke execute on function match_incidents_by_signature(text, float, int, uuid)
+  from public, anon, authenticated;
+revoke execute on function match_kb_chunks_by_embedding(vector, float, int)
+  from public, anon, authenticated;
+revoke execute on function match_kb_chunks_by_signature(text, float, int)
+  from public, anon, authenticated;
+
+grant execute on function match_incidents_by_embedding(vector, float, int, uuid) to service_role;
+grant execute on function match_incidents_by_signature(text, float, int, uuid) to service_role;
+grant execute on function match_kb_chunks_by_embedding(vector, float, int) to service_role;
+grant execute on function match_kb_chunks_by_signature(text, float, int) to service_role;

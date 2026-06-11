@@ -8,6 +8,7 @@ import { hasSupabase } from "@/lib/db";
 import { calcCost, normalizeUsage } from "@/lib/cost";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
+import { rateLimit, clientKey } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -24,6 +25,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   if (!hasSupabase()) {
     return apiError(503, "DB_UNCONFIGURED", "Supabase not configured");
+  }
+  const rl = rateLimit(clientKey(req), { max: 3, namespace: "rerun" });
+  if (!rl.allowed) {
+    return apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`);
   }
   const sb = supabaseAdmin();
   const { data: incident, error: e0 } = await sb.from("incidents").select("*").eq("id", id).single();

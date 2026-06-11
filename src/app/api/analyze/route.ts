@@ -9,15 +9,16 @@ import { retrieveContext, formatChunksForPrompt } from "@/lib/kb";
 import { normalizeUsage, calcCost } from "@/lib/cost";
 import { usageTrailer } from "@/lib/streamUsage";
 import { apiError, validationError, invalidJson } from "@/lib/http";
+import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const InputSchema = z.object({
-  title: z.string().optional(),
-  service: z.string().optional(),
-  symptoms: z.string().optional(),
-  raw_context: z.string().min(20, "raw_context too short — paste real incident details"),
+  title: z.string().max(INPUT_LIMITS.shortText).optional(),
+  service: z.string().max(INPUT_LIMITS.shortText).optional(),
+  symptoms: z.string().max(INPUT_LIMITS.shortText).optional(),
+  raw_context: z.string().min(20, "raw_context too short — paste real incident details").max(INPUT_LIMITS.rawContext),
   prompt_version: z.enum(["v1", "v2", "v3"]).optional(),
   output_language: z.enum(["en", "zh"]).optional(),
 });
@@ -30,6 +31,9 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return apiError(429, "RATE_LIMITED", `Demo limit: 5 requests/min. Retry in ${rl.retryAfterSec}s.`);
   }
+  if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 2)) {
+    return apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.");
+  }
 
   let body: unknown;
   try {
@@ -41,7 +45,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return validationError(parsed.error);
   }
-  const input = parsed.data;
+  const input = redactSensitiveValue(parsed.data);
 
   const version: PromptVersion = input.prompt_version ?? DEFAULT_PROMPT_VERSION;
 

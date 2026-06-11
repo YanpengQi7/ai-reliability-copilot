@@ -7,6 +7,7 @@ import { hasSupabase } from "@/lib/db";
 import { JUDGE_MODEL } from "@/lib/ai";
 import { SCENARIOS } from "@/lib/scenarios";
 import { apiError, validationError } from "@/lib/http";
+import { rateLimit, clientKey } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -22,6 +23,10 @@ export async function POST(req: Request) {
   }
   if (!hasSupabase()) {
     return apiError(503, "DB_UNCONFIGURED", "Supabase not configured");
+  }
+  const rl = rateLimit(clientKey(req), { max: 3, namespace: "evaluate" });
+  if (!rl.allowed) {
+    return apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`);
   }
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {

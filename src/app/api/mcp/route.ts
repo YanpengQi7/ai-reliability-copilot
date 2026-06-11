@@ -15,6 +15,7 @@ import { buildMcpServer } from "@/lib/mcp/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { withClientIp } from "@/lib/mcp/telemetry";
+import { machineEndpointNeedsSecret } from "@/lib/requestSafety";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,13 @@ function rateLimited(retryAfterSec: number): Response {
   );
 }
 
+function authNotConfigured(): Response {
+  return new Response(
+    JSON.stringify({ jsonrpc: "2.0", error: { code: -32002, message: "MCP_AUTH_TOKEN is required in production" } }),
+    { status: 503, headers: { "content-type": "application/json" } },
+  );
+}
+
 function checkAuth(req: Request): boolean {
   const required = process.env.MCP_AUTH_TOKEN;
   if (!required) return true; // public mode
@@ -45,6 +53,7 @@ function checkAuth(req: Request): boolean {
 }
 
 async function handle(req: Request): Promise<Response> {
+  if (machineEndpointNeedsSecret(process.env.MCP_AUTH_TOKEN)) return authNotConfigured();
   if (!checkAuth(req)) return unauthorized();
   const ip = clientKey(req);
   const rl = rateLimit(ip, { max: RATE_LIMIT_PER_MIN, namespace: "mcp" });

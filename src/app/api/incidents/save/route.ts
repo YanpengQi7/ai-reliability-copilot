@@ -8,14 +8,16 @@ import { DEFAULT_PROMPT_VERSION } from "@/lib/prompts";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, recordRetrievedChunks } from "@/lib/kb";
 import { apiError, validationError, invalidJson } from "@/lib/http";
+import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
 
 export const runtime = "nodejs";
 
 const Body = z.object({
-  title: z.string().optional(),
-  service: z.string().optional(),
-  symptoms: z.string().optional(),
-  raw_context: z.string().min(20),
+  title: z.string().max(INPUT_LIMITS.shortText).optional(),
+  service: z.string().max(INPUT_LIMITS.shortText).optional(),
+  symptoms: z.string().max(INPUT_LIMITS.shortText).optional(),
+  raw_context: z.string().min(20).max(INPUT_LIMITS.rawContext),
   analysis: AnalysisSchema,
   latency_ms: z.number().optional(),
   prompt_version: z.enum(["v1", "v2", "v3"]).optional(),
@@ -35,6 +37,13 @@ export async function POST(req: NextRequest) {
   if (!hasSupabase()) {
     return apiError(503, "DB_UNCONFIGURED", "Supabase env vars not set");
   }
+  const rl = rateLimit(clientKey(req), { max: 10, namespace: "save" });
+  if (!rl.allowed) {
+    return apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`);
+  }
+  if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 4)) {
+    return apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.");
+  }
   let body: unknown;
   try {
     body = await req.json();
@@ -45,7 +54,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return validationError(parsed.error);
   }
-  const input = parsed.data;
+  const input = redactSensitiveValue(parsed.data);
   const sb = supabaseAdmin();
 
   // Build similarity-search artifacts. Both are best-effort: a failure here
@@ -97,7 +106,11 @@ export async function POST(req: NextRequest) {
     })
     .select("id")
     .single();
-  if (e2) return apiError(500, "DB_ERROR", e2.message);
+  if (e2) {
+    // Keep the two-step write atomic from the user's perspective.
+    await sb.from("incidents").delete().eq("id", inc.id);
+    return apiError(500, "DB_ERROR", e2.message);
+  }
 
   // Record which KB chunks the streaming /api/analyze pipeline retrieved.
   // We re-run retrieval with the same query so the junction is consistent

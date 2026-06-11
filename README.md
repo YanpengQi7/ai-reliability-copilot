@@ -167,8 +167,12 @@ npm install
 #   NEXT_PUBLIC_SUPABASE_URL=
 #   NEXT_PUBLIC_SUPABASE_ANON_KEY=
 #   SUPABASE_SERVICE_ROLE_KEY=
+# Public deployments should also set:
+#   WEBHOOK_SECRET=
+#   MCP_AUTH_TOKEN=
 
 # DB: in Supabase SQL editor, run supabase/schema.sql
+# The schema enables RLS and grants data/RPC access only to service_role.
 
 # seed the scenario library
 npm run seed:scenarios
@@ -180,11 +184,15 @@ npm run dev   # → http://localhost:3000
 npm run evals:run
 ```
 
+Vercel production deployments fail closed for MCP and webhook traffic when
+these tokens are missing. Set `ALLOW_PUBLIC_MACHINE_API=true` only for an
+intentionally public deployment.
+
 ## Known limitations
 
 - **In-memory rate limiter** (`src/lib/rateLimit.ts`) — resets on cold start. Production swap: Upstash Redis.
 - **Judge ≠ ground truth** — same model family judges the analyzer. I guessed "~10–20% optimistic bias"; then I measured it. `npm run evals:crossjudge` holds each analysis fixed and re-scores it with an independent vendor (Claude Sonnet 4.6). Result over 20 analyses: the same-family judge scores **+0.24 higher on overall** (4.48 vs 4.24, ~5% — the guess was an overestimate), worst on `actionability`/`completeness` (−0.40 each), zero bias on `safety` (90% exact agreement). Pearson r 0.59, 70% within ±0.5. So: the bias is real but ~5%, not 10–20%, and it's concentrated, not uniform. Mitigation remains periodic human review (see [EVALUATION.md](./EVALUATION.md)).
-- **No per-scenario repeats** — single-shot evaluation. Doesn't capture run-to-run variance.
+- **Limited repeats** — the default eval batch uses 3 repeats per cell, but this is still too small for narrow confidence intervals.
 - **5 scenarios is narrow** — real production has long tails.
 
 ## Tech stack

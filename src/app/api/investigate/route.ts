@@ -3,6 +3,7 @@ import { z } from "zod";
 import { investigate } from "@/lib/agent/investigate";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { apiError, validationError, invalidJson } from "@/lib/http";
+import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -12,11 +13,11 @@ export const maxDuration = 300;
 // analysis + the investigation trace + usage — as one JSON payload. No DB
 // writes (pure inference, same separation-of-concerns as /api/analyze).
 const InputSchema = z.object({
-  title: z.string().optional(),
-  service: z.string().optional(),
-  symptoms: z.string().optional(),
-  raw_context: z.string().min(20, "raw_context too short — paste real incident details").optional(),
-  scenario_slug: z.string().optional(),
+  title: z.string().max(INPUT_LIMITS.shortText).optional(),
+  service: z.string().max(INPUT_LIMITS.shortText).optional(),
+  symptoms: z.string().max(INPUT_LIMITS.shortText).optional(),
+  raw_context: z.string().min(20, "raw_context too short — paste real incident details").max(INPUT_LIMITS.rawContext).optional(),
+  scenario_slug: z.string().max(INPUT_LIMITS.shortText).optional(),
   output_language: z.enum(["en", "zh"]).optional(),
   max_steps: z.number().int().min(1).max(12).optional(),
 }).refine((d) => d.raw_context || d.scenario_slug, {
@@ -32,6 +33,9 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return apiError(429, "RATE_LIMITED", `Demo limit: 3 investigations/min. Retry in ${rl.retryAfterSec}s.`);
   }
+  if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 2)) {
+    return apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.");
+  }
 
   let body: unknown;
   try {
@@ -43,7 +47,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return validationError(parsed.error);
   }
-  const input = parsed.data;
+  const input = redactSensitiveValue(parsed.data);
 
   try {
     const result = await investigate({

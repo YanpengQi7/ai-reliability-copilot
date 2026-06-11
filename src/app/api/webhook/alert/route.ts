@@ -30,6 +30,7 @@ import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
+import { contentLengthExceeds, INPUT_LIMITS, machineEndpointNeedsSecret, redactSensitiveValue } from "@/lib/requestSafety";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +48,9 @@ function checkAuth(req: Request): boolean {
 }
 
 export async function POST(req: Request) {
+  if (machineEndpointNeedsSecret(process.env.WEBHOOK_SECRET)) {
+    return apiError(503, "AUTH_NOT_CONFIGURED", "WEBHOOK_SECRET is required in production.");
+  }
   if (!checkAuth(req)) {
     return apiError(401, "UNAUTHORIZED", "Missing or wrong secret");
   }
@@ -60,19 +64,26 @@ export async function POST(req: Request) {
   if (!process.env.DEEPSEEK_API_KEY) {
     return apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY missing");
   }
+  if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 2)) {
+    return apiError(413, "PAYLOAD_TOO_LARGE", "Webhook payload is too large.");
+  }
 
   const bodyText = await req.text();
   if (bodyText.length < 5) {
     return apiError(400, "EMPTY_BODY", "Webhook body empty");
   }
 
-  const parsed = tryParseAlert(bodyText) ?? {
+  if (bodyText.length > INPUT_LIMITS.rawContext) {
+    return apiError(413, "PAYLOAD_TOO_LARGE", "Webhook payload is too large.");
+  }
+
+  const parsed = redactSensitiveValue(tryParseAlert(bodyText) ?? {
     source: "raw" as const,
     title: undefined,
     service: undefined,
     symptoms: undefined,
     raw_context: bodyText.slice(0, 8000), // truncate hostile / huge payloads
-  };
+  });
 
   const sb = supabaseAdmin();
 
