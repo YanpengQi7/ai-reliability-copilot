@@ -11,6 +11,7 @@ import { Nav } from "@/components/Nav";
 import { tryParseAlert } from "@/lib/alertParsers";
 import { SAMPLE_ALERTS } from "@/lib/sampleAlerts";
 import { makeUsageCapturingFetch, type StreamUsage } from "@/lib/streamUsage";
+import { readApiError } from "@/lib/http";
 
 const SAMPLE = `Time: 14:02 UTC. payment-svc p99 latency jumped from 120ms to 4.8s.
 Error rate climbed from 0.1% to 12% (mostly 500s).
@@ -68,6 +69,7 @@ export default function Home() {
   const startedRef = useRef<number>(0);
   const usageRef = useRef<StreamUsage | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Peel the token-usage trailer off the stream before useObject parses the
   // JSON; stash it in a ref for the save call below. The write runs only inside
@@ -88,6 +90,7 @@ export default function Home() {
     onFinish: async ({ object }) => {
       if (!object) return;
       setSaving(true);
+      setSaveError(null);
       try {
         const res = await fetch("/api/incidents/save", {
           method: "POST",
@@ -104,12 +107,11 @@ export default function Home() {
             usage: usageRef.current ?? undefined,
           }),
         });
-        if (res.ok) {
-          const { incident_id } = await res.json();
-          router.push(`/incidents/${incident_id}`);
-        }
+        if (!res.ok) throw new Error(await readApiError(res, t("home.saveFailed")));
+        const { incident_id } = await res.json();
+        router.push(`/incidents/${incident_id}`);
       } catch (e) {
-        console.error("save failed", e);
+        setSaveError(e instanceof Error ? e.message : String(e));
       } finally {
         setSaving(false);
       }
@@ -249,6 +251,7 @@ export default function Home() {
             <button
               onClick={() => {
                 startedRef.current = Date.now();
+                setSaveError(null);
                 submit({ title, service, symptoms, raw_context: raw, prompt_version: version, output_language: outputLang });
               }}
               disabled={isLoading || saving || raw.length < 20}
@@ -263,6 +266,12 @@ export default function Home() {
             <p className="text-red-400 text-sm">
               {error.message?.includes("MISSING_API_KEY") ? t("home.errorMissingKey") : `${t("common.error")}: ${error.message}`}
             </p>
+          )}
+          {saveError && (
+            <div role="alert" className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+              <p className="font-medium">{t("home.analysisNotSaved")}</p>
+              <p className="mt-1 text-xs text-amber-200/80">{saveError}</p>
+            </div>
           )}
         </section>
 

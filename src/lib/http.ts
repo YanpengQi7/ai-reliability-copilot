@@ -14,11 +14,13 @@ export type ApiErrorBody = {
   message: string; // human-readable, safe to surface to users
   statusCode: number;
   nextAction?: string; // optional guidance the client can act on
+  requestId?: string;
 };
 
 type ApiErrorOpts = {
   nextAction?: string;
   headers?: Record<string, string>;
+  requestId?: string;
 };
 
 /** Build a JSON error response with the standard envelope. */
@@ -30,7 +32,10 @@ export function apiError(
 ): Response {
   const body: ApiErrorBody = { error: code, message, statusCode: status };
   if (opts.nextAction) body.nextAction = opts.nextAction;
-  return Response.json(body, { status, headers: opts.headers });
+  if (opts.requestId) body.requestId = opts.requestId;
+  const headers = new Headers(opts.headers);
+  if (opts.requestId) headers.set("x-request-id", opts.requestId);
+  return Response.json(body, { status, headers });
 }
 
 /** 400 from a failed Zod parse — joins the issue messages for readability. */
@@ -42,4 +47,16 @@ export function validationError(err: ZodError): Response {
 /** 400 for a body that isn't valid JSON. */
 export function invalidJson(): Response {
   return apiError(400, "INVALID_JSON", "Body must be JSON");
+}
+
+export async function readApiError(res: Response, fallback: string): Promise<string> {
+  const requestId = res.headers.get("x-request-id");
+  let message = fallback;
+  try {
+    const body = await res.json() as Partial<ApiErrorBody>;
+    if (body.message) message = body.message;
+  } catch {
+    // Keep the fallback for non-JSON upstream errors.
+  }
+  return requestId ? `${message} (request ${requestId})` : message;
 }

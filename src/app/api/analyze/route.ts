@@ -8,8 +8,9 @@ import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { retrieveContext, formatChunksForPrompt } from "@/lib/kb";
 import { normalizeUsage, calcCost } from "@/lib/cost";
 import { usageTrailer } from "@/lib/streamUsage";
-import { apiError, validationError, invalidJson } from "@/lib/http";
+import { apiError } from "@/lib/http";
 import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
+import { createRequestContext } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -24,26 +25,28 @@ const InputSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const ctx = createRequestContext(req, "analyze");
   if (!process.env.DEEPSEEK_API_KEY) {
-    return apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY is not configured on the server.");
+    return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY is not configured on the server.", { requestId: ctx.requestId }));
   }
   const rl = rateLimit(clientKey(req));
   if (!rl.allowed) {
-    return apiError(429, "RATE_LIMITED", `Demo limit: 5 requests/min. Retry in ${rl.retryAfterSec}s.`);
+    return ctx.response(apiError(429, "RATE_LIMITED", `Demo limit: 5 requests/min. Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
   }
   if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 2)) {
-    return apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.");
+    return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.", { requestId: ctx.requestId }));
   }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return invalidJson();
+    return ctx.response(apiError(400, "INVALID_JSON", "Body must be JSON", { requestId: ctx.requestId }));
   }
   const parsed = InputSchema.safeParse(body);
   if (!parsed.success) {
-    return validationError(parsed.error);
+    const message = parsed.error.issues.map((issue) => issue.message).join("; ");
+    return ctx.response(apiError(400, "VALIDATION_ERROR", message, { requestId: ctx.requestId }));
   }
   const input = redactSensitiveValue(parsed.data);
 
@@ -86,7 +89,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return new Response(stream, {
+  return ctx.response(new Response(stream, {
     headers: { "content-type": "text/plain; charset=utf-8" },
-  });
+  }), { prompt_version: version, output_language: input.output_language ?? "en" });
 }

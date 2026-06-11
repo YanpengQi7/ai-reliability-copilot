@@ -7,9 +7,10 @@ import { ANALYSIS_MODEL } from "@/lib/ai";
 import { DEFAULT_PROMPT_VERSION } from "@/lib/prompts";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, recordRetrievedChunks } from "@/lib/kb";
-import { apiError, validationError, invalidJson } from "@/lib/http";
+import { apiError } from "@/lib/http";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
+import { createRequestContext } from "@/lib/observability";
 
 export const runtime = "nodejs";
 
@@ -34,25 +35,27 @@ const Body = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const ctx = createRequestContext(req, "save_incident");
   if (!hasSupabase()) {
-    return apiError(503, "DB_UNCONFIGURED", "Supabase env vars not set");
+    return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase env vars not set", { requestId: ctx.requestId }));
   }
   const rl = rateLimit(clientKey(req), { max: 10, namespace: "save" });
   if (!rl.allowed) {
-    return apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`);
+    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
   }
   if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 4)) {
-    return apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.");
+    return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.", { requestId: ctx.requestId }));
   }
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return invalidJson();
+    return ctx.response(apiError(400, "INVALID_JSON", "Body must be JSON", { requestId: ctx.requestId }));
   }
   const parsed = Body.safeParse(body);
   if (!parsed.success) {
-    return validationError(parsed.error);
+    const message = parsed.error.issues.map((issue) => issue.message).join("; ");
+    return ctx.response(apiError(400, "VALIDATION_ERROR", message, { requestId: ctx.requestId }));
   }
   const input = redactSensitiveValue(parsed.data);
   const sb = supabaseAdmin();
@@ -80,7 +83,7 @@ export async function POST(req: NextRequest) {
     })
     .select("id")
     .single();
-  if (e1) return apiError(500, "DB_ERROR", e1.message);
+  if (e1) return ctx.response(apiError(500, "DB_ERROR", e1.message, { requestId: ctx.requestId }));
 
   const a = input.analysis;
   const { data: ana, error: e2 } = await sb
@@ -109,7 +112,7 @@ export async function POST(req: NextRequest) {
   if (e2) {
     // Keep the two-step write atomic from the user's perspective.
     await sb.from("incidents").delete().eq("id", inc.id);
-    return apiError(500, "DB_ERROR", e2.message);
+    return ctx.response(apiError(500, "DB_ERROR", e2.message, { requestId: ctx.requestId }));
   }
 
   // Record which KB chunks the streaming /api/analyze pipeline retrieved.
@@ -120,8 +123,14 @@ export async function POST(req: NextRequest) {
     const r = await retrieveContext(queryText, { limit: 5 });
     await recordRetrievedChunks(ana.id, r.chunks);
   } catch (err) {
-    console.error("[save] recordRetrievedChunks failed:", err);
+    ctx.log("warn", "kb_audit_write_failed", {
+      error: err instanceof Error ? err.message : String(err),
+      analysis_id: ana.id,
+    });
   }
 
-  return NextResponse.json({ incident_id: inc.id, analysis_id: ana.id });
+  return ctx.response(NextResponse.json({ incident_id: inc.id, analysis_id: ana.id }), {
+    incident_id: inc.id,
+    analysis_id: ana.id,
+  });
 }

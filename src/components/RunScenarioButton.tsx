@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT, useLocale } from "@/lib/i18n/client";
+import { readApiError } from "@/lib/http";
 
 export function RunScenarioButton({ slug }: { slug: string }) {
   const router = useRouter();
@@ -20,8 +21,8 @@ export function RunScenarioButton({ slug }: { slug: string }) {
           setErr(null);
           try {
             const res = await fetch(`/api/scenarios/${slug}/run?language=${locale}`, { method: "POST" });
+            if (!res.ok) throw new Error(await readApiError(res, "run failed"));
             const data = await res.json();
-            if (!res.ok) throw new Error(data.message || "run failed");
             router.push(`/incidents/${data.incident_id}`);
           } catch (e) {
             setErr(e instanceof Error ? e.message : String(e));

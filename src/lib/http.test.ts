@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { apiError, validationError, invalidJson } from "./http";
+import { apiError, validationError, invalidJson, readApiError } from "./http";
 
 async function readBody(res: Response) {
   return (await res.json()) as Record<string, unknown>;
@@ -30,6 +30,12 @@ describe("apiError", () => {
     const res = apiError(429, "RATE_LIMITED", "x", { headers: { "retry-after": "30" } });
     expect(res.headers.get("retry-after")).toBe("30");
   });
+
+  it("includes a request id in the body and response headers", async () => {
+    const res = apiError(500, "DB_ERROR", "write failed", { requestId: "req-123" });
+    expect(res.headers.get("x-request-id")).toBe("req-123");
+    expect(await readBody(res)).toMatchObject({ requestId: "req-123" });
+  });
 });
 
 describe("validationError", () => {
@@ -54,5 +60,17 @@ describe("invalidJson", () => {
     const res = invalidJson();
     expect(res.status).toBe(400);
     expect(await readBody(res)).toMatchObject({ error: "INVALID_JSON", statusCode: 400 });
+  });
+});
+
+describe("readApiError", () => {
+  it("uses the API message and appends the request id", async () => {
+    const res = apiError(500, "DB_ERROR", "write failed", { requestId: "req-456" });
+    await expect(readApiError(res, "fallback")).resolves.toBe("write failed (request req-456)");
+  });
+
+  it("falls back for non-JSON responses", async () => {
+    const res = new Response("upstream failed", { status: 502 });
+    await expect(readApiError(res, "request failed")).resolves.toBe("request failed");
   });
 });

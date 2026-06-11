@@ -9,11 +9,13 @@ import { calcCost, normalizeUsage } from "@/lib/cost";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { createRequestContext } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = createRequestContext(req, "rerun_incident");
   const { id } = await params;
   const url = new URL(req.url);
   const requested = url.searchParams.get("version");
@@ -21,19 +23,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const langParam = url.searchParams.get("language");
   const language: "en" | "zh" = langParam === "zh" ? "zh" : "en";
   if (!process.env.DEEPSEEK_API_KEY) {
-    return apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY not set");
+    return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY not set", { requestId: ctx.requestId }));
   }
   if (!hasSupabase()) {
-    return apiError(503, "DB_UNCONFIGURED", "Supabase not configured");
+    return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase not configured", { requestId: ctx.requestId }));
   }
   const rl = rateLimit(clientKey(req), { max: 3, namespace: "rerun" });
   if (!rl.allowed) {
-    return apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`);
+    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
   }
   const sb = supabaseAdmin();
   const { data: incident, error: e0 } = await sb.from("incidents").select("*").eq("id", id).single();
   if (e0 || !incident) {
-    return apiError(404, "NOT_FOUND", "incident not found");
+    return ctx.response(apiError(404, "NOT_FOUND", "incident not found", { requestId: ctx.requestId }));
   }
 
   const started = Date.now();
@@ -78,9 +80,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }).select("id").single();
     if (e1) throw e1;
     if (anaRow) await recordRetrievedChunks(anaRow.id, retrieved.chunks);
-    return NextResponse.json({ ok: true, latency_ms: latency });
+    return ctx.response(NextResponse.json({ ok: true, latency_ms: latency }), {
+      incident_id: id,
+      prompt_version: version,
+      output_language: language,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return apiError(502, "LLM_ERROR", msg);
+    return ctx.response(apiError(502, "LLM_ERROR", msg, { requestId: ctx.requestId }));
   }
 }

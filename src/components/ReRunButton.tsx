@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT, useLocale } from "@/lib/i18n/client";
+import { readApiError } from "@/lib/http";
 
 export function ReRunButton({ incidentId }: { incidentId: string }) {
   const router = useRouter();
@@ -17,8 +18,7 @@ export function ReRunButton({ incidentId }: { incidentId: string }) {
     try {
       const res = await fetch(`/api/incidents/${incidentId}/rerun?version=${version}&language=${locale}`, { method: "POST" });
       if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.message || "rerun failed");
+        throw new Error(await readApiError(res, "rerun failed"));
       }
       router.refresh();
     } catch (e) {

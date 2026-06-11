@@ -6,8 +6,9 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { JUDGE_MODEL } from "@/lib/ai";
 import { SCENARIOS } from "@/lib/scenarios";
-import { apiError, validationError } from "@/lib/http";
+import { apiError } from "@/lib/http";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { createRequestContext } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -18,25 +19,27 @@ const Body = z.object({
 });
 
 export async function POST(req: Request) {
+  const ctx = createRequestContext(req, "evaluate_analysis");
   if (!process.env.DEEPSEEK_API_KEY) {
-    return apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY not set");
+    return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY not set", { requestId: ctx.requestId }));
   }
   if (!hasSupabase()) {
-    return apiError(503, "DB_UNCONFIGURED", "Supabase not configured");
+    return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase not configured", { requestId: ctx.requestId }));
   }
   const rl = rateLimit(clientKey(req), { max: 3, namespace: "evaluate" });
   if (!rl.allowed) {
-    return apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`);
+    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
   }
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
-    return validationError(parsed.error);
+    const message = parsed.error.issues.map((issue) => issue.message).join("; ");
+    return ctx.response(apiError(400, "VALIDATION_ERROR", message, { requestId: ctx.requestId }));
   }
   const { analysis_id, scenario_slug } = parsed.data;
   const sb = supabaseAdmin();
   const { data: a, error: e0 } = await sb.from("analyses").select("*").eq("id", analysis_id).single();
   if (e0 || !a) {
-    return apiError(404, "NOT_FOUND", "analysis not found");
+    return ctx.response(apiError(404, "NOT_FOUND", "analysis not found", { requestId: ctx.requestId }));
   }
 
   const scenario = scenario_slug ? SCENARIOS.find((s) => s.slug === scenario_slug) : undefined;
@@ -70,9 +73,13 @@ export async function POST(req: Request) {
       .select("id")
       .single();
     if (e1) throw e1;
-    return NextResponse.json({ evaluation_id: row.id, overall, scores });
+    return ctx.response(NextResponse.json({ evaluation_id: row.id, overall, scores }), {
+      analysis_id,
+      evaluation_id: row.id,
+      overall,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return apiError(502, "JUDGE_ERROR", msg);
+    return ctx.response(apiError(502, "JUDGE_ERROR", msg, { requestId: ctx.requestId }));
   }
 }

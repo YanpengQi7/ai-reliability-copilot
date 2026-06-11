@@ -11,11 +11,13 @@ import { calcCost, normalizeUsage } from "@/lib/cost";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
+import { createRequestContext } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
+  const ctx = createRequestContext(req, "run_scenario");
   const { slug } = await params;
   const url = new URL(req.url);
   const requested = url.searchParams.get("version");
@@ -23,18 +25,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const langParam = url.searchParams.get("language");
   const language: "en" | "zh" = langParam === "zh" ? "zh" : "en";
   if (!process.env.DEEPSEEK_API_KEY) {
-    return apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY not set");
+    return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY not set", { requestId: ctx.requestId }));
   }
   if (!hasSupabase()) {
-    return apiError(503, "DB_UNCONFIGURED", "Supabase not configured");
+    return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase not configured", { requestId: ctx.requestId }));
   }
   const rl = rateLimit(clientKey(req));
   if (!rl.allowed) {
-    return apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`);
+    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`, { requestId: ctx.requestId }));
   }
   const scenario = SCENARIOS.find((s) => s.slug === slug);
   if (!scenario) {
-    return apiError(404, "NOT_FOUND", "scenario not found");
+    return ctx.response(apiError(404, "NOT_FOUND", "scenario not found", { requestId: ctx.requestId }));
   }
 
   const started = Date.now();
@@ -62,7 +64,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     ({ tokens_in, tokens_out } = normalizeUsage(result.usage));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return apiError(502, "LLM_ERROR", msg);
+    return ctx.response(apiError(502, "LLM_ERROR", msg, { requestId: ctx.requestId }));
   }
   const latency = Date.now() - started;
   const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
@@ -88,7 +90,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     })
     .select("id")
     .single();
-  if (e1) return apiError(500, "DB_ERROR", e1.message);
+  if (e1) return ctx.response(apiError(500, "DB_ERROR", e1.message, { requestId: ctx.requestId }));
 
   const { data: anaRow } = await sb.from("analyses").insert({
     incident_id: inc.id,
@@ -111,5 +113,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   }).select("id").single();
   if (anaRow) await recordRetrievedChunks(anaRow.id, retrieved.chunks);
 
-  return NextResponse.json({ incident_id: inc.id, latency_ms: latency });
+  return ctx.response(NextResponse.json({ incident_id: inc.id, latency_ms: latency }), {
+    incident_id: inc.id,
+    scenario_slug: slug,
+    prompt_version: version,
+    output_language: language,
+  });
 }

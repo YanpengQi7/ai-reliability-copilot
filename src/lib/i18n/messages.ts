@@ -59,6 +59,11 @@ export const MESSAGES: Messages = {
   "home.saving": { en: "Saving...", zh: "保存中..." },
   "home.savingHint": { en: "Saving and redirecting...", zh: "保存并跳转中..." },
   "home.generatingHint": { en: "AI is generating sections...", zh: "AI 正在生成各段..." },
+  "home.saveFailed": { en: "Failed to save the analysis", zh: "分析保存失败" },
+  "home.analysisNotSaved": {
+    en: "The analysis was generated, but it was not saved.",
+    zh: "分析已生成，但未能保存。",
+  },
   "home.errorMissingKey": {
     en: "Server is missing DEEPSEEK_API_KEY. Set it in Vercel → Settings → Environment Variables and redeploy.",
     zh: "服务端缺少 DEEPSEEK_API_KEY。请在 Vercel → Settings → Environment Variables 中设置后重新部署。",

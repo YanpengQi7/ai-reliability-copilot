@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/client";
+import { readApiError } from "@/lib/http";
 
 export function EvaluateButton({ analysisId, scenarioSlug }: { analysisId: string; scenarioSlug?: string }) {
   const router = useRouter();
@@ -24,8 +25,8 @@ export function EvaluateButton({ analysisId, scenarioSlug }: { analysisId: strin
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ analysis_id: analysisId, scenario_slug: scenarioSlug }),
             });
+            if (!res.ok) throw new Error(await readApiError(res, "evaluate failed"));
             const data = await res.json();
-            if (!res.ok) throw new Error(data.message || "evaluate failed");
             setResult({ overall: data.overall });
             router.refresh();
           } catch (e) {
