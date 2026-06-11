@@ -6,6 +6,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+const DB_TIMEOUT_MS = 3_000;
+
 /**
  * Liveness + readiness probe. Returns 200 only if:
  *   - Required env vars are present (DEEPSEEK_API_KEY, Supabase URL + service key)
@@ -24,10 +26,17 @@ export async function GET() {
   if (checks.supabase_env.ok) {
     try {
       const sb = supabaseAdmin();
-      const { error } = await sb.from("incidents").select("*", { count: "exact", head: true });
+      const { error } = await sb
+        .from("incidents")
+        .select("*", { count: "exact", head: true })
+        .abortSignal(AbortSignal.timeout(DB_TIMEOUT_MS));
       checks.supabase_query = { ok: !error, detail: error?.message };
     } catch (e) {
-      checks.supabase_query = { ok: false, detail: e instanceof Error ? e.message : String(e) };
+      const timedOut = e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError");
+      checks.supabase_query = {
+        ok: false,
+        detail: timedOut ? `timed out after ${DB_TIMEOUT_MS}ms` : e instanceof Error ? e.message : String(e),
+      };
     }
   } else {
     checks.supabase_query = { ok: false, detail: "skipped (env missing)" };
@@ -42,6 +51,9 @@ export async function GET() {
       version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
       ts: new Date().toISOString(),
     },
-    { status: allOk ? 200 : 503 },
+    {
+      status: allOk ? 200 : 503,
+      headers: { "cache-control": "no-store, max-age=0" },
+    },
   );
 }
