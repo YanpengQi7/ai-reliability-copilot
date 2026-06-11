@@ -41,11 +41,11 @@ If the image is not operationally useful (random photo, unrelated UI), say so in
  * Describe an image. The `image` is either a public URL, or a data URL (base64).
  * Returns null when no vision provider is configured.
  */
-export async function describeImage(image: string): Promise<string | null> {
+export async function describeImage(image: string, signal?: AbortSignal): Promise<string | null> {
   const client = getClient();
   if (!client) return null;
-  try {
-    const res = await client.chat.completions.create({
+  const res = await client.chat.completions.create(
+    {
       model: VISION_MODEL,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
@@ -59,10 +59,8 @@ export async function describeImage(image: string): Promise<string | null> {
       ],
       max_tokens: 700,
       temperature: 0,
-    });
-    return res.choices[0]?.message?.content ?? null;
-  } catch (err) {
-    console.error("[vision] failed:", err instanceof Error ? err.message : err);
-    return null;
-  }
+    },
+    { signal },
+  );
+  return res.choices[0]?.message?.content ?? null;
 }

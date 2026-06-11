@@ -51,11 +51,16 @@ export function IncidentInputForm({
   const [parseNotice, setParseNotice] = useState<string | null>(null);
   const [visionStatus, setVisionStatus] = useState<VisionStatus>({ kind: "idle" });
   const rawRef = useRef(value.raw_context);
+  const visionAbortRef = useRef<AbortController | null>(null);
   const disabled = isLoading || isSaving || visionStatus.kind === "uploading";
 
   useEffect(() => {
     rawRef.current = value.raw_context;
   }, [value.raw_context]);
+
+  useEffect(() => () => {
+    visionAbortRef.current?.abort();
+  }, []);
 
   function update(patch: Partial<IncidentInput>) {
     onChange((current) => ({ ...current, ...patch }));
@@ -72,6 +77,9 @@ export function IncidentInputForm({
     }
 
     setVisionStatus({ kind: "uploading" });
+    visionAbortRef.current?.abort();
+    const controller = new AbortController();
+    visionAbortRef.current = controller;
     const reader = new FileReader();
     reader.onload = async () => {
       try {
@@ -79,6 +87,7 @@ export function IncidentInputForm({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image: String(reader.result) }),
+          signal: controller.signal,
         });
         if (!res.ok) {
           const message = await readApiError(res, "Image analysis failed");
@@ -98,10 +107,16 @@ export function IncidentInputForm({
         onChange((current) => ({ ...current, raw_context: current.raw_context + block }));
         setVisionStatus({ kind: "ok", msg: t("home.imageDescribed") });
       } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
         setVisionStatus({ kind: "err", msg: error instanceof Error ? error.message : String(error) });
+      } finally {
+        if (visionAbortRef.current === controller) visionAbortRef.current = null;
       }
     };
-    reader.onerror = () => setVisionStatus({ kind: "err", msg: t("common.error") });
+    reader.onerror = () => {
+      if (visionAbortRef.current === controller) visionAbortRef.current = null;
+      setVisionStatus({ kind: "err", msg: t("common.error") });
+    };
     reader.readAsDataURL(file);
   }
 
