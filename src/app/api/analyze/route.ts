@@ -64,6 +64,7 @@ export async function POST(req: NextRequest) {
     system: getSystemPrompt(version),
     prompt: buildUserPrompt({ ...input, language: input.output_language ?? "en", internal_context }),
     temperature: 0.2,
+    abortSignal: req.signal,
   });
 
   // Stream the object JSON, then append a usage TRAILER once the stream ends

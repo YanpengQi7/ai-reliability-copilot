@@ -30,16 +30,20 @@ export function IncidentInputForm({
   value,
   onChange,
   onSubmit,
+  onStop,
   isLoading,
   isSaving,
+  generationStopped,
   analysisError,
   saveError,
 }: {
   value: IncidentInput;
   onChange: Dispatch<SetStateAction<IncidentInput>>;
   onSubmit: () => void;
+  onStop: () => void;
   isLoading: boolean;
   isSaving: boolean;
+  generationStopped: boolean;
   analysisError?: Error;
   saveError: string | null;
 }) {
@@ -265,6 +269,20 @@ export function IncidentInputForm({
         </div>
       </fieldset>
 
+      {isLoading && (
+        <button
+          type="button"
+          onClick={onStop}
+          className="justify-self-start rounded-md border border-red-500/40 px-3 py-1.5 text-sm text-red-300 hover:border-red-400 hover:bg-red-500/10"
+        >
+          {t("home.stopGenerating")}
+        </button>
+      )}
+      {generationStopped && (
+        <p role="status" className="text-sm text-amber-300">
+          {t("home.generationStopped")}
+        </p>
+      )}
       {analysisError && (
         <p className="text-red-400 text-sm">
           {analysisError.message?.includes("MISSING_API_KEY") ? t("home.errorMissingKey") : `${t("common.error")}: ${analysisError.message}`}

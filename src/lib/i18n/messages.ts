@@ -60,6 +60,11 @@ export const MESSAGES: Messages = {
   "home.outputLanguage": { en: "Output:", zh: "输出语言：" },
   "home.analyze": { en: "Analyze incident", zh: "分析故障" },
   "home.streaming": { en: "Streaming...", zh: "生成中..." },
+  "home.stopGenerating": { en: "Stop generating", zh: "停止生成" },
+  "home.generationStopped": {
+    en: "Generation stopped. The partial result below was not saved.",
+    zh: "生成已停止。下方的部分结果未保存。",
+  },
   "home.saving": { en: "Saving...", zh: "保存中..." },
   "home.savingHint": { en: "Saving and redirecting...", zh: "保存并跳转中..." },
   "home.generatingHint": { en: "AI is generating sections...", zh: "AI 正在生成各段..." },

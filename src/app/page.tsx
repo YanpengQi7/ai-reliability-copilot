@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { experimental_useObject as useObject } from "@ai-sdk/react";
 import { AnalysisSchema } from "@/lib/schema";
@@ -34,6 +34,7 @@ export default function Home() {
   const submittedInputRef = useRef<IncidentInput | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [generationStopped, setGenerationStopped] = useState(false);
 
   // Peel the token-usage trailer off the stream before useObject parses the
   // JSON; stash it in a ref for the save call below. The write runs only inside
@@ -47,7 +48,7 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/refs -- onUsage writes the ref only in async flush(), never during render
   const capturingFetch = useMemo(() => makeUsageCapturingFetch(onUsage), [onUsage]);
 
-  const { object, submit, isLoading, error } = useObject({
+  const { object, submit, isLoading, error, stop } = useObject({
     api: "/api/analyze",
     schema: AnalysisSchema,
     fetch: capturingFetch,
@@ -84,11 +85,22 @@ export default function Home() {
     },
   });
 
+  useEffect(() => () => stop(), [stop]);
+
   function analyze() {
     submittedInputRef.current = { ...input };
+    usageRef.current = null;
     startedRef.current = Date.now();
     setSaveError(null);
+    setGenerationStopped(false);
     submit(input);
+  }
+
+  function stopGenerating() {
+    stop();
+    submittedInputRef.current = null;
+    usageRef.current = null;
+    setGenerationStopped(true);
   }
 
   return (
@@ -111,8 +123,10 @@ export default function Home() {
           value={input}
           onChange={setInput}
           onSubmit={analyze}
+          onStop={stopGenerating}
           isLoading={isLoading}
           isSaving={saving}
+          generationStopped={generationStopped}
           analysisError={error}
           saveError={saveError}
         />
