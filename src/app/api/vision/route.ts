@@ -3,13 +3,16 @@ import { z } from "zod";
 import { describeImage, hasVisionProvider } from "@/lib/vision";
 import { apiError, validationError, invalidJson } from "@/lib/http";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
-import { contentLengthExceeds, INPUT_LIMITS } from "@/lib/requestSafety";
+import { contentLengthExceeds, INPUT_LIMITS, isAllowedImageSource } from "@/lib/requestSafety";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const Body = z.object({
-  image: z.string().min(20).max(INPUT_LIMITS.imagePayload), // either data URL or public https URL
+  image: z.string()
+    .min(20)
+    .max(INPUT_LIMITS.imagePayload)
+    .refine(isAllowedImageSource, "image must be a supported data URL or public HTTPS URL"),
 });
 
 export async function POST(req: NextRequest) {

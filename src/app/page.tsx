@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { experimental_useObject as useObject } from "@ai-sdk/react";
 import ReactMarkdown from "react-markdown";
@@ -12,6 +12,12 @@ import { tryParseAlert } from "@/lib/alertParsers";
 import { SAMPLE_ALERTS } from "@/lib/sampleAlerts";
 import { makeUsageCapturingFetch, type StreamUsage } from "@/lib/streamUsage";
 import { readApiError } from "@/lib/http";
+import {
+  ALLOWED_IMAGE_TYPES,
+  INPUT_LIMITS,
+  safeDisplayFilename,
+  validateImageFile,
+} from "@/lib/requestSafety";
 
 const SAMPLE = `Time: 14:02 UTC. payment-svc p99 latency jumped from 120ms to 4.8s.
 Error rate climbed from 0.1% to 12% (mostly 500s).
@@ -30,8 +36,21 @@ export default function Home() {
   const [outputLang, setOutputLang] = useState<Locale>("en");
   const [parseNotice, setParseNotice] = useState<string | null>(null);
   const [visionStatus, setVisionStatus] = useState<{ kind: "idle" | "uploading" | "ok" | "err"; msg?: string }>({ kind: "idle" });
+  const rawRef = useRef(raw);
+
+  useEffect(() => {
+    rawRef.current = raw;
+  }, [raw]);
 
   async function handleScreenshotUpload(file: File) {
+    const validationError = validateImageFile(file);
+    if (validationError) {
+      setVisionStatus({
+        kind: "err",
+        msg: t(validationError === "file_too_large" ? "home.imageTooLarge" : "home.imageUnsupported"),
+      });
+      return;
+    }
     setVisionStatus({ kind: "uploading" });
     const reader = new FileReader();
     reader.onload = async () => {
@@ -43,13 +62,18 @@ export default function Home() {
           setVisionStatus({ kind: "err", msg: j.error === "MISSING_API_KEY" ? t("home.visionMissingKey") : j.message ?? "failed" });
           return;
         }
-        const block = `\n\n## Screenshot description (${file.name})\n${j.description}\n`;
-        setRaw((r) => r + block);
+        const block = `\n\n## Screenshot description (${safeDisplayFilename(file.name)})\n${j.description}\n`;
+        if (rawRef.current.length + block.length > INPUT_LIMITS.rawContext) {
+          setVisionStatus({ kind: "err", msg: t("home.contextTooLong") });
+          return;
+        }
+        setRaw((current) => current + block);
         setVisionStatus({ kind: "ok", msg: t("home.imageDescribed") });
       } catch (e) {
         setVisionStatus({ kind: "err", msg: e instanceof Error ? e.message : String(e) });
       }
     };
+    reader.onerror = () => setVisionStatus({ kind: "err", msg: t("common.error") });
     reader.readAsDataURL(file);
   }
 
@@ -140,6 +164,7 @@ export default function Home() {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              maxLength={INPUT_LIMITS.shortText}
               className="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2"
             />
           </label>
@@ -149,6 +174,7 @@ export default function Home() {
               <input
                 value={service}
                 onChange={(e) => setService(e.target.value)}
+                maxLength={INPUT_LIMITS.shortText}
                 className="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2"
               />
             </label>
@@ -157,6 +183,7 @@ export default function Home() {
               <input
                 value={symptoms}
                 onChange={(e) => setSymptoms(e.target.value)}
+                maxLength={INPUT_LIMITS.shortText}
                 className="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2"
               />
             </label>
@@ -196,29 +223,41 @@ export default function Home() {
                 setParseNotice(null);
               }}
               rows={10}
+              maxLength={INPUT_LIMITS.rawContext}
+              aria-describedby="raw-context-count"
               className="bg-neutral-950 border border-neutral-800 rounded-md px-3 py-2 font-mono text-sm"
             />
+            <span
+              id="raw-context-count"
+              className={`text-right text-xs ${raw.length >= INPUT_LIMITS.rawContext ? "text-amber-400" : "text-neutral-500"}`}
+            >
+              {raw.length.toLocaleString()} / {INPUT_LIMITS.rawContext.toLocaleString()} {t("home.characters")}
+            </span>
             {parseNotice && (
               <span className={`text-xs ${parseNotice.includes(t("home.notRecognized")) ? "text-amber-400" : "text-emerald-400"}`}>
                 {parseNotice}
               </span>
             )}
             <div className="flex items-center gap-3 mt-1">
-              <label className="text-xs px-2 py-1 rounded border border-emerald-500/40 text-emerald-300 hover:border-emerald-500/70 cursor-pointer">
+              <label className={`text-xs px-2 py-1 rounded border border-emerald-500/40 text-emerald-300 ${visionStatus.kind === "uploading" ? "cursor-not-allowed opacity-50" : "hover:border-emerald-500/70 cursor-pointer"}`}>
                 {t("home.uploadScreenshot")}
                 <input
                   type="file"
-                  accept="image/*"
+                  accept={ALLOWED_IMAGE_TYPES.join(",")}
+                  disabled={visionStatus.kind === "uploading"}
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) handleScreenshotUpload(f);
+                    e.target.value = "";
                   }}
                 />
               </label>
-              {visionStatus.kind === "uploading" && <span className="text-xs text-neutral-500 animate-pulse">{t("home.describingImage")}</span>}
-              {visionStatus.kind === "ok" && <span className="text-xs text-emerald-400">{visionStatus.msg}</span>}
-              {visionStatus.kind === "err" && <span className="text-xs text-amber-400">{visionStatus.msg}</span>}
+              <span role="status" aria-live="polite">
+                {visionStatus.kind === "uploading" && <span className="text-xs text-neutral-500 animate-pulse">{t("home.describingImage")}</span>}
+                {visionStatus.kind === "ok" && <span className="text-xs text-emerald-400">{visionStatus.msg}</span>}
+                {visionStatus.kind === "err" && <span className="text-xs text-amber-400">{visionStatus.msg}</span>}
+              </span>
             </div>
           </label>
           <div className="flex items-center gap-4 flex-wrap">
@@ -254,13 +293,15 @@ export default function Home() {
                 setSaveError(null);
                 submit({ title, service, symptoms, raw_context: raw, prompt_version: version, output_language: outputLang });
               }}
-              disabled={isLoading || saving || raw.length < 20}
+              disabled={isLoading || saving || visionStatus.kind === "uploading" || raw.length < 20}
               className="bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-md"
             >
               {isLoading ? t("home.streaming") : saving ? t("home.saving") : t("home.analyze")}
             </button>
-            {isLoading && <span className="text-xs text-neutral-500 animate-pulse">{t("home.generatingHint")}</span>}
-            {saving && <span className="text-xs text-neutral-500">{t("home.savingHint")}</span>}
+            <span role="status" aria-live="polite">
+              {isLoading && <span className="text-xs text-neutral-500 animate-pulse">{t("home.generatingHint")}</span>}
+              {saving && <span className="text-xs text-neutral-500">{t("home.savingHint")}</span>}
+            </span>
           </div>
           {error && (
             <p className="text-red-400 text-sm">
@@ -275,7 +316,11 @@ export default function Home() {
           )}
         </section>
 
-        {object && <AnalysisView a={object} />}
+        {object && (
+          <div aria-live="polite" aria-busy={isLoading}>
+            <AnalysisView a={object} />
+          </div>
+        )}
       </div>
     </main>
   );
