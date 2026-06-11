@@ -23,4 +23,15 @@ describe("createRequestContext", () => {
     expect(ctx.requestId).not.toBe("bad id value");
     expect(ctx.requestId.length).toBeGreaterThan(10);
   });
+
+  it("preserves the wrapped response body and status", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const ctx = createRequestContext(new Request("https://example.test"), "protocol");
+    const payload = { jsonrpc: "2.0", id: 1, result: { tools: [] } };
+    const response = ctx.response(Response.json(payload, { status: 202 }));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual(payload);
+    log.mockRestore();
+  });
 });

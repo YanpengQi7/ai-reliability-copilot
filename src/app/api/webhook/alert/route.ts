@@ -31,6 +31,7 @@ import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@
 import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
 import { contentLengthExceeds, INPUT_LIMITS, machineEndpointNeedsSecret, redactSensitiveValue } from "@/lib/requestSafety";
+import { createRequestContext } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,33 +49,34 @@ function checkAuth(req: Request): boolean {
 }
 
 export async function POST(req: Request) {
+  const ctx = createRequestContext(req, "webhook_alert");
   if (machineEndpointNeedsSecret(process.env.WEBHOOK_SECRET)) {
-    return apiError(503, "AUTH_NOT_CONFIGURED", "WEBHOOK_SECRET is required in production.");
+    return ctx.response(apiError(503, "AUTH_NOT_CONFIGURED", "WEBHOOK_SECRET is required in production.", { requestId: ctx.requestId }));
   }
   if (!checkAuth(req)) {
-    return apiError(401, "UNAUTHORIZED", "Missing or wrong secret");
+    return ctx.response(apiError(401, "UNAUTHORIZED", "Missing or wrong secret", { requestId: ctx.requestId }));
   }
   const rl = rateLimit(clientKey(req), { max: RATE_LIMIT, namespace: "webhook" });
   if (!rl.allowed) {
-    return apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`);
+    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`, { requestId: ctx.requestId }));
   }
   if (!hasSupabase()) {
-    return apiError(503, "DB_UNCONFIGURED", "Supabase env missing");
+    return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase env missing", { requestId: ctx.requestId }));
   }
   if (!process.env.DEEPSEEK_API_KEY) {
-    return apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY missing");
+    return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY missing", { requestId: ctx.requestId }));
   }
   if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 2)) {
-    return apiError(413, "PAYLOAD_TOO_LARGE", "Webhook payload is too large.");
+    return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Webhook payload is too large.", { requestId: ctx.requestId }));
   }
 
   const bodyText = await req.text();
   if (bodyText.length < 5) {
-    return apiError(400, "EMPTY_BODY", "Webhook body empty");
+    return ctx.response(apiError(400, "EMPTY_BODY", "Webhook body empty", { requestId: ctx.requestId }));
   }
 
   if (bodyText.length > INPUT_LIMITS.rawContext) {
-    return apiError(413, "PAYLOAD_TOO_LARGE", "Webhook payload is too large.");
+    return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Webhook payload is too large.", { requestId: ctx.requestId }));
   }
 
   const parsed = redactSensitiveValue(tryParseAlert(bodyText) ?? {
@@ -98,7 +100,7 @@ export async function POST(req: Request) {
     })
     .select("id")
     .single();
-  if (e1) return apiError(500, "DB_ERROR", e1.message);
+  if (e1) return ctx.response(apiError(500, "DB_ERROR", e1.message, { requestId: ctx.requestId }));
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://ai-reliability-copilot.vercel.app";
   const url = `${base}/incidents/${inc.id}`;
@@ -163,12 +165,25 @@ export async function POST(req: Request) {
         cost_usd,
       }).select("id").single();
       if (e2) {
-        console.error("[webhook] analysis insert failed:", e2.message);
+        ctx.log("error", "webhook_analysis_insert_failed", {
+          incident_id: inc.id,
+          error: e2.message,
+        });
         return;
       }
       if (anaRow) await recordRetrievedChunks(anaRow.id, retrieved.chunks);
+      ctx.log("info", "webhook_analysis_completed", {
+        incident_id: inc.id,
+        analysis_id: anaRow?.id,
+        latency_ms,
+        tokens_in,
+        tokens_out,
+      });
     } catch (err) {
-      console.error("[webhook] background analysis failed:", err instanceof Error ? err.message : err);
+      ctx.log("error", "webhook_background_failed", {
+        incident_id: inc.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
       // Don't lose the failure — log it on the incident itself so /incidents/[id] shows it
       try {
         await sb.from("analyses").insert({
@@ -189,11 +204,14 @@ export async function POST(req: Request) {
     }
   });
 
-  return NextResponse.json({
-    status: "accepted",
-    source: parsed.source,
-    incident_id: inc.id,
-    url,
-    message: "Incident recorded. Analysis will appear at url within ~15s.",
-  }, { status: 202 });
+  return ctx.response(
+    NextResponse.json({
+      status: "accepted",
+      source: parsed.source,
+      incident_id: inc.id,
+      url,
+      message: "Incident recorded. Analysis will appear at url within ~15s.",
+    }, { status: 202 }),
+    { source: parsed.source, incident_id: inc.id },
+  );
 }

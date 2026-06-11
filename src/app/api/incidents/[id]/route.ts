@@ -11,23 +11,25 @@
 import { NextResponse } from "next/server";
 import { hasSupabase, getIncidentWithAnalyses } from "@/lib/db";
 import { apiError } from "@/lib/http";
+import { createRequestContext } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = createRequestContext(req, "get_incident");
   const { id } = await params;
   if (!hasSupabase()) {
-    return apiError(503, "DB_UNCONFIGURED", "Supabase not configured");
+    return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase not configured", { requestId: ctx.requestId }));
   }
   const result = await getIncidentWithAnalyses(id);
   if (!result) {
-    return apiError(404, "NOT_FOUND", "incident not found");
+    return ctx.response(apiError(404, "NOT_FOUND", "incident not found", { requestId: ctx.requestId }));
   }
   const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
-  return NextResponse.json({
+  return ctx.response(NextResponse.json({
     incident: result.incident,
     analysis: result.analyses[0] ?? null,
     url: `${base}/incidents/${id}`,
-  });
+  }), { incident_id: id, has_analysis: result.analyses.length > 0 });
 }

@@ -2,8 +2,9 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { investigate } from "@/lib/agent/investigate";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
-import { apiError, validationError, invalidJson } from "@/lib/http";
+import { apiError } from "@/lib/http";
 import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
+import { createRequestContext } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -25,27 +26,29 @@ const InputSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const ctx = createRequestContext(req, "investigate");
   if (!process.env.DEEPSEEK_API_KEY) {
-    return apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY is not configured on the server.");
+    return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY is not configured on the server.", { requestId: ctx.requestId }));
   }
   // Agentic runs make several model calls — keep the demo limit tight.
   const rl = rateLimit(clientKey(req), { max: 3, windowMs: 60_000, namespace: "investigate" });
   if (!rl.allowed) {
-    return apiError(429, "RATE_LIMITED", `Demo limit: 3 investigations/min. Retry in ${rl.retryAfterSec}s.`);
+    return ctx.response(apiError(429, "RATE_LIMITED", `Demo limit: 3 investigations/min. Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
   }
   if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 2)) {
-    return apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.");
+    return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.", { requestId: ctx.requestId }));
   }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return invalidJson();
+    return ctx.response(apiError(400, "INVALID_JSON", "Body must be JSON", { requestId: ctx.requestId }));
   }
   const parsed = InputSchema.safeParse(body);
   if (!parsed.success) {
-    return validationError(parsed.error);
+    const message = parsed.error.issues.map((issue) => issue.message).join("; ");
+    return ctx.response(apiError(400, "VALIDATION_ERROR", message, { requestId: ctx.requestId }));
   }
   const input = redactSensitiveValue(parsed.data);
 
@@ -60,9 +63,13 @@ export async function POST(req: NextRequest) {
       language: input.output_language ?? "en",
       maxSteps: input.max_steps,
     });
-    return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
+    return ctx.response(Response.json(result), {
+      steps: result.steps,
+      completed: result.completed,
+      model_calls: result.usage.model_calls,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    return apiError(500, "INVESTIGATION_FAILED", msg);
+    return ctx.response(apiError(500, "INVESTIGATION_FAILED", msg, { requestId: ctx.requestId }));
   }
 }

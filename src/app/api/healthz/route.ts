@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { hasSupabase } from "@/lib/db";
 import { supabaseAdmin } from "@/lib/supabase";
+import { createRequestContext } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,8 @@ const DB_TIMEOUT_MS = 3_000;
  * Suitable for Vercel uptime monitor, BetterStack, Pingdom, etc.
  * Intentionally cheap (HEAD-style count on a single table).
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const ctx = createRequestContext(req, "healthz");
   const started = Date.now();
   const checks: Record<string, { ok: boolean; detail?: string }> = {};
 
@@ -43,17 +45,20 @@ export async function GET() {
   }
 
   const allOk = Object.values(checks).every((c) => c.ok);
-  return NextResponse.json(
-    {
-      status: allOk ? "ok" : "degraded",
-      latency_ms: Date.now() - started,
-      checks,
-      version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
-      ts: new Date().toISOString(),
-    },
-    {
-      status: allOk ? 200 : 503,
-      headers: { "cache-control": "no-store, max-age=0" },
-    },
+  return ctx.response(
+    NextResponse.json(
+      {
+        status: allOk ? "ok" : "degraded",
+        latency_ms: Date.now() - started,
+        checks,
+        version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
+        ts: new Date().toISOString(),
+      },
+      {
+        status: allOk ? 200 : 503,
+        headers: { "cache-control": "no-store, max-age=0" },
+      },
+    ),
+    { healthy: allOk },
   );
 }

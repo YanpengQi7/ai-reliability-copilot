@@ -16,6 +16,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { withClientIp } from "@/lib/mcp/telemetry";
 import { machineEndpointNeedsSecret } from "@/lib/requestSafety";
+import { createRequestContext } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,11 +54,14 @@ function checkAuth(req: Request): boolean {
 }
 
 async function handle(req: Request): Promise<Response> {
-  if (machineEndpointNeedsSecret(process.env.MCP_AUTH_TOKEN)) return authNotConfigured();
-  if (!checkAuth(req)) return unauthorized();
+  const ctx = createRequestContext(req, "mcp");
+  if (machineEndpointNeedsSecret(process.env.MCP_AUTH_TOKEN)) {
+    return ctx.response(authNotConfigured(), { method: req.method });
+  }
+  if (!checkAuth(req)) return ctx.response(unauthorized(), { method: req.method });
   const ip = clientKey(req);
   const rl = rateLimit(ip, { max: RATE_LIMIT_PER_MIN, namespace: "mcp" });
-  if (!rl.allowed) return rateLimited(rl.retryAfterSec);
+  if (!rl.allowed) return ctx.response(rateLimited(rl.retryAfterSec), { method: req.method });
 
   return withClientIp(ip, async () => {
     const server = buildMcpServer();
@@ -65,10 +69,19 @@ async function handle(req: Request): Promise<Response> {
       sessionIdGenerator: undefined, // stateless — Vercel-friendly
       enableJsonResponse: true,
     });
-    await server.connect(transport);
-    const res = await transport.handleRequest(req);
-    transport.close();
-    return res;
+    try {
+      await server.connect(transport);
+      const response = await transport.handleRequest(req);
+      return ctx.response(response, { method: req.method });
+    } catch (error) {
+      ctx.log("error", "mcp_request_failed", {
+        method: req.method,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    } finally {
+      await transport.close();
+    }
   });
 }
 
