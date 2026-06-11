@@ -3,7 +3,6 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { experimental_useObject as useObject } from "@ai-sdk/react";
-import ReactMarkdown from "react-markdown";
 import { AnalysisSchema } from "@/lib/schema";
 import { useT } from "@/lib/i18n/client";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n/messages";
@@ -18,6 +17,7 @@ import {
   safeDisplayFilename,
   validateImageFile,
 } from "@/lib/requestSafety";
+import { StreamingAnalysisView } from "@/components/StreamingAnalysisView";
 
 const SAMPLE = `Time: 14:02 UTC. payment-svc p99 latency jumped from 120ms to 4.8s.
 Error rate climbed from 0.1% to 12% (mostly 500s).
@@ -318,141 +318,10 @@ export default function Home() {
 
         {object && (
           <div aria-live="polite" aria-busy={isLoading}>
-            <AnalysisView a={object} />
+            <StreamingAnalysisView analysis={object} />
           </div>
         )}
       </div>
     </main>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-5">
-      <h2 className="text-lg font-semibold mb-3">{title}</h2>
-      {children}
-    </div>
-  );
-}
-
-function SeverityBadge({ s }: { s?: string }) {
-  if (!s) return null;
-  const color =
-    s === "SEV1" ? "bg-red-500/20 text-red-300 border-red-500/40" :
-    s === "SEV2" ? "bg-amber-500/20 text-amber-300 border-amber-500/40" :
-    "bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
-  return <span className={`inline-block text-xs px-2 py-1 rounded border ${color}`}>{s}</span>;
-}
-
-type PartialAnalysis = Partial<{
-  summary: string;
-  severity: string;
-  severity_reasoning: string;
-  root_causes: Array<{ hypothesis?: string; evidence?: string; likelihood?: string } | undefined>;
-  investigation_checklist: Array<{ step?: string; command?: string; expected?: string } | undefined>;
-  mitigation_plan: Array<{ action?: string; risk?: string; rollback?: string } | undefined>;
-  customer_impact: string;
-  postmortem_draft: string;
-  follow_ups: Array<{ item?: string; owner_role?: string; priority?: string } | undefined>;
-}>;
-
-function AnalysisView({ a }: { a: PartialAnalysis }) {
-  const t = useT();
-  return (
-    <div className="flex flex-col gap-6 w-full">
-      {(a.summary || a.severity) && (
-        <Section title={t("section.summary")}>
-          <div className="flex items-start gap-3">
-            <SeverityBadge s={a.severity} />
-            <p className="text-neutral-200">{a.summary || "..."}</p>
-          </div>
-          {a.severity_reasoning && (
-            <p className="text-sm text-neutral-400 mt-2">{t("section.severityReasoning")} {a.severity_reasoning}</p>
-          )}
-        </Section>
-      )}
-
-      {a.root_causes && a.root_causes.length > 0 && (
-        <Section title={t("section.rootCauses")}>
-          <ul className="space-y-3">
-            {a.root_causes.map((r, i) =>
-              r ? (
-                <li key={i} className="border-l-2 border-indigo-500/50 pl-3">
-                  <div className="flex gap-2 items-center">
-                    {r.likelihood && <span className="text-xs uppercase text-neutral-500">{r.likelihood}</span>}
-                    <span className="font-medium">{r.hypothesis}</span>
-                  </div>
-                  {r.evidence && <p className="text-sm text-neutral-400 mt-1">{t("section.evidence")} {r.evidence}</p>}
-                </li>
-              ) : null
-            )}
-          </ul>
-        </Section>
-      )}
-
-      {a.investigation_checklist && a.investigation_checklist.length > 0 && (
-        <Section title={t("section.investigation")}>
-          <ol className="space-y-3 list-decimal list-inside">
-            {a.investigation_checklist.map((s, i) =>
-              s ? (
-                <li key={i}>
-                  <span className="font-medium">{s.step}</span>
-                  {s.command && (
-                    <pre className="mt-1 bg-neutral-950 border border-neutral-800 rounded p-2 text-xs overflow-x-auto"><code>{s.command}</code></pre>
-                  )}
-                  {s.expected && <p className="text-xs text-neutral-400 mt-1">{t("section.expected")} {s.expected}</p>}
-                </li>
-              ) : null
-            )}
-          </ol>
-        </Section>
-      )}
-
-      {a.mitigation_plan && a.mitigation_plan.length > 0 && (
-        <Section title={t("section.mitigation")}>
-          <ul className="space-y-3">
-            {a.mitigation_plan.map((m, i) =>
-              m ? (
-                <li key={i}>
-                  <p className="font-medium">{m.action}</p>
-                  {m.risk && <p className="text-xs text-amber-300/80">{t("section.risk")} {m.risk}</p>}
-                  {m.rollback && <p className="text-xs text-neutral-400">{t("section.rollback")} {m.rollback}</p>}
-                </li>
-              ) : null
-            )}
-          </ul>
-        </Section>
-      )}
-
-      {a.customer_impact && (
-        <Section title={t("section.customerImpact")}>
-          <p className="text-neutral-200 whitespace-pre-wrap">{a.customer_impact}</p>
-        </Section>
-      )}
-
-      {a.postmortem_draft && (
-        <Section title={t("section.postmortem")}>
-          <div className="prose prose-invert prose-sm max-w-none prose-headings:text-neutral-100 prose-p:text-neutral-300 prose-li:text-neutral-300 prose-strong:text-neutral-100">
-            <ReactMarkdown>{a.postmortem_draft}</ReactMarkdown>
-          </div>
-        </Section>
-      )}
-
-      {a.follow_ups && a.follow_ups.length > 0 && (
-        <Section title={t("section.followUps")}>
-          <ul className="space-y-2">
-            {a.follow_ups.map((f, i) =>
-              f ? (
-                <li key={i} className="flex gap-2 text-sm">
-                  {f.priority && <span className="text-xs px-2 py-0.5 rounded bg-neutral-800 text-neutral-300">{f.priority}</span>}
-                  <span className="text-neutral-200">{f.item}</span>
-                  {f.owner_role && <span className="text-neutral-500">— {f.owner_role}</span>}
-                </li>
-              ) : null
-            )}
-          </ul>
-        </Section>
-      )}
-    </div>
   );
 }
