@@ -28,6 +28,7 @@ export type InvestigateOptions = {
   promptVersion?: PromptVersion;
   model?: string;
   maxSteps?: number; // hard cap on model-loop iterations
+  abortSignal?: AbortSignal;
 };
 
 const DEFAULT_MAX_STEPS = 8;
@@ -119,8 +120,10 @@ export async function investigate(opts: InvestigateOptions): Promise<Investigati
         tools,
         toolChoice: "auto",
         temperature: 0.2,
+        abortSignal: opts.abortSignal,
       });
     } catch (err) {
+      if (opts.abortSignal?.aborted) throw err;
       // Recovery: a model/transport error shouldn't kill the run. Stop the loop
       // and let phase 2 produce a best-effort conclusion from what we have.
       const msg = err instanceof Error ? err.message : String(err);
@@ -222,6 +225,7 @@ Now produce the structured 9-section incident response based on this evidence.${
       system: finalSystem,
       prompt: finalPrompt,
       temperature: 0.2,
+      abortSignal: opts.abortSignal,
     });
     analysis = r.object;
     accumulate(usage, r.usage, model);
@@ -235,6 +239,7 @@ Now produce the structured 9-section incident response based on this evidence.${
       system: finalSystem,
       prompt: finalPrompt,
       temperature: 0.2,
+      abortSignal: opts.abortSignal,
     });
     analysis = r.object;
     accumulate(usage, r.usage, model);

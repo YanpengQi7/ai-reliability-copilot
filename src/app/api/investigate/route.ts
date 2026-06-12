@@ -9,6 +9,8 @@ import { createRequestContext } from "@/lib/observability";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+const INVESTIGATION_TIMEOUT_MS = 240_000;
+
 // Agentic investigation endpoint. Unlike /api/analyze (single streamed call),
 // this runs the hand-written tool-use loop and returns the full result —
 // analysis + the investigation trace + usage — as one JSON payload. No DB
@@ -51,6 +53,8 @@ export async function POST(req: NextRequest) {
     return ctx.response(apiError(400, "VALIDATION_ERROR", message, { requestId: ctx.requestId }));
   }
   const input = redactSensitiveValue(parsed.data);
+  const timeoutSignal = AbortSignal.timeout(INVESTIGATION_TIMEOUT_MS);
+  const signal = AbortSignal.any([req.signal, timeoutSignal]);
 
   try {
     const result = await investigate({
@@ -62,6 +66,7 @@ export async function POST(req: NextRequest) {
       },
       language: input.output_language ?? "en",
       maxSteps: input.max_steps,
+      abortSignal: signal,
     });
     return ctx.response(Response.json(result), {
       steps: result.steps,
@@ -69,7 +74,19 @@ export async function POST(req: NextRequest) {
       model_calls: result.usage.model_calls,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return ctx.response(apiError(500, "INVESTIGATION_FAILED", msg, { requestId: ctx.requestId }));
+    const detail = err instanceof Error ? err.message : String(err);
+    if (req.signal.aborted) {
+      ctx.log("warn", "investigation_request_aborted", { error: detail });
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Investigation was cancelled.", { requestId: ctx.requestId }));
+    }
+    if (timeoutSignal.aborted) {
+      ctx.log("error", "investigation_request_timed_out", {
+        timeout_ms: INVESTIGATION_TIMEOUT_MS,
+        error: detail,
+      });
+      return ctx.response(apiError(504, "INVESTIGATION_TIMEOUT", "Investigation timed out. Try fewer steps.", { requestId: ctx.requestId }));
+    }
+    ctx.log("error", "investigation_failed", { error: detail });
+    return ctx.response(apiError(502, "INVESTIGATION_FAILED", "Investigation provider failed. Please try again.", { requestId: ctx.requestId }));
   }
 }

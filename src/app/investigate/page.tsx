@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Nav } from "@/components/Nav";
 import type { Analysis } from "@/lib/schema";
+import { readApiError } from "@/lib/http";
 
 // ── Types mirrored from src/lib/agent/types.ts (client-safe, no server imports) ──
 type TraceStep = {
@@ -158,8 +159,16 @@ export default function InvestigatePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<InvestigationResult | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => {
+    abortRef.current?.abort();
+  }, []);
 
   async function run() {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -168,18 +177,27 @@ export default function InvestigatePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scenario_slug: slug, output_language: lang }),
+        signal: controller.signal,
       });
-      const j = await res.json();
       if (!res.ok) {
-        setError(j.message ?? "Investigation failed");
+        setError(await readApiError(res, "Investigation failed"));
         return;
       }
+      const j = await res.json();
       setResult(j as InvestigationResult);
     } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setLoading(false);
+      }
     }
+  }
+
+  function stop() {
+    abortRef.current?.abort();
   }
 
   return (
@@ -205,8 +223,13 @@ export default function InvestigatePage() {
           <option value="en">Output: English</option>
           <option value="zh">输出：中文</option>
         </select>
-        <button onClick={run} disabled={loading} className="rounded bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">
-          {loading ? "Investigating…" : "Run investigation"}
+        <button
+          onClick={loading ? stop : run}
+          className={`rounded px-4 py-2 text-sm font-semibold text-white ${
+            loading ? "bg-red-700 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-500"
+          }`}
+        >
+          {loading ? "Stop investigation" : "Run investigation"}
         </button>
       </div>
 
