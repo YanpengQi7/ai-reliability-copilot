@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   if (!hasSupabase()) {
     return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase not configured", { requestId: ctx.requestId }));
   }
-  const rl = rateLimit(clientKey(req));
+  const rl = await rateLimit(clientKey(req));
   if (!rl.allowed) {
     return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`, { requestId: ctx.requestId }));
   }

@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY is not configured on the server.", { requestId: ctx.requestId }));
   }
   // Agentic runs make several model calls — keep the demo limit tight.
-  const rl = rateLimit(clientKey(req), { max: 3, windowMs: 60_000, namespace: "investigate" });
+  const rl = await rateLimit(clientKey(req), { max: 3, windowMs: 60_000, namespace: "investigate" });
   if (!rl.allowed) {
     return ctx.response(apiError(429, "RATE_LIMITED", `Demo limit: 3 investigations/min. Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
   }

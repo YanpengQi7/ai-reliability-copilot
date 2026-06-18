@@ -60,7 +60,7 @@ async function handle(req: Request): Promise<Response> {
   }
   if (!checkAuth(req)) return ctx.response(unauthorized(), { method: req.method });
   const ip = clientKey(req);
-  const rl = rateLimit(ip, { max: RATE_LIMIT_PER_MIN, namespace: "mcp" });
+  const rl = await rateLimit(ip, { max: RATE_LIMIT_PER_MIN, namespace: "mcp" });
   if (!rl.allowed) return ctx.response(rateLimited(rl.retryAfterSec), { method: req.method });
 
   return withClientIp(ip, async () => {
