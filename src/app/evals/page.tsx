@@ -5,6 +5,8 @@ import { type RubricDim } from "@/lib/eval/rubric";
 import { Nav } from "@/components/Nav";
 import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
+import { publicIncidentDataEnabled } from "@/lib/incidentAccess";
+import { PrivateDataNotice } from "@/components/PrivateDataNotice";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +38,17 @@ type IncidentLite = {
 export default async function EvalsPage() {
   const locale = await getLocale();
   const tr = (k: string) => t(locale, k);
+  if (!publicIncidentDataEnabled()) {
+    return (
+      <Shell>
+        <header className="flex items-end justify-between gap-4 flex-wrap">
+          <h1 className="text-2xl font-bold">{tr("evals.title")}</h1>
+          <Nav />
+        </header>
+        <PrivateDataNotice title={tr("privateData.title")} body={tr("privateData.body")} />
+      </Shell>
+    );
+  }
   if (!hasSupabase()) {
     return (
       <Shell>

@@ -29,6 +29,11 @@ export const MESSAGES: Messages = {
   "common.cancel": { en: "Cancel", zh: "取消" },
   "common.copy": { en: "Copy", zh: "复制" },
   "common.copied": { en: "Copied", zh: "已复制" },
+  "privateData.title": { en: "Operational data is private", zh: "运营数据为私有内容" },
+  "privateData.body": {
+    en: "This hosted deployment does not expose saved incidents, internal knowledge-base metadata, evaluation records, or MCP telemetry.",
+    zh: "此托管部署不会公开已保存的故障、内部知识库元数据、评测记录或 MCP 遥测数据。",
+  },
 
   // Home (New)
   "home.title": { en: "AI Reliability Copilot", zh: "AI 故障响应副驾" },

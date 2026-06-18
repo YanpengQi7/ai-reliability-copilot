@@ -3,6 +3,8 @@ import { hasSupabase } from "@/lib/db";
 import { Nav } from "@/components/Nav";
 import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
+import { publicIncidentDataEnabled } from "@/lib/incidentAccess";
+import { PrivateDataNotice } from "@/components/PrivateDataNotice";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,10 @@ type DocRow = { id: string; source_path: string; kind: string; title: string | n
 export default async function KbPage() {
   const locale = await getLocale();
   const tr = (k: string) => t(locale, k);
+
+  if (!publicIncidentDataEnabled()) {
+    return <Shell title={tr("kb.title")}><PrivateDataNotice title={tr("privateData.title")} body={tr("privateData.body")} /></Shell>;
+  }
 
   if (!hasSupabase()) {
     return <Shell title={tr("kb.title")}><p className="text-neutral-400">{tr("incidents.dbMissing.body")}</p></Shell>;
