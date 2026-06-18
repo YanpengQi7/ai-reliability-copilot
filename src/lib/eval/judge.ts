@@ -98,7 +98,7 @@ export async function judge(input: JudgeInput, model = deepseek(JUDGE_MODEL)) {
 // 6-dimension judge for the agentic arm: the core 5 PLUS evidence_grounding,
 // graded against the supplied investigation trace.
 //
-// `judgeModel` override: calibration (notes/calib-grounding.md) showed
+// `judgeModel` override: calibration (notes/generated/calib-grounding.md) showed
 // deepseek-chat returns a flat 5.00 on evidence_grounding with zero variance —
 // too weak to discriminate verbatim-grounded from derived claims even with
 // tightened anchors. The override lets us grade grounding with a stronger model

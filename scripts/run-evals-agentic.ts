@@ -5,7 +5,7 @@
 //   npm run evals:agentic -- --quick      # smoke: 1 scenario, en, 1 rep
 //   npm run evals:agentic -- --en         # English only
 //
-// Methodology (continues notes/eval-run-3.md): n repeats per cell, report
+// Methodology (continues notes/reports/eval-run-3.md): n repeats per cell, report
 // mean ± std, and call a gap "stands out" only when |Δmean| > pooled std.
 //
 // What's held constant so the comparison is honest: same model, same judge,
@@ -16,7 +16,7 @@
 // dims for BOTH (comparable). `evidence_grounding` is scored for the agentic
 // arm ONLY (the baseline has no trace) and reported separately.
 //
-// No Supabase required — results print to stdout and write to notes/eval-agentic-latest.json.
+// No Supabase required — results print to stdout and write to notes/generated/eval-agentic-latest.json.
 
 import { config } from "dotenv";
 config({ path: ".env.local" });
@@ -208,7 +208,7 @@ async function main() {
   console.log(`  overall Δ (agentic − single): ${dOverall >= 0 ? "+" : ""}${dOverall.toFixed(3)} (pooled std ${pooled.toFixed(3)} → ${Math.abs(dOverall) > pooled ? "stands out" : "inside noise"})`);
   console.log(`  agentic costs ${costMult.toFixed(1)}× the single-shot baseline`);
 
-  const out = `notes/eval-agentic-latest.json`;
+  const out = `notes/generated/eval-agentic-latest.json`;
   writeFileSync(out, JSON.stringify({ generated_at: new Date().toISOString(), repeats, rows }, null, 2));
   console.log(`\nRaw rows written to ${out}`);
 }

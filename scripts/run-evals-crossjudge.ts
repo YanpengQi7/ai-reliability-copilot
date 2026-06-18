@@ -14,7 +14,7 @@
 // if Judge A (same family as the generator) sits systematically above the
 // independent Judge B, that quantifies the self-bias.
 //
-// Self-contained: prints + dumps notes/crossjudge-latest.json. Does NOT touch
+// Self-contained: prints + dumps notes/generated/crossjudge-latest.json. Does NOT touch
 // Supabase (holds the judge as the only variable, and stays runnable with just
 // the two API keys).
 //
@@ -185,8 +185,8 @@ async function main() {
     ),
     rows,
   };
-  writeFileSync("notes/crossjudge-latest.json", JSON.stringify(out, null, 2));
-  console.log(`\nWrote notes/crossjudge-latest.json`);
+  writeFileSync("notes/generated/crossjudge-latest.json", JSON.stringify(out, null, 2));
+  console.log(`\nWrote notes/generated/crossjudge-latest.json`);
 }
 
 main();

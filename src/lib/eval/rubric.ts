@@ -88,7 +88,7 @@ export function overallScore(s: RubricScores): number {
 // queried and returned), not just the final analysis — a claim is only
 // "grounded" if the evidence cited was really retrieved during investigation.
 // Anchors deliberately force the judge to DISCRIMINATE — calibration (see
-// notes/calib-grounding.md) found it returning a flat 5.00 with zero variance,
+// notes/generated/calib-grounding.md) found it returning a flat 5.00 with zero variance,
 // which means the dimension wasn't grading anything. A derived/rounded number
 // (e.g. reporting "~3.2% failures" when the trace shows 99.7%→96.8%) must cost a
 // point; only verbatim-traceable claims earn a 5. Numbers from the severity

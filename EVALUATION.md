@@ -64,7 +64,7 @@ open http://localhost:3000/evals
 
 ### Cross-model judge results (measuring same-family bias)
 
-`npm run evals:crossjudge` holds each analysis fixed and re-scores it with an independent vendor (`JUDGE_MODEL_CROSS`), so any score delta is the judge, not the generation. Run below: prompt v3, 5 scenarios × en/zh × 2 repeats = **n=20**, Judge A = `deepseek-chat` (same family as the analyzer), Judge B = `anthropic:claude-sonnet-4-6` (independent). Raw dump: `notes/crossjudge-latest.json`.
+`npm run evals:crossjudge` holds each analysis fixed and re-scores it with an independent vendor (`JUDGE_MODEL_CROSS`), so any score delta is the judge, not the generation. Run below: prompt v3, 5 scenarios × en/zh × 2 repeats = **n=20**, Judge A = `deepseek-chat` (same family as the analyzer), Judge B = `anthropic:claude-sonnet-4-6` (independent). Raw dump: `notes/generated/crossjudge-latest.json`.
 
 | dimension | meanA (deepseek) | meanB (claude) | bias B−A | MAE | exact-agree |
 |---|---:|---:|---:|---:|---:|
