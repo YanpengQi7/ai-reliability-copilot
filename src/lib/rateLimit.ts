@@ -62,6 +62,10 @@ function redisConfig(): { url: string; token: string } | null {
   return url && token ? { url: url.replace(/\/$/, ""), token } : null;
 }
 
+export function distributedRateLimitConfigured(): boolean {
+  return redisConfig() !== null;
+}
+
 function redisKey(key: string, namespace?: string): string {
   const digest = createHash("sha256").update(key).digest("hex").slice(0, 32);
   return `sre-copilot:rate-limit:${namespace ?? "default"}:${digest}`;

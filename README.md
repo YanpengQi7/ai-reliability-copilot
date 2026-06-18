@@ -188,6 +188,9 @@ Vercel production deployments fail closed for MCP and webhook traffic when
 these tokens are missing. Set `ALLOW_PUBLIC_MACHINE_API=true` only for an
 intentionally public deployment.
 
+Health endpoints: `/api/livez` is a dependency-free liveness probe;
+`/api/healthz` is readiness and verifies required configuration plus Supabase.
+
 ## Known limitations
 
 - **In-memory rate limiter** (`src/lib/rateLimit.ts`) — resets on cold start. Production swap: Upstash Redis.

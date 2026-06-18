@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { hasSupabase } from "@/lib/db";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createRequestContext } from "@/lib/observability";
+import { distributedRateLimitConfigured } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,12 +11,11 @@ export const revalidate = 0;
 const DB_TIMEOUT_MS = 3_000;
 
 /**
- * Liveness + readiness probe. Returns 200 only if:
+ * Readiness probe. Returns 200 only if:
  *   - Required env vars are present (DEEPSEEK_API_KEY, Supabase URL + service key)
  *   - Supabase Postgres responds within the timeout
  *
- * Suitable for Vercel uptime monitor, BetterStack, Pingdom, etc.
- * Intentionally cheap (HEAD-style count on a single table).
+ * Use /api/livez for a dependency-free process liveness probe.
  */
 export async function GET(req: Request) {
   const ctx = createRequestContext(req, "healthz");
@@ -30,7 +30,8 @@ export async function GET(req: Request) {
       const sb = supabaseAdmin();
       const { error } = await sb
         .from("incidents")
-        .select("*", { count: "exact", head: true })
+        .select("id")
+        .limit(1)
         .abortSignal(AbortSignal.timeout(DB_TIMEOUT_MS));
       checks.supabase_query = { ok: !error, detail: error?.message };
     } catch (e) {
@@ -51,6 +52,9 @@ export async function GET(req: Request) {
         status: allOk ? "ok" : "degraded",
         latency_ms: Date.now() - started,
         checks,
+        capabilities: {
+          distributed_rate_limit: distributedRateLimitConfigured(),
+        },
         version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
         ts: new Date().toISOString(),
       },
