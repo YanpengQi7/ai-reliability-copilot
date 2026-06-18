@@ -28,7 +28,7 @@ import { tryParseAlert } from "@/lib/alertParsers";
 import { calcCost, normalizeUsage } from "@/lib/cost";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
 import { contentLengthExceeds, INPUT_LIMITS, machineEndpointNeedsSecret, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext } from "@/lib/observability";
@@ -58,7 +58,7 @@ export async function POST(req: Request) {
   }
   const rl = await rateLimit(clientKey(req), { max: RATE_LIMIT, namespace: "webhook" });
   if (!rl.allowed) {
-    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`, { requestId: ctx.requestId }));
+    return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`, { requestId: ctx.requestId }), rl));
   }
   if (!hasSupabase()) {
     return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase env missing", { requestId: ctx.requestId }));

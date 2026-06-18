@@ -16,6 +16,7 @@ const MAX_PER_WINDOW = 5;
 
 export type RateLimitResult = {
   allowed: boolean;
+  limit: number;
   remaining: number;
   retryAfterSec: number;
   backend: "redis" | "memory";
@@ -38,13 +39,13 @@ function memoryRateLimit(
   const b = bucketset.get(key);
   if (!b || b.resetAt < now) {
     bucketset.set(key, { count: 1, resetAt: now + windowMs });
-    return { allowed: true, remaining: max - 1, retryAfterSec: 0, backend: "memory" };
+    return { allowed: true, limit: max, remaining: max - 1, retryAfterSec: 0, backend: "memory" };
   }
   if (b.count >= max) {
-    return { allowed: false, remaining: 0, retryAfterSec: Math.ceil((b.resetAt - now) / 1000), backend: "memory" };
+    return { allowed: false, limit: max, remaining: 0, retryAfterSec: Math.ceil((b.resetAt - now) / 1000), backend: "memory" };
   }
   b.count += 1;
-  return { allowed: true, remaining: max - b.count, retryAfterSec: 0, backend: "memory" };
+  return { allowed: true, limit: max, remaining: max - b.count, retryAfterSec: 0, backend: "memory" };
 }
 
 const FIXED_WINDOW_SCRIPT = `
@@ -101,6 +102,7 @@ async function redisRateLimit(
   }
   return {
     allowed: count <= max,
+    limit: max,
     remaining: Math.max(0, max - count),
     retryAfterSec: count <= max ? 0 : Math.max(1, Math.ceil((ttlMs > 0 ? ttlMs : windowMs) / 1000)),
     backend: "redis",
@@ -121,6 +123,25 @@ export async function rateLimit(key: string, opts: RateLimitOptions = {}): Promi
     }
   }
   return memoryRateLimit(key, opts);
+}
+
+/** Attach machine-readable retry metadata to a 429 response. */
+export function withRateLimitHeaders(response: Response, result: RateLimitResult): Response {
+  const headers = new Headers(response.headers);
+  const retryAfter = String(Math.max(1, result.retryAfterSec));
+  headers.set("Retry-After", retryAfter);
+  headers.set("RateLimit-Limit", String(result.limit));
+  headers.set("RateLimit-Remaining", String(result.remaining));
+  headers.set("RateLimit-Reset", retryAfter);
+  // Retain the widely deployed legacy names for existing API clients.
+  headers.set("X-RateLimit-Limit", String(result.limit));
+  headers.set("X-RateLimit-Remaining", String(result.remaining));
+  headers.set("X-RateLimit-Reset", String(Math.ceil(Date.now() / 1000) + Number(retryAfter)));
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }
 
 export function clientKey(req: Request): string {

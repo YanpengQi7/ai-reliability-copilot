@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { investigate } from "@/lib/agent/investigate";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
 import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext } from "@/lib/observability";
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   // Agentic runs make several model calls — keep the demo limit tight.
   const rl = await rateLimit(clientKey(req), { max: 3, windowMs: 60_000, namespace: "investigate" });
   if (!rl.allowed) {
-    return ctx.response(apiError(429, "RATE_LIMITED", `Demo limit: 3 investigations/min. Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
+    return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Demo limit: 3 investigations/min. Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
   if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 2)) {
     return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.", { requestId: ctx.requestId }));

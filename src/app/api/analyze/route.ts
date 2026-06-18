@@ -4,7 +4,7 @@ import { z } from "zod";
 import { AnalysisSchema } from "@/lib/schema";
 import { deepseek, ANALYSIS_MODEL } from "@/lib/ai";
 import { getSystemPrompt, buildUserPrompt, DEFAULT_PROMPT_VERSION, type PromptVersion } from "@/lib/prompts";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { retrieveContext, formatChunksForPrompt } from "@/lib/kb";
 import { normalizeUsage, calcCost } from "@/lib/cost";
 import { usageTrailer } from "@/lib/streamUsage";
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   }
   const rl = await rateLimit(clientKey(req));
   if (!rl.allowed) {
-    return ctx.response(apiError(429, "RATE_LIMITED", `Demo limit: 5 requests/min. Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
+    return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Demo limit: 5 requests/min. Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
   if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 2)) {
     return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.", { requestId: ctx.requestId }));

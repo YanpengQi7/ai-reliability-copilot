@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { describeImage, hasVisionProvider } from "@/lib/vision";
 import { apiError } from "@/lib/http";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { contentLengthExceeds, INPUT_LIMITS, isAllowedImageSource } from "@/lib/requestSafety";
 import { createRequestContext } from "@/lib/observability";
 
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   }
   const rl = await rateLimit(clientKey(req), { max: 3, namespace: "vision" });
   if (!rl.allowed) {
-    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
+    return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
   if (contentLengthExceeds(req, INPUT_LIMITS.imagePayload + 1024)) {
     return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Image payload is too large.", { requestId: ctx.requestId }));

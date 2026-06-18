@@ -6,7 +6,7 @@ import { getSystemPrompt, buildUserPrompt, DEFAULT_PROMPT_VERSION, type PromptVe
 import { SCENARIOS } from "@/lib/scenarios";
 import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { calcCost, normalizeUsage } from "@/lib/cost";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
@@ -32,7 +32,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   }
   const rl = await rateLimit(clientKey(req));
   if (!rl.allowed) {
-    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`, { requestId: ctx.requestId }));
+    return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`, { requestId: ctx.requestId }), rl));
   }
   const scenario = SCENARIOS.find((s) => s.slug === slug);
   if (!scenario) {

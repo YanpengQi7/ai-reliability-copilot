@@ -7,7 +7,7 @@ import { hasSupabase } from "@/lib/db";
 import { JUDGE_MODEL } from "@/lib/ai";
 import { SCENARIOS } from "@/lib/scenarios";
 import { apiError } from "@/lib/http";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { createRequestContext } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
   }
   const rl = await rateLimit(clientKey(req), { max: 3, namespace: "evaluate" });
   if (!rl.allowed) {
-    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
+    return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {

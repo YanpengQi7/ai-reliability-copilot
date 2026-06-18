@@ -13,7 +13,7 @@
 
 import { buildMcpServer } from "@/lib/mcp/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { withClientIp } from "@/lib/mcp/telemetry";
 import { machineEndpointNeedsSecret } from "@/lib/requestSafety";
 import { createRequestContext } from "@/lib/observability";
@@ -61,7 +61,7 @@ async function handle(req: Request): Promise<Response> {
   if (!checkAuth(req)) return ctx.response(unauthorized(), { method: req.method });
   const ip = clientKey(req);
   const rl = await rateLimit(ip, { max: RATE_LIMIT_PER_MIN, namespace: "mcp" });
-  if (!rl.allowed) return ctx.response(rateLimited(rl.retryAfterSec), { method: req.method });
+  if (!rl.allowed) return ctx.response(withRateLimitHeaders(rateLimited(rl.retryAfterSec), rl), { method: req.method });
 
   return withClientIp(ip, async () => {
     const server = buildMcpServer();

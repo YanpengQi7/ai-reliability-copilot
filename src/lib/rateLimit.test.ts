@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { rateLimit } from "./rateLimit";
+import { rateLimit, withRateLimitHeaders } from "./rateLimit";
 
 const originalUrl = process.env.UPSTASH_REDIS_REST_URL;
 const originalToken = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -34,13 +34,30 @@ describe("rateLimit", () => {
 
     const result = await rateLimit("203.0.113.42", { max: 3, namespace: "analyze" });
 
-    expect(result).toEqual({ allowed: true, remaining: 1, retryAfterSec: 0, backend: "redis" });
+    expect(result).toEqual({ allowed: true, limit: 3, remaining: 1, retryAfterSec: 0, backend: "redis" });
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("https://redis.example.com");
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer secret-token");
     expect(String(init.body)).not.toContain("203.0.113.42");
     expect(JSON.parse(String(init.body))[0]).toBe("EVAL");
+  });
+
+  it("adds standard and legacy retry headers to rate-limited responses", () => {
+    const response = withRateLimitHeaders(new Response("limited", { status: 429 }), {
+      allowed: false,
+      limit: 5,
+      remaining: 0,
+      retryAfterSec: 17,
+      backend: "memory",
+    });
+
+    expect(response.headers.get("Retry-After")).toBe("17");
+    expect(response.headers.get("RateLimit-Limit")).toBe("5");
+    expect(response.headers.get("RateLimit-Remaining")).toBe("0");
+    expect(response.headers.get("RateLimit-Reset")).toBe("17");
+    expect(response.headers.get("X-RateLimit-Limit")).toBe("5");
+    expect(Number(response.headers.get("X-RateLimit-Reset"))).toBeGreaterThan(Math.floor(Date.now() / 1000));
   });
 
   it("falls back to memory if Redis is temporarily unavailable", async () => {

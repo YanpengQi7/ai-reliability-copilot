@@ -8,7 +8,7 @@ import { hasSupabase } from "@/lib/db";
 import { calcCost, normalizeUsage } from "@/lib/cost";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { createRequestContext } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 
@@ -34,7 +34,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   const rl = await rateLimit(clientKey(req), { max: 3, namespace: "rerun" });
   if (!rl.allowed) {
-    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
+    return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
   const sb = supabaseAdmin();
   const { data: incident, error: e0 } = await sb.from("incidents").select("*").eq("id", id).single();

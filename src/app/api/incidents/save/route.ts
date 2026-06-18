@@ -8,7 +8,7 @@ import { DEFAULT_PROMPT_VERSION } from "@/lib/prompts";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
   }
   const rl = await rateLimit(clientKey(req), { max: 10, namespace: "save" });
   if (!rl.allowed) {
-    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
+    return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
   if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 4)) {
     return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.", { requestId: ctx.requestId }));
