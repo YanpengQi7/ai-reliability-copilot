@@ -11,11 +11,13 @@ import { t } from "@/lib/i18n/messages";
 import { findSimilarIncidents } from "@/lib/similar";
 import { buildSignature } from "@/lib/embeddings";
 import { supabaseAdmin } from "@/lib/supabase";
+import { publicIncidentDataEnabled } from "@/lib/incidentAccess";
 
 export const dynamic = "force-dynamic";
 
 export default async function IncidentDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!publicIncidentDataEnabled()) return notFound();
   const locale = await getLocale();
   const tr = (k: string) => t(locale, k);
   if (!hasSupabase()) {

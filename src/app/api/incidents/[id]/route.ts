@@ -12,6 +12,7 @@ import { NextResponse } from "next/server";
 import { hasSupabase, getIncidentWithAnalyses } from "@/lib/db";
 import { apiError } from "@/lib/http";
 import { createRequestContext } from "@/lib/observability";
+import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,9 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = createRequestContext(req, "get_incident");
   const { id } = await params;
+  if (!requestHasIncidentDataAccess(req)) {
+    return ctx.response(apiError(403, "INCIDENT_DATA_PRIVATE", "Persisted incident data is private on this deployment.", { requestId: ctx.requestId }));
+  }
   if (!hasSupabase()) {
     return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase not configured", { requestId: ctx.requestId }));
   }

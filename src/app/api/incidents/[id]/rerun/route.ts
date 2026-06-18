@@ -10,6 +10,7 @@ import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@
 import { apiError } from "@/lib/http";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { createRequestContext } from "@/lib/observability";
+import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -17,6 +18,9 @@ export const maxDuration = 300;
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = createRequestContext(req, "rerun_incident");
   const { id } = await params;
+  if (!requestHasIncidentDataAccess(req)) {
+    return ctx.response(apiError(403, "INCIDENT_DATA_PRIVATE", "Persisted incident data is private on this deployment.", { requestId: ctx.requestId }));
+  }
   const url = new URL(req.url);
   const requested = url.searchParams.get("version");
   const version: PromptVersion = requested === "v1" || requested === "v2" || requested === "v3" ? requested : DEFAULT_PROMPT_VERSION;

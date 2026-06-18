@@ -73,6 +73,10 @@ export const MESSAGES: Messages = {
     en: "The analysis was generated, but it was not saved.",
     zh: "分析已生成，但未能保存。",
   },
+  "home.persistenceDisabled": {
+    en: "This deployment analyzes incidents without storing them.",
+    zh: "此部署仅分析故障，不会持久化保存数据。",
+  },
   "home.errorMissingKey": {
     en: "Server is missing DEEPSEEK_API_KEY. Set it in Vercel → Settings → Environment Variables and redeploy.",
     zh: "服务端缺少 DEEPSEEK_API_KEY。请在 Vercel → Settings → Environment Variables 中设置后重新部署。",
@@ -103,6 +107,11 @@ export const MESSAGES: Messages = {
   "incidents.dbMissing.body": {
     en: "Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to see saved incidents.",
     zh: "设置 NEXT_PUBLIC_SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 后即可看到保存的故障。",
+  },
+  "incidents.private.title": { en: "Incident history is private", zh: "故障历史为私有数据" },
+  "incidents.private.body": {
+    en: "This hosted deployment does not expose persisted incident logs. Set ALLOW_PUBLIC_INCIDENT_DATA=true only for a sample-data demo.",
+    zh: "此托管部署不会公开已保存的故障日志。仅在纯样例数据 Demo 中设置 ALLOW_PUBLIC_INCIDENT_DATA=true。",
   },
   "incidents.untitled": { en: "Untitled incident", zh: "未命名故障" },
 

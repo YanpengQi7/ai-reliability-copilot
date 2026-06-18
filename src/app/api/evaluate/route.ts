@@ -9,6 +9,7 @@ import { SCENARIOS } from "@/lib/scenarios";
 import { apiError } from "@/lib/http";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { createRequestContext } from "@/lib/observability";
+import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -20,6 +21,9 @@ const Body = z.object({
 
 export async function POST(req: Request) {
   const ctx = createRequestContext(req, "evaluate_analysis");
+  if (!requestHasIncidentDataAccess(req)) {
+    return ctx.response(apiError(403, "INCIDENT_DATA_PRIVATE", "Persisted incident data is private on this deployment.", { requestId: ctx.requestId }));
+  }
   if (!process.env.DEEPSEEK_API_KEY) {
     return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY not set", { requestId: ctx.requestId }));
   }

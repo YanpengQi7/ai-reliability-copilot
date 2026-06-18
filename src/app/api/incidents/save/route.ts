@@ -11,6 +11,7 @@ import { apiError } from "@/lib/http";
 import { rateLimit, clientKey } from "@/lib/rateLimit";
 import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext } from "@/lib/observability";
+import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 
 export const runtime = "nodejs";
 
@@ -36,6 +37,12 @@ const Body = z.object({
 
 export async function POST(req: NextRequest) {
   const ctx = createRequestContext(req, "save_incident");
+  if (!requestHasIncidentDataAccess(req)) {
+    return ctx.response(NextResponse.json({
+      persisted: false,
+      reason: "Incident persistence is disabled on this deployment to protect production data.",
+    }));
+  }
   if (!hasSupabase()) {
     return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase env vars not set", { requestId: ctx.requestId }));
   }
@@ -129,7 +136,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  return ctx.response(NextResponse.json({ incident_id: inc.id, analysis_id: ana.id }), {
+  return ctx.response(NextResponse.json({ persisted: true, incident_id: inc.id, analysis_id: ana.id }), {
     incident_id: inc.id,
     analysis_id: ana.id,
   });

@@ -8,7 +8,8 @@ describe("Next.js security headers", () => {
     const globalRule = rules.find((rule) => rule.source === "/:path*");
     const headers = new Map(globalRule?.headers.map((header) => [header.key, header.value]));
 
-    expect(headers.get("Content-Security-Policy-Report-Only")).toContain("frame-ancestors 'none'");
+    expect(headers.get("Content-Security-Policy")).toContain("frame-ancestors 'none'");
+    expect(headers.has("Content-Security-Policy-Report-Only")).toBe(false);
     expect(headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(headers.get("X-Frame-Options")).toBe("DENY");
     expect(headers.get("Permissions-Policy")).toContain("camera=()");
