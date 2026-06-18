@@ -84,7 +84,7 @@ Overall Pearson r = **0.59**; 70% of items agree within ±0.5 on overall.
 - **Takeaway for the pipeline:** absolute scores should be read with a ~0.2–0.4 same-family discount on the soft dimensions; *relative* comparisons (prompt v1 vs v3) are safer because the bias is roughly constant across versions. Cross-judging the soft dimensions, or anchoring them to human review, is the next step.
 - **5 scenarios is narrow.** Will expand to 15–20 as the project matures. Real production has long tails.
 - **`temperature: 0.2` on the analyzer** means some run-to-run variance; we don't yet repeat each scenario and average. Roadmap item.
-- **In-memory rate limiter** on `/api/analyze` resets on cold start.
+- **Rate-limit backend depends on deployment configuration.** Upstash provides shared counters across instances; deployments without its REST credentials use the documented in-memory fallback.
 - **The 9-section schema is opinionated.** Real incidents don't always fit; this is a tradeoff for structured, comparable output.
 
 ## Roadmap

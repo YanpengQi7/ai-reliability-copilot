@@ -193,7 +193,7 @@ Health endpoints: `/api/livez` is a dependency-free liveness probe;
 
 ## Known limitations
 
-- **In-memory rate limiter** (`src/lib/rateLimit.ts`) — resets on cold start. Production swap: Upstash Redis.
+- **Distributed rate limiting is optional** (`src/lib/rateLimit.ts`) — configure Upstash REST credentials in production; without them the app deliberately falls back to per-instance memory counters and reports the capability as disabled in `/api/healthz`.
 - **Judge ≠ ground truth** — same model family judges the analyzer. I guessed "~10–20% optimistic bias"; then I measured it. `npm run evals:crossjudge` holds each analysis fixed and re-scores it with an independent vendor (Claude Sonnet 4.6). Result over 20 analyses: the same-family judge scores **+0.24 higher on overall** (4.48 vs 4.24, ~5% — the guess was an overestimate), worst on `actionability`/`completeness` (−0.40 each), zero bias on `safety` (90% exact agreement). Pearson r 0.59, 70% within ±0.5. So: the bias is real but ~5%, not 10–20%, and it's concentrated, not uniform. Mitigation remains periodic human review (see [EVALUATION.md](./EVALUATION.md)).
 - **Limited repeats** — the default eval batch uses 3 repeats per cell, but this is still too small for narrow confidence intervals.
 - **5 scenarios is narrow** — real production has long tails.

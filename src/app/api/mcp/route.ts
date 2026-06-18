@@ -8,8 +8,8 @@
 //   - If MCP_AUTH_TOKEN is set in env → require Authorization: Bearer <token> on every request
 //   - If unset → public (development / open-source self-hosting default)
 //
-// Rate limit: 50 req/min per IP, in-memory (cold-start reset acceptable here
-// because abuse mitigation is the goal, not pixel-perfect billing).
+// Rate limit: 50 req/min per IP. Counters are shared through Upstash when its
+// REST credentials are configured, with an in-memory availability fallback.
 
 import { buildMcpServer } from "@/lib/mcp/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
