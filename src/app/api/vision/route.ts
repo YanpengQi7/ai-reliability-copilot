@@ -5,7 +5,7 @@ import { apiError } from "@/lib/http";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { INPUT_LIMITS, isAllowedImageSource, readJsonBody } from "@/lib/requestSafety";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
-import { createProviderDeadline } from "@/lib/providerDeadline";
+import { classifyProviderDeadlineFailure, createProviderDeadline } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -51,11 +51,12 @@ export async function POST(req: NextRequest) {
     return ctx.response(NextResponse.json({ description }));
   } catch (error) {
     const detail = safeErrorDetail(error);
-    if (req.signal.aborted) {
+    const failure = classifyProviderDeadlineFailure(req.signal, deadline);
+    if (failure === "request_aborted") {
       ctx.log("warn", "vision_request_aborted", { error: detail });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Image analysis request was cancelled.", { requestId: ctx.requestId }));
     }
-    if (deadline.timeoutSignal.aborted) {
+    if (failure === "timed_out") {
       ctx.log("error", "vision_request_timed_out", {
         timeout_ms: VISION_TIMEOUT_MS,
         error: detail,

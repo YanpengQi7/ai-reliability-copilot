@@ -11,7 +11,7 @@ import { apiError } from "@/lib/http";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
-import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
+import { classifyProviderDeadlineFailure, createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
 
 export const runtime = "nodejs";
@@ -87,7 +87,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
   } catch (err) {
     ctx.log("error", "rerun_provider_failed", { error: safeErrorDetail(err), incident_id: id });
-    if (deadline.timeoutSignal.aborted) {
+    const failure = classifyProviderDeadlineFailure(req.signal, deadline);
+    if (failure === "request_aborted") {
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Analysis was cancelled.", { requestId: ctx.requestId }));
+    }
+    if (failure === "timed_out") {
       return ctx.response(apiError(504, "ANALYSIS_TIMEOUT", `Analysis timed out after ${PROVIDER_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
     }
     return ctx.response(apiError(502, "LLM_ERROR", "Analysis provider failed. Please try again.", { requestId: ctx.requestId }));

@@ -12,7 +12,7 @@ import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
-import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
+import { classifyProviderDeadlineFailure, createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
 import { buildIncidentRecord } from "@/lib/incidentRecord";
 
@@ -69,7 +69,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     ({ tokens_in, tokens_out } = normalizeUsage(result.usage));
   } catch (err) {
     ctx.log("error", "scenario_provider_failed", { error: safeErrorDetail(err), scenario_slug: slug });
-    if (deadline.timeoutSignal.aborted) {
+    const failure = classifyProviderDeadlineFailure(req.signal, deadline);
+    if (failure === "request_aborted") {
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Scenario analysis was cancelled.", { requestId: ctx.requestId }));
+    }
+    if (failure === "timed_out") {
       return ctx.response(apiError(504, "ANALYSIS_TIMEOUT", `Analysis timed out after ${PROVIDER_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
     }
     return ctx.response(apiError(502, "LLM_ERROR", "Analysis provider failed. Please try again.", { requestId: ctx.requestId }));

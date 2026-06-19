@@ -5,7 +5,7 @@ import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
 import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
-import { createProviderDeadline } from "@/lib/providerDeadline";
+import { classifyProviderDeadlineFailure, createProviderDeadline } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -72,11 +72,12 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const detail = safeErrorDetail(err);
-    if (req.signal.aborted) {
+    const failure = classifyProviderDeadlineFailure(req.signal, deadline);
+    if (failure === "request_aborted") {
       ctx.log("warn", "investigation_request_aborted", { error: detail });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Investigation was cancelled.", { requestId: ctx.requestId }));
     }
-    if (deadline.timeoutSignal.aborted) {
+    if (failure === "timed_out") {
       ctx.log("error", "investigation_request_timed_out", {
         timeout_ms: INVESTIGATION_TIMEOUT_MS,
         error: detail,

@@ -11,7 +11,7 @@ import { usageTrailer } from "@/lib/streamUsage";
 import { apiError } from "@/lib/http";
 import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext } from "@/lib/observability";
-import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
+import { classifyProviderDeadlineFailure, createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -84,7 +84,10 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(usageTrailer({ tokens_in, tokens_out, cost_usd })));
         controller.close();
       } catch (err) {
-        if (deadline.timeoutSignal.aborted) {
+        const failure = classifyProviderDeadlineFailure(req.signal, deadline);
+        if (failure === "request_aborted") {
+          ctx.log("warn", "analysis_request_aborted");
+        } else if (failure === "timed_out") {
           ctx.log("error", "analysis_provider_timed_out", { timeout_ms: PROVIDER_TIMEOUT_MS });
         }
         controller.error(err);
