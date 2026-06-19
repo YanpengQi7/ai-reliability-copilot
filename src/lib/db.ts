@@ -50,8 +50,9 @@ export async function listIncidents(limit = 50): Promise<IncidentRow[]> {
 export async function getIncidentWithAnalyses(id: string) {
   if (!hasSupabase()) return null;
   const sb = supabaseAdmin();
-  const { data: incident, error: e1 } = await sb.from("incidents").select("*").eq("id", id).single();
-  if (e1) return null;
+  const { data: incident, error: e1 } = await sb.from("incidents").select("*").eq("id", id).maybeSingle();
+  if (e1) throw e1;
+  if (!incident) return null;
   const { data: analyses, error: e2 } = await sb
     .from("analyses")
     .select("*")

@@ -6,12 +6,13 @@
 // Response shape:
 //   200 { incident, analysis: AnalysisRow | null, url: string }
 //   404 { error: "NOT_FOUND", ... }
+//   500 { error: "DB_ERROR", ... }
 //   503 { error: "DB_UNCONFIGURED", ... }
 
 import { NextResponse } from "next/server";
 import { hasSupabase, getIncidentWithAnalyses } from "@/lib/db";
 import { apiError } from "@/lib/http";
-import { createRequestContext } from "@/lib/observability";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 
 export const runtime = "nodejs";
@@ -26,7 +27,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!hasSupabase()) {
     return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase not configured", { requestId: ctx.requestId }));
   }
-  const result = await getIncidentWithAnalyses(id);
+  let result: Awaited<ReturnType<typeof getIncidentWithAnalyses>>;
+  try {
+    result = await getIncidentWithAnalyses(id);
+  } catch (error) {
+    ctx.log("error", "incident_query_failed", { error: safeErrorDetail(error), incident_id: id });
+    return ctx.response(apiError(500, "DB_ERROR", "Could not load the incident.", { requestId: ctx.requestId }));
+  }
   if (!result) {
     return ctx.response(apiError(404, "NOT_FOUND", "incident not found", { requestId: ctx.requestId }));
   }
