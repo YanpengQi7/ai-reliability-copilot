@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateObject } from "ai";
-import { AnalysisSchema } from "@/lib/schema";
+import { AnalysisSchema, type Analysis } from "@/lib/schema";
 import { deepseek, ANALYSIS_MODEL } from "@/lib/ai";
 import { getSystemPrompt, buildUserPrompt, DEFAULT_PROMPT_VERSION, type PromptVersion } from "@/lib/prompts";
 import { supabaseAdmin } from "@/lib/supabase";
@@ -49,8 +49,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const queryText = [incident.title, incident.service, incident.symptoms, incident.raw_context].filter(Boolean).join(" ").slice(0, 4000);
   const retrieved = await retrieveContext(queryText, { limit: 5, abortSignal: deadline.signal });
   const internal_context = formatChunksForPrompt(retrieved.chunks);
+  let object: Analysis;
+  let tokens_in = 0;
+  let tokens_out = 0;
   try {
-    const { object, usage } = await generateObject({
+    const result = await generateObject({
       model: deepseek(ANALYSIS_MODEL),
       schema: AnalysisSchema,
       system: getSystemPrompt(version),
@@ -64,36 +67,45 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       temperature: 0.2,
       abortSignal: deadline.signal,
     });
-    const latency = Date.now() - started;
-    const { tokens_in, tokens_out } = normalizeUsage(usage);
-    const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
-    const { data: anaRow, error: e1 } = await sb.from("analyses").insert(
-      buildAnalysisRecord({
-        incidentId: id,
-        analysis: object,
-        model: ANALYSIS_MODEL,
-        promptVersion: version,
-        outputLanguage: language,
-        latencyMs: latency,
-        usage: { tokens_in, tokens_out, cost_usd },
-      }),
-    ).select("id").single();
-    if (e1) throw e1;
-    if (anaRow) await recordRetrievedChunks(anaRow.id, retrieved.chunks);
-    return ctx.response(NextResponse.json({ ok: true, latency_ms: latency }), {
-      incident_id: id,
-      prompt_version: version,
-      output_language: language,
-    });
+    object = result.object;
+    ({ tokens_in, tokens_out } = normalizeUsage(result.usage));
   } catch (err) {
-    ctx.log("error", "rerun_provider_failed", { error: safeErrorDetail(err), incident_id: id });
     const failure = classifyProviderDeadlineFailure(req.signal, deadline);
     if (failure === "request_aborted") {
+      ctx.log("warn", "rerun_request_aborted", { incident_id: id });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Analysis was cancelled.", { requestId: ctx.requestId }));
     }
+    ctx.log("error", "rerun_provider_failed", { error: safeErrorDetail(err), incident_id: id });
     if (failure === "timed_out") {
       return ctx.response(apiError(504, "ANALYSIS_TIMEOUT", `Analysis timed out after ${PROVIDER_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
     }
     return ctx.response(apiError(502, "LLM_ERROR", "Analysis provider failed. Please try again.", { requestId: ctx.requestId }));
   }
+
+  const latency = Date.now() - started;
+  const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
+  const { data: anaRow, error: e1 } = await sb.from("analyses").insert(
+    buildAnalysisRecord({
+      incidentId: id,
+      analysis: object,
+      model: ANALYSIS_MODEL,
+      promptVersion: version,
+      outputLanguage: language,
+      latencyMs: latency,
+      usage: { tokens_in, tokens_out, cost_usd },
+    }),
+  ).select("id").single();
+  if (e1 || !anaRow) {
+    ctx.log("error", "rerun_analysis_insert_failed", {
+      error: safeErrorDetail(e1 ?? new Error("Analysis insert returned no row.")),
+      incident_id: id,
+    });
+    return ctx.response(apiError(500, "DB_ERROR", "Could not save the analysis.", { requestId: ctx.requestId }));
+  }
+  await recordRetrievedChunks(anaRow.id, retrieved.chunks);
+  return ctx.response(NextResponse.json({ ok: true, latency_ms: latency }), {
+    incident_id: id,
+    prompt_version: version,
+    output_language: language,
+  });
 }

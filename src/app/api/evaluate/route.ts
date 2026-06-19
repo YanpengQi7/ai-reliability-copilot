@@ -58,8 +58,9 @@ export async function POST(req: Request) {
   const scenario = scenario_slug ? SCENARIOS.find((s) => s.slug === scenario_slug) : undefined;
   const deadline = createProviderDeadline(req.signal);
 
+  let scores: Awaited<ReturnType<typeof judge>>;
   try {
-    const scores = await judge({
+    scores = await judge({
       analysis: {
         summary: a.summary ?? "",
         severity: (a.severity ?? "SEV3") as "SEV1" | "SEV2" | "SEV3",
@@ -73,34 +74,42 @@ export async function POST(req: Request) {
       },
       scenario,
     }, undefined, { abortSignal: deadline.signal });
-    const overall = overallScore(scores);
-    const { data: row, error: e1 } = await sb
-      .from("evaluations")
-      .insert({
-        analysis_id,
-        rubric_version: RUBRIC_VERSION,
-        scores,
-        overall,
-        judge_model: JUDGE_MODEL,
-        judge_notes: scores.overall_notes,
-      })
-      .select("id")
-      .single();
-    if (e1) throw e1;
-    return ctx.response(NextResponse.json({ evaluation_id: row.id, overall, scores }), {
-      analysis_id,
-      evaluation_id: row.id,
-      overall,
-    });
   } catch (err) {
-    ctx.log("error", "evaluation_provider_failed", { error: safeErrorDetail(err), analysis_id });
     const failure = classifyProviderDeadlineFailure(req.signal, deadline);
     if (failure === "request_aborted") {
+      ctx.log("warn", "evaluation_request_aborted", { analysis_id });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Evaluation was cancelled.", { requestId: ctx.requestId }));
     }
+    ctx.log("error", "evaluation_provider_failed", { error: safeErrorDetail(err), analysis_id });
     if (failure === "timed_out") {
       return ctx.response(apiError(504, "EVALUATION_TIMEOUT", `Evaluation timed out after ${PROVIDER_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
     }
     return ctx.response(apiError(502, "JUDGE_ERROR", "Evaluation provider failed. Please try again.", { requestId: ctx.requestId }));
   }
+
+  const overall = overallScore(scores);
+  const { data: row, error: e1 } = await sb
+    .from("evaluations")
+    .insert({
+      analysis_id,
+      rubric_version: RUBRIC_VERSION,
+      scores,
+      overall,
+      judge_model: JUDGE_MODEL,
+      judge_notes: scores.overall_notes,
+    })
+    .select("id")
+    .single();
+  if (e1 || !row) {
+    ctx.log("error", "evaluation_insert_failed", {
+      error: safeErrorDetail(e1 ?? new Error("Evaluation insert returned no row.")),
+      analysis_id,
+    });
+    return ctx.response(apiError(500, "DB_ERROR", "Could not save the evaluation.", { requestId: ctx.requestId }));
+  }
+  return ctx.response(NextResponse.json({ evaluation_id: row.id, overall, scores }), {
+    analysis_id,
+    evaluation_id: row.id,
+    overall,
+  });
 }
