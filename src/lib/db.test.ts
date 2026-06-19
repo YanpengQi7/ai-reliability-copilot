@@ -14,16 +14,18 @@ function mockClient(
   analysesResult: { data: unknown[]; error: unknown } = { data: [], error: null },
 ) {
   const maybeSingle = vi.fn().mockResolvedValue(incidentResult);
-  const incidentEq = vi.fn(() => ({ maybeSingle }));
+  const incidentAbortSignal = vi.fn();
+  const incidentEq = vi.fn(() => ({ abortSignal: incidentAbortSignal, maybeSingle }));
   const incidentSelect = vi.fn(() => ({ eq: incidentEq }));
   const order = vi.fn().mockResolvedValue(analysesResult);
-  const analysisEq = vi.fn(() => ({ order }));
+  const analysisAbortSignal = vi.fn();
+  const analysisEq = vi.fn(() => ({ abortSignal: analysisAbortSignal, order }));
   const analysisSelect = vi.fn(() => ({ eq: analysisEq }));
   const from = vi.fn((table: string) => table === "incidents"
     ? { select: incidentSelect }
     : { select: analysisSelect });
   mocks.supabaseAdmin.mockReturnValue({ from });
-  return { maybeSingle, order };
+  return { maybeSingle, order, incidentAbortSignal, analysisAbortSignal };
 }
 
 describe("getIncidentWithAnalyses", () => {
@@ -60,5 +62,16 @@ describe("getIncidentWithAnalyses", () => {
     mockClient({ data: incident, error: null }, { data: analyses, error: null });
 
     await expect(getIncidentWithAnalyses(incident.id)).resolves.toEqual({ incident, analyses });
+  });
+
+  it("propagates request cancellation to both database queries", async () => {
+    const incident = { id: "incident-1", raw_context: "context" };
+    const signal = new AbortController().signal;
+    const { incidentAbortSignal, analysisAbortSignal } = mockClient({ data: incident, error: null });
+
+    await getIncidentWithAnalyses(incident.id, { abortSignal: signal });
+
+    expect(incidentAbortSignal).toHaveBeenCalledWith(signal);
+    expect(analysisAbortSignal).toHaveBeenCalledWith(signal);
   });
 });

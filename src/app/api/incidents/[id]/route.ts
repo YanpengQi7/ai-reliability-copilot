@@ -29,7 +29,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
   let result: Awaited<ReturnType<typeof getIncidentWithAnalyses>>;
   try {
-    result = await getIncidentWithAnalyses(id);
+    result = await getIncidentWithAnalyses(id, { abortSignal: req.signal });
   } catch (error) {
     ctx.log("error", "incident_query_failed", { error: safeErrorDetail(error), incident_id: id });
     return ctx.response(apiError(500, "DB_ERROR", "Could not load the incident.", { requestId: ctx.requestId }));

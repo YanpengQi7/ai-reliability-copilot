@@ -47,17 +47,20 @@ export async function listIncidents(limit = 50): Promise<IncidentRow[]> {
   return data as IncidentRow[];
 }
 
-export async function getIncidentWithAnalyses(id: string) {
+export async function getIncidentWithAnalyses(id: string, options: { abortSignal?: AbortSignal } = {}) {
   if (!hasSupabase()) return null;
   const sb = supabaseAdmin();
-  const { data: incident, error: e1 } = await sb.from("incidents").select("*").eq("id", id).maybeSingle();
+  const incidentQuery = sb.from("incidents").select("*").eq("id", id);
+  if (options.abortSignal) incidentQuery.abortSignal(options.abortSignal);
+  const { data: incident, error: e1 } = await incidentQuery.maybeSingle();
   if (e1) throw e1;
   if (!incident) return null;
-  const { data: analyses, error: e2 } = await sb
+  const analysesQuery = sb
     .from("analyses")
     .select("*")
-    .eq("incident_id", id)
-    .order("created_at", { ascending: false });
+    .eq("incident_id", id);
+  if (options.abortSignal) analysesQuery.abortSignal(options.abortSignal);
+  const { data: analyses, error: e2 } = await analysesQuery.order("created_at", { ascending: false });
   if (e2) throw e2;
   return { incident: incident as IncidentRow, analyses: (analyses ?? []) as AnalysisRow[] };
 }
