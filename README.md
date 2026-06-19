@@ -190,6 +190,8 @@ intentionally public deployment.
 
 Health endpoints: `/api/livez` is a dependency-free liveness probe;
 `/api/healthz` is readiness and verifies required configuration plus Supabase.
+Hosted deployments expose only status/version publicly; set `HEALTHCHECK_TOKEN`
+and send it as a Bearer token to retrieve detailed dependency diagnostics.
 
 ## Known limitations
 

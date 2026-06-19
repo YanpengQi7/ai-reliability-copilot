@@ -1,12 +1,7 @@
 import "server-only";
 
 import { bearerToken, secureTokenEqual } from "@/lib/serverAuth";
-
-function isHostedDeployment(): boolean {
-  return process.env.NODE_ENV === "production"
-    || process.env.VERCEL_ENV === "production"
-    || process.env.VERCEL_ENV === "preview";
-}
+import { isHostedDeployment } from "@/lib/deployment";
 
 /**
  * Persisted incident data is private by default on hosted deployments.

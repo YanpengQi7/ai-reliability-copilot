@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { hasSupabase } from "@/lib/db";
 import { supabaseAdmin } from "@/lib/supabase";
-import { createRequestContext } from "@/lib/observability";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { distributedRateLimitConfigured } from "@/lib/rateLimit";
+import { requestCanSeeHealthDetails } from "@/lib/deployment";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
       const timedOut = e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError");
       checks.supabase_query = {
         ok: false,
-        detail: timedOut ? `timed out after ${DB_TIMEOUT_MS}ms` : e instanceof Error ? e.message : String(e),
+        detail: timedOut ? `timed out after ${DB_TIMEOUT_MS}ms` : safeErrorDetail(e),
       };
     }
   } else {
@@ -46,18 +47,24 @@ export async function GET(req: Request) {
   }
 
   const allOk = Object.values(checks).every((c) => c.ok);
-  return ctx.response(
-    NextResponse.json(
-      {
-        status: allOk ? "ok" : "degraded",
+  const summary = {
+    status: allOk ? "ok" : "degraded",
+    version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
+    ts: new Date().toISOString(),
+  };
+  const payload = requestCanSeeHealthDetails(req)
+    ? {
+        ...summary,
         latency_ms: Date.now() - started,
         checks,
         capabilities: {
           distributed_rate_limit: distributedRateLimitConfigured(),
         },
-        version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
-        ts: new Date().toISOString(),
-      },
+      }
+    : summary;
+  return ctx.response(
+    NextResponse.json(
+      payload,
       {
         status: allOk ? 200 : 503,
         headers: { "cache-control": "no-store, max-age=0" },

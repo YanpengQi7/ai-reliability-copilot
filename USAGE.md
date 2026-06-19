@@ -313,9 +313,15 @@ NODE_ENV=production npm start   # 默认 :3000
 
 ### Health check
 ```
+GET /api/livez
+→ 200：进程存活，不访问外部依赖
+
 GET /api/healthz
-→ 200 OK + JSON 包含每个依赖的健康状态
-→ 503 + 哪个失败 + 失败原因
+→ 200/503：公开响应只包含 status、version、timestamp
+
+GET /api/healthz
+Authorization: Bearer <HEALTHCHECK_TOKEN>
+→ 包含每个依赖的详细状态和能力配置
 ```
 
 接 BetterStack / Pingdom / Vercel Monitor 一键配监控。
