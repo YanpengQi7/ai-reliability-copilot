@@ -11,7 +11,7 @@ import { calcCost, normalizeUsage } from "@/lib/cost";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
-import { createRequestContext } from "@/lib/observability";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -63,8 +63,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     object = result.object;
     ({ tokens_in, tokens_out } = normalizeUsage(result.usage));
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return ctx.response(apiError(502, "LLM_ERROR", msg, { requestId: ctx.requestId }));
+    ctx.log("error", "scenario_provider_failed", { error: safeErrorDetail(err), scenario_slug: slug });
+    return ctx.response(apiError(502, "LLM_ERROR", "Analysis provider failed. Please try again.", { requestId: ctx.requestId }));
   }
   const latency = Date.now() - started;
   const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
@@ -90,7 +90,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     })
     .select("id")
     .single();
-  if (e1) return ctx.response(apiError(500, "DB_ERROR", e1.message, { requestId: ctx.requestId }));
+  if (e1) {
+    ctx.log("error", "scenario_incident_insert_failed", { error: safeErrorDetail(e1), scenario_slug: slug });
+    return ctx.response(apiError(500, "DB_ERROR", "Could not save the scenario run.", { requestId: ctx.requestId }));
+  }
 
   const { data: anaRow } = await sb.from("analyses").insert({
     incident_id: inc.id,

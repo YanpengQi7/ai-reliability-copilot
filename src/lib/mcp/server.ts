@@ -15,6 +15,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { safeErrorDetail } from "@/lib/observability";
 import { SCENARIOS } from "@/lib/scenarios";
 import { retrieveContext } from "@/lib/kb";
 import { findSimilarIncidents } from "@/lib/similar";
@@ -206,7 +207,10 @@ export function buildMcpServer() {
         signature,
         embedding: embedding ? (embedding as unknown as string) : null,
       }).select("id").single();
-      if (e1) return { content: [{ type: "text", text: `DB error: ${e1.message}` }], isError: true };
+      if (e1) {
+        console.error(JSON.stringify({ level: "error", event: "mcp_incident_insert_failed", error: safeErrorDetail(e1) }));
+        return { content: [{ type: "text", text: "Database error while saving the incident." }], isError: true };
+      }
 
       const a = input.analysis;
       const { data: ana, error: e2 } = await sb.from("analyses").insert({
@@ -224,7 +228,10 @@ export function buildMcpServer() {
         postmortem_draft: a.postmortem_draft,
         follow_ups: a.follow_ups,
       }).select("id").single();
-      if (e2) return { content: [{ type: "text", text: `DB error (analysis): ${e2.message}` }], isError: true };
+      if (e2) {
+        console.error(JSON.stringify({ level: "error", event: "mcp_analysis_insert_failed", error: safeErrorDetail(e2), incident_id: inc.id }));
+        return { content: [{ type: "text", text: "Database error while saving the analysis." }], isError: true };
+      }
 
       const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://ai-reliability-copilot.vercel.app";
       return {

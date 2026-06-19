@@ -16,7 +16,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { withClientIp } from "@/lib/mcp/telemetry";
 import { machineEndpointNeedsSecret } from "@/lib/requestSafety";
-import { createRequestContext } from "@/lib/observability";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { hasBearerToken } from "@/lib/serverAuth";
 
 export const runtime = "nodejs";
@@ -75,7 +75,7 @@ async function handle(req: Request): Promise<Response> {
     } catch (error) {
       ctx.log("error", "mcp_request_failed", {
         method: req.method,
-        error: error instanceof Error ? error.message : String(error),
+        error: safeErrorDetail(error),
       });
       throw error;
     } finally {

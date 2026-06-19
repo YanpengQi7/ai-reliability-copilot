@@ -1,4 +1,12 @@
+import { redactSecrets } from "./secretScan";
+
 type LogLevel = "info" | "warn" | "error";
+
+export function safeErrorDetail(error: unknown, maxLength = 1_000): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  const redacted = redactSecrets(detail).replace(/[\r\n\t]+/g, " ");
+  return redacted.length <= maxLength ? redacted : `${redacted.slice(0, maxLength)}…`;
+}
 
 function safeRequestId(value: string | null): string | null {
   if (!value || value.length > 100) return null;

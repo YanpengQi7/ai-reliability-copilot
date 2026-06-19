@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRequestContext } from "./observability";
+import { createRequestContext, safeErrorDetail } from "./observability";
 
 describe("createRequestContext", () => {
   afterEach(() => {
@@ -66,5 +66,17 @@ describe("createRequestContext", () => {
       incident_id: "incident-1",
     });
     expect(JSON.stringify(entry)).not.toContain("do-not-log");
+  });
+});
+
+describe("safeErrorDetail", () => {
+  it("redacts credentials, removes newlines, and caps provider errors", () => {
+    const secret = "sk-" + "aB3".repeat(20);
+    const detail = safeErrorDetail(new Error(`provider failed\nAuthorization token=${secret}\n${"x".repeat(200)}`), 100);
+
+    expect(detail).not.toContain(secret);
+    expect(detail).not.toContain("\n");
+    expect(detail.length).toBeLessThanOrEqual(101);
+    expect(detail).toContain("[REDACTED:");
   });
 });

@@ -32,7 +32,7 @@ import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
 import { INPUT_LIMITS, machineEndpointNeedsSecret, readTextBody, redactSensitiveValue } from "@/lib/requestSafety";
-import { createRequestContext } from "@/lib/observability";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { bearerToken, secureTokenEqual } from "@/lib/serverAuth";
 
 export const runtime = "nodejs";
@@ -98,7 +98,10 @@ export async function POST(req: Request) {
     })
     .select("id")
     .single();
-  if (e1) return ctx.response(apiError(500, "DB_ERROR", e1.message, { requestId: ctx.requestId }));
+  if (e1) {
+    ctx.log("error", "webhook_incident_insert_failed", { error: safeErrorDetail(e1) });
+    return ctx.response(apiError(500, "DB_ERROR", "Could not record the incident.", { requestId: ctx.requestId }));
+  }
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://ai-reliability-copilot.vercel.app";
   const url = `${base}/incidents/${inc.id}`;
@@ -165,7 +168,7 @@ export async function POST(req: Request) {
       if (e2) {
         ctx.log("error", "webhook_analysis_insert_failed", {
           incident_id: inc.id,
-          error: e2.message,
+          error: safeErrorDetail(e2),
         });
         return;
       }
@@ -180,7 +183,7 @@ export async function POST(req: Request) {
     } catch (err) {
       ctx.log("error", "webhook_background_failed", {
         incident_id: inc.id,
-        error: err instanceof Error ? err.message : String(err),
+        error: safeErrorDetail(err),
       });
       // Don't lose the failure — log it on the incident itself so /incidents/[id] shows it
       try {
@@ -189,7 +192,7 @@ export async function POST(req: Request) {
           model: ANALYSIS_MODEL,
           prompt_version: DEFAULT_PROMPT_VERSION,
           output_language: "en",
-          summary: `Background analysis failed: ${err instanceof Error ? err.message : String(err)}`,
+          summary: `Background analysis failed. Request ID: ${ctx.requestId}`,
           severity: "SEV3",
           root_causes: [],
           investigation_checklist: [],

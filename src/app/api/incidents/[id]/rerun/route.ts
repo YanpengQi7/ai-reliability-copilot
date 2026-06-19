@@ -9,7 +9,7 @@ import { calcCost, normalizeUsage } from "@/lib/cost";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
-import { createRequestContext } from "@/lib/observability";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 
 export const runtime = "nodejs";
@@ -90,7 +90,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       output_language: language,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return ctx.response(apiError(502, "LLM_ERROR", msg, { requestId: ctx.requestId }));
+    ctx.log("error", "rerun_provider_failed", { error: safeErrorDetail(err), incident_id: id });
+    return ctx.response(apiError(502, "LLM_ERROR", "Analysis provider failed. Please try again.", { requestId: ctx.requestId }));
   }
 }

@@ -10,7 +10,7 @@ import { retrieveContext, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
-import { createRequestContext } from "@/lib/observability";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 
 export const runtime = "nodejs";
@@ -88,7 +88,10 @@ export async function POST(req: NextRequest) {
     })
     .select("id")
     .single();
-  if (e1) return ctx.response(apiError(500, "DB_ERROR", e1.message, { requestId: ctx.requestId }));
+  if (e1) {
+    ctx.log("error", "incident_insert_failed", { error: safeErrorDetail(e1) });
+    return ctx.response(apiError(500, "DB_ERROR", "Could not save the incident.", { requestId: ctx.requestId }));
+  }
 
   const a = input.analysis;
   const { data: ana, error: e2 } = await sb
@@ -117,7 +120,8 @@ export async function POST(req: NextRequest) {
   if (e2) {
     // Keep the two-step write atomic from the user's perspective.
     await sb.from("incidents").delete().eq("id", inc.id);
-    return ctx.response(apiError(500, "DB_ERROR", e2.message, { requestId: ctx.requestId }));
+    ctx.log("error", "analysis_insert_failed", { error: safeErrorDetail(e2), incident_id: inc.id });
+    return ctx.response(apiError(500, "DB_ERROR", "Could not save the analysis.", { requestId: ctx.requestId }));
   }
 
   // Record which KB chunks the streaming /api/analyze pipeline retrieved.
@@ -129,7 +133,7 @@ export async function POST(req: NextRequest) {
     await recordRetrievedChunks(ana.id, r.chunks);
   } catch (err) {
     ctx.log("warn", "kb_audit_write_failed", {
-      error: err instanceof Error ? err.message : String(err),
+      error: safeErrorDetail(err),
       analysis_id: ana.id,
     });
   }

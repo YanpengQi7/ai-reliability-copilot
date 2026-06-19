@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { safeErrorDetail } from "./observability";
 
 // Fixed-window limiter. It uses Upstash Redis when configured so counters are
 // shared across serverless instances, and falls back to memory for local
@@ -118,7 +119,7 @@ export async function rateLimit(key: string, opts: RateLimitOptions = {}): Promi
       console.warn(JSON.stringify({
         level: "warn",
         event: "distributed_rate_limit_failed",
-        error: error instanceof Error ? error.message : String(error),
+        error: safeErrorDetail(error),
       }));
     }
   }

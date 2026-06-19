@@ -8,7 +8,7 @@ import { JUDGE_MODEL } from "@/lib/ai";
 import { SCENARIOS } from "@/lib/scenarios";
 import { apiError } from "@/lib/http";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
-import { createRequestContext } from "@/lib/observability";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 import { INPUT_LIMITS, readJsonBody } from "@/lib/requestSafety";
 
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
       overall,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return ctx.response(apiError(502, "JUDGE_ERROR", msg, { requestId: ctx.requestId }));
+    ctx.log("error", "evaluation_provider_failed", { error: safeErrorDetail(err), analysis_id });
+    return ctx.response(apiError(502, "JUDGE_ERROR", "Evaluation provider failed. Please try again.", { requestId: ctx.requestId }));
   }
 }
