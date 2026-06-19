@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
     summary: input.analysis.summary,
     severity: input.analysis.severity,
   });
-  const embedding = await embed(signature); // null when no OPENAI_API_KEY or on failure
+  const embedding = await embed(signature, req.signal); // null when no OPENAI_API_KEY or on failure
 
   const { data: inc, error: e1 } = await sb
     .from("incidents")
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
   // — slight cost (1 extra embed call), but the audit trail is now complete.
   try {
     const queryText = [input.title, input.service, input.symptoms, input.raw_context].filter(Boolean).join(" ").slice(0, 4000);
-    const r = await retrieveContext(queryText, { limit: 5 });
+    const r = await retrieveContext(queryText, { limit: 5, abortSignal: req.signal });
     await recordRetrievedChunks(ana.id, r.chunks);
   } catch (err) {
     ctx.log("warn", "kb_audit_write_failed", {

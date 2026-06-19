@@ -113,7 +113,7 @@ export async function POST(req: Request) {
     try {
       const queryText = [parsed.title, parsed.service, parsed.symptoms, parsed.raw_context]
         .filter(Boolean).join(" ").slice(0, 4000);
-      const retrieved = await retrieveContext(queryText, { limit: 5 });
+      const retrieved = await retrieveContext(queryText, { limit: 5, abortSignal: deadline.signal });
       const internal_context = formatChunksForPrompt(retrieved.chunks);
 
       const started = Date.now();
@@ -143,7 +143,7 @@ export async function POST(req: Request) {
         summary: object.summary,
         severity: object.severity,
       });
-      const embedding = await embed(signature);
+      const embedding = await embed(signature, deadline.signal);
       await sb.from("incidents").update({
         signature,
         embedding: embedding ? (embedding as unknown as string) : null,

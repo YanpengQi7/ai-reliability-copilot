@@ -161,7 +161,7 @@ export async function ingestDocument(input: {
  */
 export async function retrieveContext(
   queryText: string,
-  opts: { limit?: number; vectorThreshold?: number; trigramThreshold?: number } = {},
+  opts: { limit?: number; vectorThreshold?: number; trigramThreshold?: number; abortSignal?: AbortSignal } = {},
 ): Promise<RetrieveResult> {
   if (!hasSupabase()) return { mode: "none", chunks: [] };
   const sb = supabaseAdmin();
@@ -170,7 +170,7 @@ export async function retrieveContext(
   const tt = opts.trigramThreshold ?? 0.05; // chunks are longer than incident signatures → looser
 
   if (hasEmbeddingProvider()) {
-    const vec = await embed(queryText);
+    const vec = await embed(queryText, opts.abortSignal);
     if (vec) {
       const { data, error } = await sb.rpc("match_kb_chunks_by_embedding", {
         query_embedding: vec,

@@ -52,11 +52,11 @@ export async function POST(req: NextRequest) {
 
   // RAG: retrieve relevant internal docs based on what the user typed.
   // Best-effort — if KB is empty or retrieval fails, we still produce a response.
+  const deadline = createProviderDeadline(req.signal);
   const queryText = [input.title, input.service, input.symptoms, input.raw_context].filter(Boolean).join(" ").slice(0, 4000);
-  const retrieved = await retrieveContext(queryText, { limit: 5 });
+  const retrieved = await retrieveContext(queryText, { limit: 5, abortSignal: deadline.signal });
   const internal_context = formatChunksForPrompt(retrieved.chunks);
 
-  const deadline = createProviderDeadline(req.signal);
   const result = streamObject({
     model: deepseek(ANALYSIS_MODEL),
     schema: AnalysisSchema,

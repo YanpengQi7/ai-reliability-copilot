@@ -31,7 +31,7 @@ export type SimilarResult = {
  */
 export async function findSimilarIncidents(
   queryText: string,
-  opts: { excludeId?: string; limit?: number; vectorThreshold?: number; trigramThreshold?: number } = {},
+  opts: { excludeId?: string; limit?: number; vectorThreshold?: number; trigramThreshold?: number; abortSignal?: AbortSignal } = {},
 ): Promise<SimilarResult> {
   if (!hasSupabase()) return { mode: "none", hits: [] };
   const sb = supabaseAdmin();
@@ -41,7 +41,7 @@ export async function findSimilarIncidents(
   const tt = opts.trigramThreshold ?? 0.15;
 
   if (hasEmbeddingProvider()) {
-    const vec = await embed(queryText);
+    const vec = await embed(queryText, opts.abortSignal);
     if (vec) {
       const { data, error } = await sb.rpc("match_incidents_by_embedding", {
         query_embedding: vec,

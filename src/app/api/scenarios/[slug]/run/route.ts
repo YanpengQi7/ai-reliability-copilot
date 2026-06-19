@@ -41,13 +41,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   }
 
   const started = Date.now();
+  const deadline = createProviderDeadline(req.signal);
   const queryText = [scenario.title, scenario.service, scenario.symptoms, scenario.context].filter(Boolean).join(" ").slice(0, 4000);
-  const retrieved = await retrieveContext(queryText, { limit: 5 });
+  const retrieved = await retrieveContext(queryText, { limit: 5, abortSignal: deadline.signal });
   const internal_context = formatChunksForPrompt(retrieved.chunks);
   let object;
   let tokens_in = 0;
   let tokens_out = 0;
-  const deadline = createProviderDeadline(req.signal);
   try {
     const result = await generateObject({
       model: deepseek(ANALYSIS_MODEL),
@@ -83,7 +83,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     summary: object.summary,
     severity: object.severity,
   });
-  const embedding = await embed(signature);
+  const embedding = await embed(signature, deadline.signal);
   const { data: inc, error: e1 } = await sb
     .from("incidents")
     .insert({
