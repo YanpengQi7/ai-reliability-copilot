@@ -6,6 +6,7 @@
 // Response shape:
 //   200 { incident, analysis: AnalysisRow | null, url: string }
 //   404 { error: "NOT_FOUND", ... }
+//   499 { error: "REQUEST_ABORTED", ... }
 //   500 { error: "DB_ERROR", ... }
 //   503 { error: "DB_UNCONFIGURED", ... }
 
@@ -31,6 +32,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   try {
     result = await getIncidentWithAnalyses(id, { abortSignal: req.signal });
   } catch (error) {
+    if (req.signal.aborted) {
+      ctx.log("warn", "incident_query_aborted", { incident_id: id });
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Incident query was cancelled.", { requestId: ctx.requestId }));
+    }
     ctx.log("error", "incident_query_failed", { error: safeErrorDetail(error), incident_id: id });
     return ctx.response(apiError(500, "DB_ERROR", "Could not load the incident.", { requestId: ctx.requestId }));
   }
