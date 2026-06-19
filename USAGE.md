@@ -170,12 +170,15 @@ printf '%s' "$TOKEN" | vercel env add WEBHOOK_SECRET production
 vercel --prod
 ```
 
-在 alerter 里配 webhook URL：
+在 alerter 里配置 URL `https://your-deployment/api/webhook/alert`，并添加请求头：
+
 ```
-https://your-deployment/api/webhook/alert?secret=<TOKEN>
-# 或者 header 形式：
-X-Webhook-Secret: <TOKEN>
+Authorization: Bearer <TOKEN>
 ```
+
+如果告警平台不支持 `Authorization`，也可以使用 `X-Webhook-Secret: <TOKEN>`。
+不要把 token 放进 URL；旧版 `?secret=` 仅在显式设置
+`ALLOW_LEGACY_QUERY_SECRET=true` 时兼容。
 
 行为：
 - 自动 parser 识别 Datadog / PagerDuty / Sentry payload（任何 JSON 都接，识别不出来就当 raw text）

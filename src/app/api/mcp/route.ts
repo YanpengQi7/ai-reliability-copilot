@@ -17,6 +17,7 @@ import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { withClientIp } from "@/lib/mcp/telemetry";
 import { machineEndpointNeedsSecret } from "@/lib/requestSafety";
 import { createRequestContext } from "@/lib/observability";
+import { hasBearerToken } from "@/lib/serverAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,9 +49,7 @@ function authNotConfigured(): Response {
 function checkAuth(req: Request): boolean {
   const required = process.env.MCP_AUTH_TOKEN;
   if (!required) return true; // public mode
-  const header = req.headers.get("authorization") ?? "";
-  const match = /^Bearer\s+(.+)$/i.exec(header);
-  return Boolean(match && match[1] === required);
+  return hasBearerToken(req, required);
 }
 
 async function handle(req: Request): Promise<Response> {

@@ -7,8 +7,9 @@
 //   Sentry:     integrations → webhooks → URL above (issue alerts)
 //
 // Auth (optional, env-gated):
-//   WEBHOOK_SECRET set → require ?secret=<token> in URL OR
-//                        X-Webhook-Secret header
+//   WEBHOOK_SECRET set → require Authorization: Bearer <token> or
+//                        X-Webhook-Secret. Query tokens require an explicit
+//                        legacy opt-in because URLs are commonly logged.
 //   unset → public (don't do this on prod)
 //
 // Response pattern (fast ACK):
@@ -32,6 +33,7 @@ import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
 import { INPUT_LIMITS, machineEndpointNeedsSecret, readTextBody, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext } from "@/lib/observability";
+import { bearerToken, secureTokenEqual } from "@/lib/serverAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,10 +44,10 @@ const RATE_LIMIT = 60;
 function checkAuth(req: Request): boolean {
   const required = process.env.WEBHOOK_SECRET;
   if (!required) return true;
-  const fromHeader = req.headers.get("x-webhook-secret");
-  if (fromHeader && fromHeader === required) return true;
-  const url = new URL(req.url);
-  return url.searchParams.get("secret") === required;
+  const fromHeader = bearerToken(req) ?? req.headers.get("x-webhook-secret");
+  if (secureTokenEqual(fromHeader, required)) return true;
+  if (process.env.ALLOW_LEGACY_QUERY_SECRET !== "true") return false;
+  return secureTokenEqual(new URL(req.url).searchParams.get("secret"), required);
 }
 
 export async function POST(req: Request) {

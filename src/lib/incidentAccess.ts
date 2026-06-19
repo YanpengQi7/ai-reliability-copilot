@@ -1,6 +1,6 @@
 import "server-only";
 
-import { timingSafeEqual } from "node:crypto";
+import { bearerToken, secureTokenEqual } from "@/lib/serverAuth";
 
 function isHostedDeployment(): boolean {
   return process.env.NODE_ENV === "production"
@@ -20,20 +20,11 @@ function configuredAccessToken(): string | undefined {
   return process.env.INCIDENT_ACCESS_TOKEN || process.env.WEBHOOK_SECRET;
 }
 
-function safeEqual(left: string, right: string): boolean {
-  const a = Buffer.from(left);
-  const b = Buffer.from(right);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 /** Machine clients may access private incident data with a dedicated token. */
 export function requestHasIncidentDataAccess(req: Request): boolean {
   if (publicIncidentDataEnabled()) return true;
   const required = configuredAccessToken();
   if (!required) return false;
-  const authorization = req.headers.get("authorization") ?? "";
-  const supplied = authorization.startsWith("Bearer ")
-    ? authorization.slice("Bearer ".length).trim()
-    : req.headers.get("x-incident-access-token") ?? "";
-  return safeEqual(supplied, required);
+  const supplied = bearerToken(req) ?? req.headers.get("x-incident-access-token");
+  return secureTokenEqual(supplied, required);
 }

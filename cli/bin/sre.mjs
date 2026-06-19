@@ -50,11 +50,13 @@ if (!body || body.trim().length < 5) {
 }
 
 const webhookUrl = new URL("/api/webhook/alert", base);
-if (secret) webhookUrl.searchParams.set("secret", secret);
 
 const submit = await fetch(webhookUrl, {
   method: "POST",
-  headers: { "content-type": "text/plain" },
+  headers: {
+    "content-type": "text/plain",
+    ...(secret ? { authorization: `Bearer ${secret}` } : {}),
+  },
   body,
 }).catch((e) => {
   console.error(`error: cannot reach ${base}: ${e?.message ?? e}`);
