@@ -12,6 +12,7 @@ import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
+import { buildAnalysisRecord } from "@/lib/analysisRecord";
 
 export const runtime = "nodejs";
 
@@ -93,28 +94,17 @@ export async function POST(req: NextRequest) {
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the incident.", { requestId: ctx.requestId }));
   }
 
-  const a = input.analysis;
   const { data: ana, error: e2 } = await sb
     .from("analyses")
-    .insert({
-      incident_id: inc.id,
+    .insert(buildAnalysisRecord({
+      incidentId: inc.id,
+      analysis: input.analysis,
       model: ANALYSIS_MODEL,
-      prompt_version: input.prompt_version ?? DEFAULT_PROMPT_VERSION,
-      output_language: input.output_language ?? "en",
-      summary: a.summary,
-      severity: a.severity,
-      severity_reasoning: a.severity_reasoning,
-      root_causes: a.root_causes,
-      investigation_checklist: a.investigation_checklist,
-      mitigation_plan: a.mitigation_plan,
-      customer_impact: a.customer_impact,
-      postmortem_draft: a.postmortem_draft,
-      follow_ups: a.follow_ups,
-      latency_ms: input.latency_ms ?? null,
-      tokens_in: input.usage?.tokens_in ?? null,
-      tokens_out: input.usage?.tokens_out ?? null,
-      cost_usd: input.usage?.cost_usd ?? null,
-    })
+      promptVersion: input.prompt_version ?? DEFAULT_PROMPT_VERSION,
+      outputLanguage: input.output_language ?? "en",
+      latencyMs: input.latency_ms,
+      usage: input.usage,
+    }))
     .select("id")
     .single();
   if (e2) {

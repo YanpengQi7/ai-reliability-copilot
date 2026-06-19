@@ -16,6 +16,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { safeErrorDetail } from "@/lib/observability";
+import { buildAnalysisRecord } from "@/lib/analysisRecord";
 import { SCENARIOS } from "@/lib/scenarios";
 import { retrieveContext } from "@/lib/kb";
 import { findSimilarIncidents } from "@/lib/similar";
@@ -212,22 +213,15 @@ export function buildMcpServer() {
         return { content: [{ type: "text", text: "Database error while saving the incident." }], isError: true };
       }
 
-      const a = input.analysis;
-      const { data: ana, error: e2 } = await sb.from("analyses").insert({
-        incident_id: inc.id,
-        model: input.client_model ?? "external-mcp-client",
-        prompt_version: "mcp",
-        output_language: input.output_language ?? "en",
-        summary: a.summary,
-        severity: a.severity,
-        severity_reasoning: a.severity_reasoning,
-        root_causes: a.root_causes,
-        investigation_checklist: a.investigation_checklist,
-        mitigation_plan: a.mitigation_plan,
-        customer_impact: a.customer_impact,
-        postmortem_draft: a.postmortem_draft,
-        follow_ups: a.follow_ups,
-      }).select("id").single();
+      const { data: ana, error: e2 } = await sb.from("analyses").insert(
+        buildAnalysisRecord({
+          incidentId: inc.id,
+          analysis: input.analysis,
+          model: input.client_model ?? "external-mcp-client",
+          promptVersion: "mcp",
+          outputLanguage: input.output_language ?? "en",
+        }),
+      ).select("id").single();
       if (e2) {
         const { error: cleanupError } = await sb.from("incidents").delete().eq("id", inc.id);
         console.error(JSON.stringify({

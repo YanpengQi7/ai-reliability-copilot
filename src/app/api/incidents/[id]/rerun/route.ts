@@ -12,6 +12,7 @@ import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
+import { buildAnalysisRecord } from "@/lib/analysisRecord";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -66,25 +67,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const latency = Date.now() - started;
     const { tokens_in, tokens_out } = normalizeUsage(usage);
     const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
-    const { data: anaRow, error: e1 } = await sb.from("analyses").insert({
-      incident_id: id,
-      model: ANALYSIS_MODEL,
-      prompt_version: version,
-      output_language: language,
-      summary: object.summary,
-      severity: object.severity,
-      severity_reasoning: object.severity_reasoning,
-      root_causes: object.root_causes,
-      investigation_checklist: object.investigation_checklist,
-      mitigation_plan: object.mitigation_plan,
-      customer_impact: object.customer_impact,
-      postmortem_draft: object.postmortem_draft,
-      follow_ups: object.follow_ups,
-      latency_ms: latency,
-      tokens_in,
-      tokens_out,
-      cost_usd,
-    }).select("id").single();
+    const { data: anaRow, error: e1 } = await sb.from("analyses").insert(
+      buildAnalysisRecord({
+        incidentId: id,
+        analysis: object,
+        model: ANALYSIS_MODEL,
+        promptVersion: version,
+        outputLanguage: language,
+        latencyMs: latency,
+        usage: { tokens_in, tokens_out, cost_usd },
+      }),
+    ).select("id").single();
     if (e1) throw e1;
     if (anaRow) await recordRetrievedChunks(anaRow.id, retrieved.chunks);
     return ctx.response(NextResponse.json({ ok: true, latency_ms: latency }), {

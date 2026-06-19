@@ -13,6 +13,7 @@ import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@
 import { apiError } from "@/lib/http";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
+import { buildAnalysisRecord } from "@/lib/analysisRecord";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -101,25 +102,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the scenario run.", { requestId: ctx.requestId }));
   }
 
-  const { data: anaRow, error: e2 } = await sb.from("analyses").insert({
-    incident_id: inc.id,
-    model: ANALYSIS_MODEL,
-    prompt_version: version,
-    output_language: language,
-    summary: object.summary,
-    severity: object.severity,
-    severity_reasoning: object.severity_reasoning,
-    root_causes: object.root_causes,
-    investigation_checklist: object.investigation_checklist,
-    mitigation_plan: object.mitigation_plan,
-    customer_impact: object.customer_impact,
-    postmortem_draft: object.postmortem_draft,
-    follow_ups: object.follow_ups,
-    latency_ms: latency,
-    tokens_in,
-    tokens_out,
-    cost_usd,
-  }).select("id").single();
+  const { data: anaRow, error: e2 } = await sb.from("analyses").insert(
+    buildAnalysisRecord({
+      incidentId: inc.id,
+      analysis: object,
+      model: ANALYSIS_MODEL,
+      promptVersion: version,
+      outputLanguage: language,
+      latencyMs: latency,
+      usage: { tokens_in, tokens_out, cost_usd },
+    }),
+  ).select("id").single();
   if (e2 || !anaRow) {
     const { error: cleanupError } = await sb.from("incidents").delete().eq("id", inc.id);
     ctx.log("error", "scenario_analysis_insert_failed", {

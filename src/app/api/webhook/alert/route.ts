@@ -35,6 +35,7 @@ import { INPUT_LIMITS, machineEndpointNeedsSecret, readTextBody, redactSensitive
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { bearerToken, secureTokenEqual } from "@/lib/serverAuth";
 import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
+import { buildAnalysisRecord } from "@/lib/analysisRecord";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -149,25 +150,17 @@ export async function POST(req: Request) {
         embedding: embedding ? (embedding as unknown as string) : null,
       }).eq("id", inc.id);
 
-      const { data: anaRow, error: e2 } = await sb.from("analyses").insert({
-        incident_id: inc.id,
-        model: ANALYSIS_MODEL,
-        prompt_version: DEFAULT_PROMPT_VERSION,
-        output_language: "en",
-        summary: object.summary,
-        severity: object.severity,
-        severity_reasoning: object.severity_reasoning,
-        root_causes: object.root_causes,
-        investigation_checklist: object.investigation_checklist,
-        mitigation_plan: object.mitigation_plan,
-        customer_impact: object.customer_impact,
-        postmortem_draft: object.postmortem_draft,
-        follow_ups: object.follow_ups,
-        latency_ms,
-        tokens_in,
-        tokens_out,
-        cost_usd,
-      }).select("id").single();
+      const { data: anaRow, error: e2 } = await sb.from("analyses").insert(
+        buildAnalysisRecord({
+          incidentId: inc.id,
+          analysis: object,
+          model: ANALYSIS_MODEL,
+          promptVersion: DEFAULT_PROMPT_VERSION,
+          outputLanguage: "en",
+          latencyMs: latency_ms,
+          usage: { tokens_in, tokens_out, cost_usd },
+        }),
+      ).select("id").single();
       if (e2) {
         ctx.log("error", "webhook_analysis_insert_failed", {
           incident_id: inc.id,
