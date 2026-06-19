@@ -68,11 +68,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     object = result.object;
     ({ tokens_in, tokens_out } = normalizeUsage(result.usage));
   } catch (err) {
-    ctx.log("error", "scenario_provider_failed", { error: safeErrorDetail(err), scenario_slug: slug });
     const failure = classifyProviderDeadlineFailure(req.signal, deadline);
     if (failure === "request_aborted") {
+      ctx.log("warn", "scenario_request_aborted", { scenario_slug: slug });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Scenario analysis was cancelled.", { requestId: ctx.requestId }));
     }
+    ctx.log("error", "scenario_provider_failed", { error: safeErrorDetail(err), scenario_slug: slug });
     if (failure === "timed_out") {
       return ctx.response(apiError(504, "ANALYSIS_TIMEOUT", `Analysis timed out after ${PROVIDER_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
     }
