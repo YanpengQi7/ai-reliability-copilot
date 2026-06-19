@@ -13,6 +13,7 @@
 
 import { supabaseAdmin } from "../supabase";
 import { hasSupabase } from "../db";
+import { safeErrorDetail } from "../observability";
 
 type LogPayload = {
   tool_name: string;
@@ -46,13 +47,13 @@ export async function logToolCall(payload: LogPayload): Promise<void> {
       tool_name: payload.tool_name,
       ok: payload.ok,
       latency_ms: payload.latency_ms,
-      error: payload.error?.slice(0, 500) ?? null,
+      error: payload.error ? safeErrorDetail(payload.error, 500) : null,
       client_ip: payload.client_ip ?? _currentIp,
-      input_summary: payload.input_summary?.slice(0, 200) ?? null,
+      input_summary: payload.input_summary ? safeErrorDetail(payload.input_summary, 200) : null,
       result_size_bytes: payload.result_size_bytes ?? null,
     });
   } catch (e) {
-    console.error("[mcp telemetry] failed:", e instanceof Error ? e.message : e);
+    console.error("[mcp telemetry] failed:", safeErrorDetail(e));
   }
 }
 
@@ -77,7 +78,7 @@ export function withTelemetry<TArgs extends object, TResult extends { content: A
     try {
       result = await handler(args);
     } catch (e) {
-      err = e instanceof Error ? e.message : String(e);
+      err = safeErrorDetail(e);
       // Re-throw so the SDK surfaces a proper JSON-RPC error to the caller
       void logToolCall({
         tool_name: toolName,

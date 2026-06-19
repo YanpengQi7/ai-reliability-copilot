@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { safeErrorDetail } from "./observability";
 
 const EMBEDDING_MODEL = "text-embedding-3-small"; // 1536 dims, $0.02 / 1M tokens
 
@@ -27,7 +28,7 @@ export async function embed(text: string): Promise<number[] | null> {
     const res = await client.embeddings.create({ model: EMBEDDING_MODEL, input: trimmed });
     return res.data[0]?.embedding ?? null;
   } catch (err) {
-    console.error("[embed] failed:", err instanceof Error ? err.message : err);
+    console.error("[embed] failed:", safeErrorDetail(err));
     return null;
   }
 }

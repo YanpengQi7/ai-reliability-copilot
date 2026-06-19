@@ -4,7 +4,7 @@ import { investigate } from "@/lib/agent/investigate";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
 import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
-import { createRequestContext } from "@/lib/observability";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       model_calls: result.usage.model_calls,
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
+    const detail = safeErrorDetail(err);
     if (req.signal.aborted) {
       ctx.log("warn", "investigation_request_aborted", { error: detail });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Investigation was cancelled.", { requestId: ctx.requestId }));

@@ -17,6 +17,7 @@ import { z } from "zod";
 import { tool, type Tool } from "ai";
 import { getScenario, type Scenario, type LogLine } from "@/lib/scenarios";
 import { retrieveContext } from "@/lib/kb";
+import { safeErrorDetail } from "@/lib/observability";
 import type { InvestigationInput, TraceStep } from "./types";
 
 // ── Budget constants ─────────────────────────────────────────────────
@@ -271,7 +272,7 @@ export async function dispatchTool(
     const out = await runHandler(toolName as ToolName, input, dctx.ctx);
     return { ...base, status: out.status, observation: clampObservation(out.text), latency_ms: Date.now() - started };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = safeErrorDetail(err);
     return { ...base, status: "error", observation: `Tool "${toolName}" failed: ${msg}. Continue with other evidence.`, reason: "handler_threw", latency_ms: Date.now() - started };
   }
 }

@@ -4,7 +4,7 @@ import { describeImage, hasVisionProvider } from "@/lib/vision";
 import { apiError } from "@/lib/http";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { INPUT_LIMITS, isAllowedImageSource, readJsonBody } from "@/lib/requestSafety";
-import { createRequestContext } from "@/lib/observability";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     }
     return ctx.response(NextResponse.json({ description }));
   } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error);
+    const detail = safeErrorDetail(error);
     if (req.signal.aborted) {
       ctx.log("warn", "vision_request_aborted", { error: detail });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Image analysis request was cancelled.", { requestId: ctx.requestId }));
