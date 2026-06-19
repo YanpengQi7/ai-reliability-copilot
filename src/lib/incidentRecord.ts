@@ -1,3 +1,5 @@
+import { embeddingForDatabase } from "./embeddings";
+
 export type IncidentRecordInput = {
   title?: string | null;
   service?: string | null;
@@ -15,6 +17,6 @@ export function buildIncidentRecord(input: IncidentRecordInput) {
     symptoms: input.symptoms ?? null,
     raw_context: input.rawContext,
     signature: input.signature ?? null,
-    embedding: input.embedding ? (input.embedding as unknown as string) : null,
+    embedding: embeddingForDatabase(input.embedding),
   };
 }

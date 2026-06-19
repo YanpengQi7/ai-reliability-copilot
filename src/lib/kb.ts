@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { supabaseAdmin } from "./supabase";
 import { hasSupabase } from "./db";
-import { embed, hasEmbeddingProvider } from "./embeddings";
+import { embed, embeddingForDatabase, hasEmbeddingProvider } from "./embeddings";
 import { scanForSecrets } from "./secretScan";
 
 export type KbKind = "runbook" | "postmortem" | "service" | "architecture" | "other";
@@ -146,7 +146,7 @@ export async function ingestDocument(input: {
     // supabase-js wants embeddings as strings for vector(...) columns
     const formatted = rows.map((r) => ({
       ...r,
-      embedding: r.embedding ? (r.embedding as unknown as string) : null,
+      embedding: embeddingForDatabase(r.embedding),
     }));
     const { error: e2 } = await sb.from("kb_chunks").insert(formatted);
     if (e2) throw e2;

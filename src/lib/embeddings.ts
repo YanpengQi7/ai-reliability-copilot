@@ -16,6 +16,11 @@ export function hasEmbeddingProvider(): boolean {
   return Boolean(process.env.OPENAI_API_KEY);
 }
 
+/** Keep the Supabase pgvector type workaround at one persistence boundary. */
+export function embeddingForDatabase(embedding?: number[] | null): string | null {
+  return embedding ? (embedding as unknown as string) : null;
+}
+
 /**
  * Compute a 1536-dim embedding for the given text.
  * Returns null if no embedding provider is configured (caller should fall back

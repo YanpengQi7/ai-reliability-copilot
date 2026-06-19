@@ -8,7 +8,7 @@ vi.mock("openai", () => ({
   },
 }));
 
-import { embed, EMBEDDING_TIMEOUT_MS } from "./embeddings";
+import { embed, embeddingForDatabase, EMBEDDING_TIMEOUT_MS } from "./embeddings";
 
 describe("embed", () => {
   beforeEach(() => {
@@ -49,5 +49,14 @@ describe("embed", () => {
     controller.abort();
 
     await expect(result).resolves.toBeNull();
+  });
+});
+
+describe("embeddingForDatabase", () => {
+  it("preserves vectors and normalizes missing values", () => {
+    const vector = [0.1, 0.2];
+    expect(embeddingForDatabase(vector)).toBe(vector);
+    expect(embeddingForDatabase(null)).toBeNull();
+    expect(embeddingForDatabase()).toBeNull();
   });
 });

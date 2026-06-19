@@ -27,7 +27,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { tryParseAlert } from "@/lib/alertParsers";
 import { calcCost, normalizeUsage } from "@/lib/cost";
-import { embed, buildSignature } from "@/lib/embeddings";
+import { embed, embeddingForDatabase, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
@@ -148,7 +148,7 @@ export async function POST(req: Request) {
       const embedding = await embed(signature, deadline.signal);
       await sb.from("incidents").update({
         signature,
-        embedding: embedding ? (embedding as unknown as string) : null,
+        embedding: embeddingForDatabase(embedding),
       }).eq("id", inc.id);
 
       const { data: anaRow, error: e2 } = await sb.from("analyses").insert(
