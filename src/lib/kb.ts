@@ -172,20 +172,24 @@ export async function retrieveContext(
   if (hasEmbeddingProvider()) {
     const vec = await embed(queryText, opts.abortSignal);
     if (vec) {
-      const { data, error } = await sb.rpc("match_kb_chunks_by_embedding", {
+      const query = sb.rpc("match_kb_chunks_by_embedding", {
         query_embedding: vec,
         match_threshold: vt,
         match_count: limit,
       });
+      if (opts.abortSignal) query.abortSignal(opts.abortSignal);
+      const { data, error } = await query;
       if (!error && data) return { mode: "vector", chunks: data as RetrievedChunk[] };
     }
   }
 
-  const { data, error } = await sb.rpc("match_kb_chunks_by_signature", {
+  const query = sb.rpc("match_kb_chunks_by_signature", {
     query_text: queryText,
     match_threshold: tt,
     match_count: limit,
   });
+  if (opts.abortSignal) query.abortSignal(opts.abortSignal);
+  const { data, error } = await query;
   if (error || !data) return { mode: "trigram", chunks: [] };
   return { mode: "trigram", chunks: data as RetrievedChunk[] };
 }

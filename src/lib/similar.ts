@@ -43,12 +43,14 @@ export async function findSimilarIncidents(
   if (hasEmbeddingProvider()) {
     const vec = await embed(queryText, opts.abortSignal);
     if (vec) {
-      const { data, error } = await sb.rpc("match_incidents_by_embedding", {
+      const query = sb.rpc("match_incidents_by_embedding", {
         query_embedding: vec,
         match_threshold: vt,
         match_count: limit,
         exclude_id: excludeId,
       });
+      if (opts.abortSignal) query.abortSignal(opts.abortSignal);
+      const { data, error } = await query;
       if (!error && data) {
         return { mode: "vector", hits: data as SimilarIncident[] };
       }
@@ -56,12 +58,14 @@ export async function findSimilarIncidents(
     }
   }
 
-  const { data, error } = await sb.rpc("match_incidents_by_signature", {
+  const query = sb.rpc("match_incidents_by_signature", {
     query_text: queryText,
     match_threshold: tt,
     match_count: limit,
     exclude_id: excludeId,
   });
+  if (opts.abortSignal) query.abortSignal(opts.abortSignal);
+  const { data, error } = await query;
   if (error || !data) return { mode: "trigram", hits: [] };
   return { mode: "trigram", hits: data as SimilarIncident[] };
 }
