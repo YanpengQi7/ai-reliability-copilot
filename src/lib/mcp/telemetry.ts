@@ -11,6 +11,7 @@
 //   - full input or full output (privacy + storage cost)
 //   - bearer tokens or headers
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { supabaseAdmin } from "../supabase";
 import { hasSupabase } from "../db";
 import { safeErrorDetail } from "../observability";
@@ -25,18 +26,14 @@ type LogPayload = {
   result_size_bytes?: number;
 };
 
-// Per-request IP can be attached via AsyncLocalStorage if we want; for now we
-// keep it simple — the route handler stuffs the IP into a module-level Map
-// keyed by request, and the tool wrapper reads it. Stateless per request is fine
-// because Node's per-invocation isolation means concurrent requests don't collide
-// within a single handler frame (each request gets its own JS engine call stack).
-let _currentIp: string | null = null;
+const clientIpStorage = new AsyncLocalStorage<string | null>();
+
 export function withClientIp<T>(ip: string | null, fn: () => Promise<T>): Promise<T> {
-  const prev = _currentIp;
-  _currentIp = ip;
-  return fn().finally(() => {
-    _currentIp = prev;
-  });
+  return clientIpStorage.run(ip, fn);
+}
+
+export function getTelemetryClientIp(): string | null {
+  return clientIpStorage.getStore() ?? null;
 }
 
 export async function logToolCall(payload: LogPayload): Promise<void> {
@@ -48,7 +45,7 @@ export async function logToolCall(payload: LogPayload): Promise<void> {
       ok: payload.ok,
       latency_ms: payload.latency_ms,
       error: payload.error ? safeErrorDetail(payload.error, 500) : null,
-      client_ip: payload.client_ip ?? _currentIp,
+      client_ip: payload.client_ip ?? getTelemetryClientIp(),
       input_summary: payload.input_summary ? safeErrorDetail(payload.input_summary, 200) : null,
       result_size_bytes: payload.result_size_bytes ?? null,
     });
