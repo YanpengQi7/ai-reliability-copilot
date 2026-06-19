@@ -5,6 +5,7 @@ import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
 import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
+import { createProviderDeadline } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -50,8 +51,7 @@ export async function POST(req: NextRequest) {
     return ctx.response(apiError(400, "VALIDATION_ERROR", message, { requestId: ctx.requestId }));
   }
   const input = redactSensitiveValue(parsed.data);
-  const timeoutSignal = AbortSignal.timeout(INVESTIGATION_TIMEOUT_MS);
-  const signal = AbortSignal.any([req.signal, timeoutSignal]);
+  const deadline = createProviderDeadline(req.signal, INVESTIGATION_TIMEOUT_MS);
 
   try {
     const result = await investigate({
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
       },
       language: input.output_language ?? "en",
       maxSteps: input.max_steps,
-      abortSignal: signal,
+      abortSignal: deadline.signal,
     });
     return ctx.response(Response.json(result), {
       steps: result.steps,
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
       ctx.log("warn", "investigation_request_aborted", { error: detail });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Investigation was cancelled.", { requestId: ctx.requestId }));
     }
-    if (timeoutSignal.aborted) {
+    if (deadline.timeoutSignal.aborted) {
       ctx.log("error", "investigation_request_timed_out", {
         timeout_ms: INVESTIGATION_TIMEOUT_MS,
         error: detail,

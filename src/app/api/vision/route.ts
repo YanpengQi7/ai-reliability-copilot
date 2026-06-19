@@ -5,6 +5,7 @@ import { apiError } from "@/lib/http";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { INPUT_LIMITS, isAllowedImageSource, readJsonBody } from "@/lib/requestSafety";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
+import { createProviderDeadline } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -40,11 +41,10 @@ export async function POST(req: NextRequest) {
     return ctx.response(apiError(400, "VALIDATION_ERROR", message, { requestId: ctx.requestId }));
   }
 
-  const timeoutSignal = AbortSignal.timeout(VISION_TIMEOUT_MS);
-  const signal = AbortSignal.any([req.signal, timeoutSignal]);
+  const deadline = createProviderDeadline(req.signal, VISION_TIMEOUT_MS);
 
   try {
-    const description = await describeImage(parsed.data.image, signal);
+    const description = await describeImage(parsed.data.image, deadline.signal);
     if (!description) {
       return ctx.response(apiError(502, "VISION_FAILED", "Vision call returned no content", { requestId: ctx.requestId }));
     }
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
       ctx.log("warn", "vision_request_aborted", { error: detail });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Image analysis request was cancelled.", { requestId: ctx.requestId }));
     }
-    if (timeoutSignal.aborted) {
+    if (deadline.timeoutSignal.aborted) {
       ctx.log("error", "vision_request_timed_out", {
         timeout_ms: VISION_TIMEOUT_MS,
         error: detail,
