@@ -12,6 +12,7 @@ import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
+import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -46,6 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   let object;
   let tokens_in = 0;
   let tokens_out = 0;
+  const deadline = createProviderDeadline(req.signal);
   try {
     const result = await generateObject({
       model: deepseek(ANALYSIS_MODEL),
@@ -59,11 +61,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
         internal_context,
       }),
       temperature: 0.2,
+      abortSignal: deadline.signal,
     });
     object = result.object;
     ({ tokens_in, tokens_out } = normalizeUsage(result.usage));
   } catch (err) {
     ctx.log("error", "scenario_provider_failed", { error: safeErrorDetail(err), scenario_slug: slug });
+    if (deadline.timeoutSignal.aborted) {
+      return ctx.response(apiError(504, "ANALYSIS_TIMEOUT", `Analysis timed out after ${PROVIDER_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
     return ctx.response(apiError(502, "LLM_ERROR", "Analysis provider failed. Please try again.", { requestId: ctx.requestId }));
   }
   const latency = Date.now() - started;

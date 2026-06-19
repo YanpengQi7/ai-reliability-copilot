@@ -11,6 +11,7 @@ import { apiError } from "@/lib/http";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
+import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -46,6 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const queryText = [incident.title, incident.service, incident.symptoms, incident.raw_context].filter(Boolean).join(" ").slice(0, 4000);
   const retrieved = await retrieveContext(queryText, { limit: 5 });
   const internal_context = formatChunksForPrompt(retrieved.chunks);
+  const deadline = createProviderDeadline(req.signal);
   try {
     const { object, usage } = await generateObject({
       model: deepseek(ANALYSIS_MODEL),
@@ -59,6 +61,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         internal_context,
       }),
       temperature: 0.2,
+      abortSignal: deadline.signal,
     });
     const latency = Date.now() - started;
     const { tokens_in, tokens_out } = normalizeUsage(usage);
@@ -91,6 +94,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     });
   } catch (err) {
     ctx.log("error", "rerun_provider_failed", { error: safeErrorDetail(err), incident_id: id });
+    if (deadline.timeoutSignal.aborted) {
+      return ctx.response(apiError(504, "ANALYSIS_TIMEOUT", `Analysis timed out after ${PROVIDER_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
     return ctx.response(apiError(502, "LLM_ERROR", "Analysis provider failed. Please try again.", { requestId: ctx.requestId }));
   }
 }

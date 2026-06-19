@@ -11,6 +11,7 @@ import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 import { INPUT_LIMITS, readJsonBody } from "@/lib/requestSafety";
+import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -55,6 +56,7 @@ export async function POST(req: Request) {
   }
 
   const scenario = scenario_slug ? SCENARIOS.find((s) => s.slug === scenario_slug) : undefined;
+  const deadline = createProviderDeadline(req.signal);
 
   try {
     const scores = await judge({
@@ -70,7 +72,7 @@ export async function POST(req: Request) {
         follow_ups: (a.follow_ups as never) ?? [],
       },
       scenario,
-    });
+    }, undefined, { abortSignal: deadline.signal });
     const overall = overallScore(scores);
     const { data: row, error: e1 } = await sb
       .from("evaluations")
@@ -92,6 +94,9 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     ctx.log("error", "evaluation_provider_failed", { error: safeErrorDetail(err), analysis_id });
+    if (deadline.timeoutSignal.aborted) {
+      return ctx.response(apiError(504, "EVALUATION_TIMEOUT", `Evaluation timed out after ${PROVIDER_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
     return ctx.response(apiError(502, "JUDGE_ERROR", "Evaluation provider failed. Please try again.", { requestId: ctx.requestId }));
   }
 }

@@ -11,6 +11,7 @@ import { usageTrailer } from "@/lib/streamUsage";
 import { apiError } from "@/lib/http";
 import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext } from "@/lib/observability";
+import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -55,13 +56,14 @@ export async function POST(req: NextRequest) {
   const retrieved = await retrieveContext(queryText, { limit: 5 });
   const internal_context = formatChunksForPrompt(retrieved.chunks);
 
+  const deadline = createProviderDeadline(req.signal);
   const result = streamObject({
     model: deepseek(ANALYSIS_MODEL),
     schema: AnalysisSchema,
     system: getSystemPrompt(version),
     prompt: buildUserPrompt({ ...input, language: input.output_language ?? "en", internal_context }),
     temperature: 0.2,
-    abortSignal: req.signal,
+    abortSignal: deadline.signal,
   });
 
   // Stream the object JSON, then append a usage TRAILER once the stream ends
@@ -82,6 +84,9 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(usageTrailer({ tokens_in, tokens_out, cost_usd })));
         controller.close();
       } catch (err) {
+        if (deadline.timeoutSignal.aborted) {
+          ctx.log("error", "analysis_provider_timed_out", { timeout_ms: PROVIDER_TIMEOUT_MS });
+        }
         controller.error(err);
       }
     },

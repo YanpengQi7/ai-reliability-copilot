@@ -34,6 +34,7 @@ import { apiError } from "@/lib/http";
 import { INPUT_LIMITS, machineEndpointNeedsSecret, readTextBody, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { bearerToken, secureTokenEqual } from "@/lib/serverAuth";
+import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -108,6 +109,7 @@ export async function POST(req: Request) {
 
   // 2. Schedule analysis to run AFTER the response is sent
   after(async () => {
+    const deadline = createProviderDeadline();
     try {
       const queryText = [parsed.title, parsed.service, parsed.symptoms, parsed.raw_context]
         .filter(Boolean).join(" ").slice(0, 4000);
@@ -127,6 +129,7 @@ export async function POST(req: Request) {
           internal_context,
         }),
         temperature: 0.2,
+        abortSignal: deadline.signal,
       });
       const latency_ms = Date.now() - started;
       const { tokens_in, tokens_out } = normalizeUsage(usage);
@@ -184,6 +187,8 @@ export async function POST(req: Request) {
       ctx.log("error", "webhook_background_failed", {
         incident_id: inc.id,
         error: safeErrorDetail(err),
+        timed_out: deadline.timeoutSignal.aborted,
+        ...(deadline.timeoutSignal.aborted ? { timeout_ms: PROVIDER_TIMEOUT_MS } : {}),
       });
       // Don't lose the failure — log it on the incident itself so /incidents/[id] shows it
       try {

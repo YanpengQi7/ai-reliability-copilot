@@ -84,13 +84,18 @@ function groundingRubricBlock(): string {
 // cross-model judge that measures same-family bias — see
 // scripts/run-evals-crossjudge.ts. The analysis being scored is held fixed,
 // so any score delta is attributable to the judge, not the generation.
-export async function judge(input: JudgeInput, model = deepseek(JUDGE_MODEL)) {
+export async function judge(
+  input: JudgeInput,
+  model = deepseek(JUDGE_MODEL),
+  options: { abortSignal?: AbortSignal } = {},
+) {
   const { object } = await generateObject({
     model,
     schema: RubricScores,
     system: JUDGE_SYSTEM_PROMPT,
     prompt: buildJudgeUserPrompt({ ...input, trace: undefined }),
     temperature: 0,
+    abortSignal: options.abortSignal,
   });
   return object;
 }
@@ -104,13 +109,18 @@ export async function judge(input: JudgeInput, model = deepseek(JUDGE_MODEL)) {
 // tightened anchors. The override lets us grade grounding with a stronger model
 // (e.g. deepseek-reasoner) while the core-5 eval keeps deepseek-chat for
 // comparability with the historical single-shot evals.
-export async function judgeWithGrounding(input: JudgeInput & { trace: string }, judgeModel: string = JUDGE_MODEL_GROUNDING) {
+export async function judgeWithGrounding(
+  input: JudgeInput & { trace: string },
+  judgeModel: string = JUDGE_MODEL_GROUNDING,
+  options: { abortSignal?: AbortSignal } = {},
+) {
   const { object } = await generateObject({
     model: deepseek(judgeModel),
     schema: RubricScoresWithGrounding,
     system: `${JUDGE_SYSTEM_PROMPT}${groundingRubricBlock()}`,
     prompt: buildJudgeUserPrompt(input),
     temperature: 0,
+    abortSignal: options.abortSignal,
   });
   return object;
 }
