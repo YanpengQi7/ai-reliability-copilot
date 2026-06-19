@@ -8,12 +8,13 @@ import { safeErrorDetail } from "./observability";
 // development or a temporary Redis outage.
 
 type Bucket = { count: number; resetAt: number };
-type Bucketset = Map<string, Bucket>;
-const DEFAULT_BUCKETS: Bucketset = new Map();
-const NAMED_BUCKETS: Map<string, Bucketset> = new Map();
+type BucketKey = string | symbol;
+type Bucketset = Map<BucketKey, Bucket>;
 
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 5;
+const MAX_MEMORY_BUCKETS_PER_NAMESPACE = 10_000;
+const OVERFLOW_BUCKET = Symbol("rate-limit-overflow");
 
 export type RateLimitResult = {
   allowed: boolean;
@@ -25,29 +26,50 @@ export type RateLimitResult = {
 
 type RateLimitOptions = { max?: number; windowMs?: number; namespace?: string };
 
-function memoryRateLimit(
-  key: string,
-  opts: RateLimitOptions = {},
-): RateLimitResult {
-  const max = opts.max ?? MAX_PER_WINDOW;
-  const windowMs = opts.windowMs ?? WINDOW_MS;
-  let bucketset = DEFAULT_BUCKETS;
-  if (opts.namespace) {
-    bucketset = NAMED_BUCKETS.get(opts.namespace) ?? new Map();
-    NAMED_BUCKETS.set(opts.namespace, bucketset);
+function removeExpiredBuckets(bucketset: Bucketset, now: number) {
+  for (const [key, bucket] of bucketset) {
+    if (bucket.resetAt <= now) bucketset.delete(key);
   }
-  const now = Date.now();
-  const b = bucketset.get(key);
-  if (!b || b.resetAt < now) {
-    bucketset.set(key, { count: 1, resetAt: now + windowMs });
-    return { allowed: true, limit: max, remaining: max - 1, retryAfterSec: 0, backend: "memory" };
-  }
-  if (b.count >= max) {
-    return { allowed: false, limit: max, remaining: 0, retryAfterSec: Math.ceil((b.resetAt - now) / 1000), backend: "memory" };
-  }
-  b.count += 1;
-  return { allowed: true, limit: max, remaining: max - b.count, retryAfterSec: 0, backend: "memory" };
 }
+
+export function createMemoryRateLimiter(maxBucketsPerNamespace = MAX_MEMORY_BUCKETS_PER_NAMESPACE) {
+  if (maxBucketsPerNamespace < 2) throw new Error("Memory rate limiter capacity must be at least 2.");
+  const defaultBuckets: Bucketset = new Map();
+  const namedBuckets = new Map<string, Bucketset>();
+
+  return function limit(
+    key: string,
+    opts: RateLimitOptions = {},
+    now = Date.now(),
+  ): RateLimitResult {
+    const max = opts.max ?? MAX_PER_WINDOW;
+    const windowMs = opts.windowMs ?? WINDOW_MS;
+    let bucketset = defaultBuckets;
+    if (opts.namespace) {
+      bucketset = namedBuckets.get(opts.namespace) ?? new Map();
+      namedBuckets.set(opts.namespace, bucketset);
+    }
+
+    let bucketKey: BucketKey = key;
+    if (!bucketset.has(bucketKey) && bucketset.size >= maxBucketsPerNamespace - 1) {
+      removeExpiredBuckets(bucketset, now);
+      if (bucketset.size >= maxBucketsPerNamespace - 1) bucketKey = OVERFLOW_BUCKET;
+    }
+
+    const bucket = bucketset.get(bucketKey);
+    if (!bucket || bucket.resetAt <= now) {
+      bucketset.set(bucketKey, { count: 1, resetAt: now + windowMs });
+      return { allowed: true, limit: max, remaining: max - 1, retryAfterSec: 0, backend: "memory" };
+    }
+    if (bucket.count >= max) {
+      return { allowed: false, limit: max, remaining: 0, retryAfterSec: Math.ceil((bucket.resetAt - now) / 1000), backend: "memory" };
+    }
+    bucket.count += 1;
+    return { allowed: true, limit: max, remaining: max - bucket.count, retryAfterSec: 0, backend: "memory" };
+  };
+}
+
+const memoryRateLimit = createMemoryRateLimiter();
 
 const FIXED_WINDOW_SCRIPT = `
 local count = redis.call("INCR", KEYS[1])

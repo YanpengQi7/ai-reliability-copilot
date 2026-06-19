@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { rateLimit, withRateLimitHeaders } from "./rateLimit";
+import { createMemoryRateLimiter, rateLimit, withRateLimitHeaders } from "./rateLimit";
 
 const originalUrl = process.env.UPSTASH_REDIS_REST_URL;
 const originalToken = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -70,5 +70,29 @@ describe("rateLimit", () => {
 
     expect(result).toMatchObject({ allowed: true, backend: "memory" });
     expect(console.warn).toHaveBeenCalledOnce();
+  });
+});
+
+describe("createMemoryRateLimiter", () => {
+  it("bounds unique clients without evicting active buckets", () => {
+    const limit = createMemoryRateLimiter(3);
+    const opts = { max: 1, windowMs: 60_000 };
+
+    expect(limit("client-a", opts, 0).allowed).toBe(true);
+    expect(limit("client-b", opts, 0).allowed).toBe(true);
+    expect(limit("client-c", opts, 0).allowed).toBe(true);
+    expect(limit("client-d", opts, 0).allowed).toBe(false);
+    expect(limit("client-a", opts, 0).allowed).toBe(false);
+  });
+
+  it("reclaims expired buckets before using overflow", () => {
+    const limit = createMemoryRateLimiter(3);
+    const opts = { max: 1, windowMs: 10 };
+
+    limit("expired-a", opts, 0);
+    limit("expired-b", opts, 0);
+    expect(limit("fresh-a", opts, 10).allowed).toBe(true);
+    expect(limit("fresh-b", opts, 10).allowed).toBe(true);
+    expect(limit("fresh-a", opts, 10).allowed).toBe(false);
   });
 });
