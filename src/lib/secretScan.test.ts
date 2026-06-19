@@ -13,6 +13,8 @@ const FAKE = {
   openai: "sk-" + "abcdefghijklmnopqrstuvwxyz1234",
   stripe: "sk_" + "live_" + "abcdEFGH1234567890abcdEFGH",
   githubPat: "ghp_" + "a".repeat(36),
+  jwt: ["eyJ" + "a".repeat(12), "b".repeat(16), "c".repeat(16)].join("."),
+  generic: "aZ8/kP3_qR7+vN2.mX9=Lt5-Wc4Hs6Df1Gj0Bu",
 };
 
 describe("scanForSecrets — detection", () => {
@@ -41,6 +43,21 @@ describe("scanForSecrets — detection", () => {
     expect(findings.some((f) => f.pattern === "Private key (PEM)")).toBe(true);
   });
 
+  it("flags JWTs, Basic auth, and credentialed connection URLs", () => {
+    const basic = "Authorization: Basic " + "QWxhZGRpbjpvcGVuIHNlc2FtZQ==";
+    const database = "postgresql://app:super-secret-password@db.internal:5432/prod";
+    const findings = scanForSecrets([FAKE.jwt, basic, database].join("\n"));
+
+    expect(findings.some((f) => f.pattern === "JWT / service token")).toBe(true);
+    expect(findings.some((f) => f.pattern === "Basic auth credential")).toBe(true);
+    expect(findings.some((f) => f.pattern === "Credentialed connection URL")).toBe(true);
+  });
+
+  it("flags high-entropy values assigned to sensitive names", () => {
+    const findings = scanForSecrets(`client_secret=${FAKE.generic}`);
+    expect(findings.some((f) => f.pattern === "High-entropy secret assignment")).toBe(true);
+  });
+
   it("reports the line number of a finding", () => {
     const text = ["line one", "line two", `key ${FAKE.aws} here`].join("\n");
     const findings = scanForSecrets(text);
@@ -61,6 +78,15 @@ describe("scanForSecrets — clean input", () => {
     expect(scanForSecrets("The payment service returned 500s after the deploy at 14:00.")).toEqual([]);
   });
 
+  it("does not flag low-entropy placeholders or ordinary hashes", () => {
+    const text = [
+      `password=${"x".repeat(32)}`,
+      `commit=${"a1".repeat(20)}`,
+      "token budget: 12000",
+    ].join("\n");
+    expect(scanForSecrets(text)).toEqual([]);
+  });
+
   it("caps findings on pathological input", () => {
     const flood = Array.from({ length: 200 }, (_, i) => `AKIA${"A".repeat(12)}${String(i).padStart(4, "0")}`).join("\n");
     const findings = scanForSecrets(flood);
@@ -75,5 +101,14 @@ describe("redactSecrets", () => {
     expect(redacted).not.toContain(FAKE.openai);
     expect(redacted).toContain("[REDACTED: OpenAI API key]");
     expect(redacted).toContain("payment-svc failed");
+  });
+
+  it("redacts generic assigned secrets and connection credentials", () => {
+    const text = `client_secret=${FAKE.generic}\nredis://worker:redis-password@cache.internal:6379`;
+    const redacted = redactSecrets(text);
+    expect(redacted).not.toContain(FAKE.generic);
+    expect(redacted).not.toContain("redis-password");
+    expect(redacted).toContain("[REDACTED: High-entropy secret assignment]");
+    expect(redacted).toContain("[REDACTED: Credentialed connection URL]");
   });
 });
