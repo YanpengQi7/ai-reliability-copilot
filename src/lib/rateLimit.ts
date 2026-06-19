@@ -14,6 +14,7 @@ type Bucketset = Map<BucketKey, Bucket>;
 const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 5;
 const MAX_MEMORY_BUCKETS_PER_NAMESPACE = 10_000;
+const REDIS_FAILURE_BACKOFF_MS = 10_000;
 const OVERFLOW_BUCKET = Symbol("rate-limit-overflow");
 
 export type RateLimitResult = {
@@ -68,8 +69,6 @@ export function createMemoryRateLimiter(maxBucketsPerNamespace = MAX_MEMORY_BUCK
     return { allowed: true, limit: max, remaining: max - bucket.count, retryAfterSec: 0, backend: "memory" };
   };
 }
-
-const memoryRateLimit = createMemoryRateLimiter();
 
 const FIXED_WINDOW_SCRIPT = `
 local count = redis.call("INCR", KEYS[1])
@@ -132,21 +131,38 @@ async function redisRateLimit(
   };
 }
 
-export async function rateLimit(key: string, opts: RateLimitOptions = {}): Promise<RateLimitResult> {
-  const config = redisConfig();
-  if (config) {
-    try {
-      return await redisRateLimit(config, key, opts);
-    } catch (error) {
-      console.warn(JSON.stringify({
-        level: "warn",
-        event: "distributed_rate_limit_failed",
-        error: safeErrorDetail(error),
-      }));
+export function createRateLimiter(options: {
+  now?: () => number;
+  redisFailureBackoffMs?: number;
+} = {}) {
+  const now = options.now ?? Date.now;
+  const redisFailureBackoffMs = options.redisFailureBackoffMs ?? REDIS_FAILURE_BACKOFF_MS;
+  const memoryRateLimit = createMemoryRateLimiter();
+  let redisUnavailableUntil = 0;
+
+  return async function limit(key: string, opts: RateLimitOptions = {}): Promise<RateLimitResult> {
+    const config = redisConfig();
+    const currentTime = now();
+    if (config && currentTime >= redisUnavailableUntil) {
+      try {
+        const result = await redisRateLimit(config, key, opts);
+        redisUnavailableUntil = 0;
+        return result;
+      } catch (error) {
+        redisUnavailableUntil = currentTime + redisFailureBackoffMs;
+        console.warn(JSON.stringify({
+          level: "warn",
+          event: "distributed_rate_limit_failed",
+          error: safeErrorDetail(error),
+          retry_in_ms: redisFailureBackoffMs,
+        }));
+      }
     }
-  }
-  return memoryRateLimit(key, opts);
+    return memoryRateLimit(key, opts, currentTime);
+  };
 }
+
+export const rateLimit = createRateLimiter();
 
 /** Attach machine-readable retry metadata to a 429 response. */
 export function withRateLimitHeaders(response: Response, result: RateLimitResult): Response {

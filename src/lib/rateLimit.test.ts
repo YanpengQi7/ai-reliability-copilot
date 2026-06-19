@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMemoryRateLimiter, rateLimit, withRateLimitHeaders } from "./rateLimit";
+import { createMemoryRateLimiter, createRateLimiter, rateLimit, withRateLimitHeaders } from "./rateLimit";
 
 const originalUrl = process.env.UPSTASH_REDIS_REST_URL;
 const originalToken = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -94,5 +94,27 @@ describe("createMemoryRateLimiter", () => {
     expect(limit("fresh-a", opts, 10).allowed).toBe(true);
     expect(limit("fresh-b", opts, 10).allowed).toBe(true);
     expect(limit("fresh-a", opts, 10).allowed).toBe(false);
+  });
+});
+
+describe("createRateLimiter", () => {
+  it("opens a short circuit after Redis fails", async () => {
+    process.env.UPSTASH_REDIS_REST_URL = "https://redis.example.com";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "secret-token";
+    let now = 1_000;
+    const fetchMock = vi.fn().mockRejectedValue(new Error("network unavailable"));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const limit = createRateLimiter({ now: () => now, redisFailureBackoffMs: 10_000 });
+
+    expect(await limit("client-a")).toMatchObject({ backend: "memory" });
+    expect(await limit("client-b")).toMatchObject({ backend: "memory" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(console.warn).toHaveBeenCalledTimes(1);
+
+    now = 11_000;
+    expect(await limit("client-c")).toMatchObject({ backend: "memory" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(console.warn).toHaveBeenCalledTimes(2);
   });
 });
