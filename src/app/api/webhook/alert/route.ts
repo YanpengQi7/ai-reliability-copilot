@@ -173,7 +173,7 @@ export async function POST(req: Request) {
           incident_id: inc.id,
           error: safeErrorDetail(e2),
         });
-        return;
+        throw e2;
       }
       if (anaRow) await recordRetrievedChunks(anaRow.id, retrieved.chunks);
       ctx.log("info", "webhook_analysis_completed", {

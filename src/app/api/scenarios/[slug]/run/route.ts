@@ -101,7 +101,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the scenario run.", { requestId: ctx.requestId }));
   }
 
-  const { data: anaRow } = await sb.from("analyses").insert({
+  const { data: anaRow, error: e2 } = await sb.from("analyses").insert({
     incident_id: inc.id,
     model: ANALYSIS_MODEL,
     prompt_version: version,
@@ -120,7 +120,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     tokens_out,
     cost_usd,
   }).select("id").single();
-  if (anaRow) await recordRetrievedChunks(anaRow.id, retrieved.chunks);
+  if (e2 || !anaRow) {
+    const { error: cleanupError } = await sb.from("incidents").delete().eq("id", inc.id);
+    ctx.log("error", "scenario_analysis_insert_failed", {
+      error: safeErrorDetail(e2 ?? new Error("Analysis insert returned no row.")),
+      cleanup_error: cleanupError ? safeErrorDetail(cleanupError) : undefined,
+      incident_id: inc.id,
+      scenario_slug: slug,
+    });
+    return ctx.response(apiError(500, "DB_ERROR", "Could not save the scenario analysis.", { requestId: ctx.requestId }));
+  }
+  await recordRetrievedChunks(anaRow.id, retrieved.chunks);
 
   return ctx.response(NextResponse.json({ incident_id: inc.id, latency_ms: latency }), {
     incident_id: inc.id,

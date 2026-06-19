@@ -229,7 +229,14 @@ export function buildMcpServer() {
         follow_ups: a.follow_ups,
       }).select("id").single();
       if (e2) {
-        console.error(JSON.stringify({ level: "error", event: "mcp_analysis_insert_failed", error: safeErrorDetail(e2), incident_id: inc.id }));
+        const { error: cleanupError } = await sb.from("incidents").delete().eq("id", inc.id);
+        console.error(JSON.stringify({
+          level: "error",
+          event: "mcp_analysis_insert_failed",
+          error: safeErrorDetail(e2),
+          cleanup_error: cleanupError ? safeErrorDetail(cleanupError) : undefined,
+          incident_id: inc.id,
+        }));
         return { content: [{ type: "text", text: "Database error while saving the analysis." }], isError: true };
       }
 
