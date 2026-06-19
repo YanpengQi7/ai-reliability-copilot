@@ -10,6 +10,7 @@ import { apiError } from "@/lib/http";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { createRequestContext } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
+import { INPUT_LIMITS, readJsonBody } from "@/lib/requestSafety";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -34,7 +35,14 @@ export async function POST(req: Request) {
   if (!rl.allowed) {
     return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
-  const parsed = Body.safeParse(await req.json().catch(() => ({})));
+  const bodyResult = await readJsonBody(req, INPUT_LIMITS.smallJson);
+  if (!bodyResult.ok && bodyResult.error === "payload_too_large") {
+    return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.", { requestId: ctx.requestId }));
+  }
+  if (!bodyResult.ok) {
+    return ctx.response(apiError(400, "INVALID_JSON", "Body must be JSON", { requestId: ctx.requestId }));
+  }
+  const parsed = Body.safeParse(bodyResult.value);
   if (!parsed.success) {
     const message = parsed.error.issues.map((issue) => issue.message).join("; ");
     return ctx.response(apiError(400, "VALIDATION_ERROR", message, { requestId: ctx.requestId }));

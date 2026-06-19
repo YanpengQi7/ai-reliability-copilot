@@ -9,7 +9,7 @@ import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
-import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
+import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 
@@ -50,16 +50,14 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
-  if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 4)) {
+  const bodyResult = await readJsonBody(req, INPUT_LIMITS.rawContext * 4);
+  if (!bodyResult.ok && bodyResult.error === "payload_too_large") {
     return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.", { requestId: ctx.requestId }));
   }
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
+  if (!bodyResult.ok) {
     return ctx.response(apiError(400, "INVALID_JSON", "Body must be JSON", { requestId: ctx.requestId }));
   }
-  const parsed = Body.safeParse(body);
+  const parsed = Body.safeParse(bodyResult.value);
   if (!parsed.success) {
     const message = parsed.error.issues.map((issue) => issue.message).join("; ");
     return ctx.response(apiError(400, "VALIDATION_ERROR", message, { requestId: ctx.requestId }));

@@ -5,6 +5,7 @@ export const INPUT_LIMITS = {
   rawContext: 50_000,
   imagePayload: 8_000_000,
   imageFileBytes: 5_000_000,
+  smallJson: 16_384,
 } as const;
 
 export const ALLOWED_IMAGE_TYPES = [
@@ -36,6 +37,48 @@ export function contentLengthExceeds(req: Request, maxBytes: number): boolean {
   if (!header) return false;
   const length = Number(header);
   return Number.isFinite(length) && length > maxBytes;
+}
+
+export type BodyReadResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: "payload_too_large" | "invalid_json" };
+
+/** Read a request body with a real byte limit, even when Content-Length is absent or false. */
+export async function readTextBody(req: Request, maxBytes: number): Promise<BodyReadResult<string>> {
+  if (contentLengthExceeds(req, maxBytes)) return { ok: false, error: "payload_too_large" };
+  if (!req.body) return { ok: true, value: "" };
+
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel("payload too large").catch(() => undefined);
+      return { ok: false, error: "payload_too_large" };
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, value: new TextDecoder().decode(bytes) };
+}
+
+export async function readJsonBody(req: Request, maxBytes: number): Promise<BodyReadResult<unknown>> {
+  const body = await readTextBody(req, maxBytes);
+  if (!body.ok) return body;
+  try {
+    return { ok: true, value: JSON.parse(body.value) as unknown };
+  } catch {
+    return { ok: false, error: "invalid_json" };
+  }
 }
 
 /** Public machine endpoints must be explicitly opted into on Vercel production. */

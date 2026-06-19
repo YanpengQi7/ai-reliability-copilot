@@ -3,6 +3,8 @@ import {
   INPUT_LIMITS,
   isAllowedImageSource,
   machineEndpointNeedsSecret,
+  readJsonBody,
+  readTextBody,
   redactSensitiveValue,
   safeDisplayFilename,
   validateImageFile,
@@ -21,6 +23,31 @@ describe("redactSensitiveValue", () => {
     expect(result.raw_context).not.toContain(secret);
     expect(result.root_causes[0].evidence).not.toContain(secret);
     expect(result.root_causes[0].likelihood).toBe(0.8);
+  });
+});
+
+describe("bounded request body readers", () => {
+  it("rejects an oversized body even without Content-Length", async () => {
+    const req = new Request("https://example.com", {
+      method: "POST",
+      body: "x".repeat(33),
+    });
+    expect(req.headers.get("content-length")).toBeNull();
+
+    await expect(readTextBody(req, 32)).resolves.toEqual({ ok: false, error: "payload_too_large" });
+  });
+
+  it("counts UTF-8 bytes rather than JavaScript characters", async () => {
+    const req = new Request("https://example.com", { method: "POST", body: "故障" });
+    await expect(readTextBody(req, 5)).resolves.toEqual({ ok: false, error: "payload_too_large" });
+  });
+
+  it("parses valid JSON and classifies malformed JSON", async () => {
+    const valid = new Request("https://example.com", { method: "POST", body: JSON.stringify({ ok: true }) });
+    const invalid = new Request("https://example.com", { method: "POST", body: "{nope" });
+
+    await expect(readJsonBody(valid, 100)).resolves.toEqual({ ok: true, value: { ok: true } });
+    await expect(readJsonBody(invalid, 100)).resolves.toEqual({ ok: false, error: "invalid_json" });
   });
 });
 

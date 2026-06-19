@@ -30,7 +30,7 @@ import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
-import { contentLengthExceeds, INPUT_LIMITS, machineEndpointNeedsSecret, redactSensitiveValue } from "@/lib/requestSafety";
+import { INPUT_LIMITS, machineEndpointNeedsSecret, readTextBody, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext } from "@/lib/observability";
 
 export const runtime = "nodejs";
@@ -66,17 +66,13 @@ export async function POST(req: Request) {
   if (!process.env.DEEPSEEK_API_KEY) {
     return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY missing", { requestId: ctx.requestId }));
   }
-  if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 2)) {
+  const bodyResult = await readTextBody(req, INPUT_LIMITS.rawContext);
+  if (!bodyResult.ok) {
     return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Webhook payload is too large.", { requestId: ctx.requestId }));
   }
-
-  const bodyText = await req.text();
+  const bodyText = bodyResult.value;
   if (bodyText.length < 5) {
     return ctx.response(apiError(400, "EMPTY_BODY", "Webhook body empty", { requestId: ctx.requestId }));
-  }
-
-  if (bodyText.length > INPUT_LIMITS.rawContext) {
-    return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Webhook payload is too large.", { requestId: ctx.requestId }));
   }
 
   const parsed = redactSensitiveValue(tryParseAlert(bodyText) ?? {
