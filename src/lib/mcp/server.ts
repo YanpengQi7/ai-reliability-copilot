@@ -17,6 +17,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { safeErrorDetail } from "@/lib/observability";
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
+import { buildIncidentRecord } from "@/lib/incidentRecord";
 import { SCENARIOS } from "@/lib/scenarios";
 import { retrieveContext } from "@/lib/kb";
 import { findSimilarIncidents } from "@/lib/similar";
@@ -200,14 +201,14 @@ export function buildMcpServer() {
         severity: input.analysis.severity,
       });
       const embedding = await embed(signature);
-      const { data: inc, error: e1 } = await sb.from("incidents").insert({
-        title: input.title ?? null,
-        service: input.service ?? null,
-        symptoms: input.symptoms ?? null,
-        raw_context: input.raw_context,
+      const { data: inc, error: e1 } = await sb.from("incidents").insert(buildIncidentRecord({
+        title: input.title,
+        service: input.service,
+        symptoms: input.symptoms,
+        rawContext: input.raw_context,
         signature,
-        embedding: embedding ? (embedding as unknown as string) : null,
-      }).select("id").single();
+        embedding,
+      })).select("id").single();
       if (e1) {
         console.error(JSON.stringify({ level: "error", event: "mcp_incident_insert_failed", error: safeErrorDetail(e1) }));
         return { content: [{ type: "text", text: "Database error while saving the incident." }], isError: true };

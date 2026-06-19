@@ -14,6 +14,7 @@ import { apiError } from "@/lib/http";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
+import { buildIncidentRecord } from "@/lib/incidentRecord";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -87,14 +88,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const embedding = await embed(signature, deadline.signal);
   const { data: inc, error: e1 } = await sb
     .from("incidents")
-    .insert({
+    .insert(buildIncidentRecord({
       title: `[Scenario] ${scenario.title}`,
       service: scenario.service,
       symptoms: scenario.symptoms,
-      raw_context: scenario.context,
+      rawContext: scenario.context,
       signature,
-      embedding: embedding ? (embedding as unknown as string) : null,
-    })
+      embedding,
+    }))
     .select("id")
     .single();
   if (e1) {

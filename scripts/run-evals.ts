@@ -14,6 +14,8 @@ import { getSystemPrompt, buildUserPrompt, type PromptVersion, type OutputLangua
 import { judge } from "../src/lib/eval/judge";
 import { RUBRIC_VERSION, overallScore } from "../src/lib/eval/rubric";
 import { calcCost, normalizeUsage } from "../src/lib/cost";
+import { buildAnalysisRecord } from "../src/lib/analysisRecord";
+import { buildIncidentRecord } from "../src/lib/incidentRecord";
 
 const VERSIONS: PromptVersion[] = ["v1", "v2", "v3"];
 const LANGUAGES: OutputLanguage[] = ["en", "zh"];
@@ -88,36 +90,26 @@ async function main() {
 
           const { data: inc, error: e1 } = await sb
             .from("incidents")
-            .insert({
+            .insert(buildIncidentRecord({
               title: `[Eval][${version}][${language}] ${scenario.title}`,
               service: scenario.service,
               symptoms: scenario.symptoms,
-              raw_context: scenario.context,
-            })
+              rawContext: scenario.context,
+            }))
             .select("id")
             .single();
           if (e1) throw e1;
           const { data: ana, error: e2 } = await sb
             .from("analyses")
-            .insert({
-              incident_id: inc.id,
+            .insert(buildAnalysisRecord({
+              incidentId: inc.id,
+              analysis,
               model: ANALYSIS_MODEL,
-              prompt_version: version,
-              output_language: language,
-              summary: analysis.summary,
-              severity: analysis.severity,
-              severity_reasoning: analysis.severity_reasoning,
-              root_causes: analysis.root_causes,
-              investigation_checklist: analysis.investigation_checklist,
-              mitigation_plan: analysis.mitigation_plan,
-              customer_impact: analysis.customer_impact,
-              postmortem_draft: analysis.postmortem_draft,
-              follow_ups: analysis.follow_ups,
-              latency_ms,
-              tokens_in,
-              tokens_out,
-              cost_usd,
-            })
+              promptVersion: version,
+              outputLanguage: language,
+              latencyMs: latency_ms,
+              usage: { tokens_in, tokens_out, cost_usd },
+            }))
             .select("id")
             .single();
           if (e2) throw e2;

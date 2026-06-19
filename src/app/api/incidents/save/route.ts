@@ -13,6 +13,7 @@ import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestS
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
+import { buildIncidentRecord } from "@/lib/incidentRecord";
 
 export const runtime = "nodejs";
 
@@ -79,14 +80,14 @@ export async function POST(req: NextRequest) {
 
   const { data: inc, error: e1 } = await sb
     .from("incidents")
-    .insert({
-      title: input.title ?? null,
-      service: input.service ?? null,
-      symptoms: input.symptoms ?? null,
-      raw_context: input.raw_context,
+    .insert(buildIncidentRecord({
+      title: input.title,
+      service: input.service,
+      symptoms: input.symptoms,
+      rawContext: input.raw_context,
       signature,
-      embedding: embedding ? (embedding as unknown as string) : null,
-    })
+      embedding,
+    }))
     .select("id")
     .single();
   if (e1) {

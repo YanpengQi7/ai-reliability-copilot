@@ -36,6 +36,7 @@ import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { bearerToken, secureTokenEqual } from "@/lib/serverAuth";
 import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
+import { buildIncidentRecord } from "@/lib/incidentRecord";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,12 +93,12 @@ export async function POST(req: Request) {
   // 1. Insert the incident IMMEDIATELY so the webhook caller gets a fast ACK
   const { data: inc, error: e1 } = await sb
     .from("incidents")
-    .insert({
+    .insert(buildIncidentRecord({
       title: parsed.title ? `[${parsed.source}] ${parsed.title}` : `[${parsed.source}] webhook`,
-      service: parsed.service ?? null,
-      symptoms: parsed.symptoms ?? null,
-      raw_context: parsed.raw_context,
-    })
+      service: parsed.service,
+      symptoms: parsed.symptoms,
+      rawContext: parsed.raw_context,
+    }))
     .select("id")
     .single();
   if (e1) {
