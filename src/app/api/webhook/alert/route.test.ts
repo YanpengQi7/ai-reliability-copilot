@@ -1,4 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({ supabaseAdmin: vi.fn() }));
+
+vi.mock("@/lib/supabase", () => ({ supabaseAdmin: mocks.supabaseAdmin }));
+
 import { POST } from "./route";
 
 const original = {
@@ -6,6 +11,7 @@ const original = {
   allowLegacy: process.env.ALLOW_LEGACY_QUERY_SECRET,
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
   serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  deepseekKey: process.env.DEEPSEEK_API_KEY,
 };
 
 afterEach(() => {
@@ -13,6 +19,9 @@ afterEach(() => {
   restore("ALLOW_LEGACY_QUERY_SECRET", original.allowLegacy);
   restore("NEXT_PUBLIC_SUPABASE_URL", original.supabaseUrl);
   restore("SUPABASE_SERVICE_ROLE_KEY", original.serviceKey);
+  restore("DEEPSEEK_API_KEY", original.deepseekKey);
+  mocks.supabaseAdmin.mockReset();
+  vi.restoreAllMocks();
 });
 
 function restore(key: string, value: string | undefined) {
@@ -52,5 +61,28 @@ describe("webhook authentication", () => {
     process.env.ALLOW_LEGACY_QUERY_SECRET = "true";
     const legacy = await POST(request("https://example.com/api/webhook/alert?secret=webhook-test-secret"));
     expect(legacy.status).toBe(503);
+  });
+});
+
+describe("webhook persistence", () => {
+  it("rejects an empty incident insert result", async () => {
+    delete process.env.WEBHOOK_SECRET;
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+    process.env.DEEPSEEK_API_KEY = "test-key";
+    const single = vi.fn().mockResolvedValue({ data: null, error: null });
+    mocks.supabaseAdmin.mockReturnValue({
+      from: vi.fn(() => ({
+        insert: vi.fn(() => ({
+          select: vi.fn(() => ({ single })),
+        })),
+      })),
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await POST(request("https://example.com/api/webhook/alert"));
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({ error: "DB_ERROR" });
   });
 });

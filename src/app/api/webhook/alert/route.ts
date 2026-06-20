@@ -101,8 +101,10 @@ export async function POST(req: Request) {
     }))
     .select("id")
     .single();
-  if (e1) {
-    ctx.log("error", "webhook_incident_insert_failed", { error: safeErrorDetail(e1) });
+  if (e1 || !inc) {
+    ctx.log("error", "webhook_incident_insert_failed", {
+      error: safeErrorDetail(e1 ?? new Error("Incident insert returned no row.")),
+    });
     return ctx.response(apiError(500, "DB_ERROR", "Could not record the incident.", { requestId: ctx.requestId }));
   }
 
@@ -146,10 +148,16 @@ export async function POST(req: Request) {
         severity: object.severity,
       });
       const embedding = await embed(signature, deadline.signal);
-      await sb.from("incidents").update({
+      const { error: signatureError } = await sb.from("incidents").update({
         signature,
         embedding: embeddingForDatabase(embedding),
-      }).eq("id", inc.id);
+      }).eq("id", inc.id).abortSignal(deadline.signal);
+      if (signatureError) {
+        ctx.log("warn", "webhook_signature_update_failed", {
+          error: safeErrorDetail(signatureError),
+          incident_id: inc.id,
+        });
+      }
 
       const { data: anaRow, error: e2 } = await sb.from("analyses").insert(
         buildAnalysisRecord({
@@ -161,28 +169,27 @@ export async function POST(req: Request) {
           latencyMs: latency_ms,
           usage: { tokens_in, tokens_out, cost_usd },
         }),
-      ).select("id").single();
-      if (e2) {
+      ).select("id").abortSignal(deadline.signal).single();
+      if (e2 || !anaRow) {
+        const analysisError = e2 ?? new Error("Analysis insert returned no row.");
         ctx.log("error", "webhook_analysis_insert_failed", {
           incident_id: inc.id,
-          error: safeErrorDetail(e2),
+          error: safeErrorDetail(analysisError),
         });
-        throw e2;
+        throw analysisError;
       }
-      if (anaRow) {
-        try {
-          await recordRetrievedChunks(anaRow.id, retrieved.chunks, { abortSignal: deadline.signal });
-        } catch (auditError) {
-          ctx.log("warn", "webhook_kb_audit_write_failed", {
-            error: safeErrorDetail(auditError),
-            analysis_id: anaRow.id,
-            incident_id: inc.id,
-          });
-        }
+      try {
+        await recordRetrievedChunks(anaRow.id, retrieved.chunks, { abortSignal: deadline.signal });
+      } catch (auditError) {
+        ctx.log("warn", "webhook_kb_audit_write_failed", {
+          error: safeErrorDetail(auditError),
+          analysis_id: anaRow.id,
+          incident_id: inc.id,
+        });
       }
       ctx.log("info", "webhook_analysis_completed", {
         incident_id: inc.id,
-        analysis_id: anaRow?.id,
+        analysis_id: anaRow.id,
         latency_ms,
         tokens_in,
         tokens_out,
@@ -196,7 +203,7 @@ export async function POST(req: Request) {
       });
       // Don't lose the failure — log it on the incident itself so /incidents/[id] shows it
       try {
-        await sb.from("analyses").insert({
+        const { error: failureWriteError } = await sb.from("analyses").insert({
           incident_id: inc.id,
           model: ANALYSIS_MODEL,
           prompt_version: DEFAULT_PROMPT_VERSION,
@@ -210,7 +217,13 @@ export async function POST(req: Request) {
           postmortem_draft: "n/a",
           follow_ups: [],
         });
-      } catch { /* swallow — we tried */ }
+        if (failureWriteError) throw failureWriteError;
+      } catch (failureWriteError) {
+        ctx.log("error", "webhook_failure_record_failed", {
+          error: safeErrorDetail(failureWriteError),
+          incident_id: inc.id,
+        });
+      }
     }
   });
 
