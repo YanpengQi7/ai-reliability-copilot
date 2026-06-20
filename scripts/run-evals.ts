@@ -16,12 +16,13 @@ import { RUBRIC_VERSION, overallScore } from "../src/lib/eval/rubric";
 import { calcCost, normalizeUsage } from "../src/lib/cost";
 import { buildAnalysisRecord } from "../src/lib/analysisRecord";
 import { buildIncidentRecord } from "../src/lib/incidentRecord";
+import { parseEvalRepeats } from "../src/lib/eval/runConfig";
 
 const VERSIONS: PromptVersion[] = ["v1", "v2", "v3"];
 const LANGUAGES: OutputLanguage[] = ["en", "zh"];
 // Repeats per cell — lets us report mean ± std and tell a real gap from run-to-run noise.
 // Override with EVAL_REPEATS=1 for a quick smoke run.
-const REPEATS = Math.max(1, parseInt(process.env.EVAL_REPEATS ?? "3", 10));
+const REPEATS = parseEvalRepeats(process.env.EVAL_REPEATS);
 
 function mean(xs: number[]): number {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN;
@@ -47,6 +48,7 @@ async function main() {
   const sb = createClient(url, key, { auth: { persistSession: false } });
 
   const results: Array<{ scenario: string; version: PromptVersion; language: OutputLanguage; overall: number; latency_ms: number }> = [];
+  let failedRuns = 0;
 
   for (const scenario of SCENARIOS) {
     for (const version of VERSIONS) {
@@ -136,6 +138,7 @@ async function main() {
           console.log(`  overall: ${overall} · spec:${scores.specificity.score} saf:${scores.safety.score} act:${scores.actionability.score} dom:${scores.domain_correctness.score} comp:${scores.completeness.score}`);
           results.push({ scenario: scenario.slug, version, language, overall, latency_ms });
         } catch (err) {
+          failedRuns += 1;
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`  ✗ ${msg}`);
         }
@@ -185,6 +188,11 @@ async function main() {
       const verdict = Math.abs(delta) > pooled ? "stands out" : "inside noise";
       console.log(`${VERSIONS[i]} − ${VERSIONS[j]}: ${delta >= 0 ? "+" : ""}${delta.toFixed(3)}  (pooled std ${pooled.toFixed(3)} → ${verdict})`);
     }
+  }
+
+  if (failedRuns > 0) {
+    console.error(`\n✗ ${failedRuns} evaluation run(s) failed; results are incomplete.`);
+    process.exitCode = 1;
   }
 }
 
