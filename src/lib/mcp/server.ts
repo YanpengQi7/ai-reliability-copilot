@@ -26,7 +26,7 @@ import { AnalysisSchema } from "@/lib/schema";
 import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { embed, buildSignature } from "@/lib/embeddings";
-import { INPUT_LIMITS } from "@/lib/requestSafety";
+import { INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
 import { withTelemetry } from "./telemetry";
 
 const SEVERITY_RUBRIC = `# Severity rubric (from src/lib/prompts.ts SYSTEM_PROMPT_V2)
@@ -72,6 +72,10 @@ export const SAVE_INCIDENT_INPUT_SCHEMA = {
   client_model: z.string().max(INPUT_LIMITS.shortText).optional()
     .describe("Name of the LLM that generated this analysis (e.g. claude-opus-4-5), recorded for audit"),
 };
+
+export function sanitizeMcpIncidentInput<T>(input: T): T {
+  return redactSensitiveValue(input);
+}
 
 export function buildMcpServer() {
   const server = new McpServer({
@@ -196,20 +200,21 @@ export function buildMcpServer() {
       (a) => `service=${a.service ?? "?"} title=${a.title ?? "?"} model=${a.client_model ?? "?"}`,
       async (input) => {
       if (!hasSupabase()) return { content: [{ type: "text", text: "Database not configured (Supabase env missing)." }], isError: true };
+      const safeInput = sanitizeMcpIncidentInput(input);
       const sb = supabaseAdmin();
       const signature = buildSignature({
-        title: input.title,
-        service: input.service,
-        symptoms: input.symptoms,
-        summary: input.analysis.summary,
-        severity: input.analysis.severity,
+        title: safeInput.title,
+        service: safeInput.service,
+        symptoms: safeInput.symptoms,
+        summary: safeInput.analysis.summary,
+        severity: safeInput.analysis.severity,
       });
       const embedding = await embed(signature);
       const { data: inc, error: e1 } = await sb.from("incidents").insert(buildIncidentRecord({
-        title: input.title,
-        service: input.service,
-        symptoms: input.symptoms,
-        rawContext: input.raw_context,
+        title: safeInput.title,
+        service: safeInput.service,
+        symptoms: safeInput.symptoms,
+        rawContext: safeInput.raw_context,
         signature,
         embedding,
       })).select("id").single();
@@ -225,10 +230,10 @@ export function buildMcpServer() {
       const { data: ana, error: e2 } = await sb.from("analyses").insert(
         buildAnalysisRecord({
           incidentId: inc.id,
-          analysis: input.analysis,
-          model: input.client_model ?? "external-mcp-client",
+          analysis: safeInput.analysis,
+          model: safeInput.client_model ?? "external-mcp-client",
           promptVersion: "mcp",
-          outputLanguage: input.output_language ?? "en",
+          outputLanguage: safeInput.output_language ?? "en",
         }),
       ).select("id").single();
       if (e2 || !ana) {
