@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { generateObject } from "ai";
 import { AnalysisSchema } from "@/lib/schema";
 import { deepseek, ANALYSIS_MODEL } from "@/lib/ai";
-import { getSystemPrompt, buildUserPrompt, DEFAULT_PROMPT_VERSION, type PromptVersion } from "@/lib/prompts";
+import { getSystemPrompt, buildUserPrompt } from "@/lib/prompts";
 import { SCENARIOS } from "@/lib/scenarios";
 import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
@@ -15,6 +15,7 @@ import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { classifyProviderDeadlineFailure, createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
 import { buildIncidentRecord } from "@/lib/incidentRecord";
+import { parseAnalysisOptions } from "@/lib/analysisOptions";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -23,10 +24,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   const ctx = createRequestContext(req, "run_scenario");
   const { slug } = await params;
   const url = new URL(req.url);
-  const requested = url.searchParams.get("version");
-  const version: PromptVersion = requested === "v1" || requested === "v2" || requested === "v3" ? requested : DEFAULT_PROMPT_VERSION;
-  const langParam = url.searchParams.get("language");
-  const language: "en" | "zh" = langParam === "zh" ? "zh" : "en";
+  const options = parseAnalysisOptions(url.searchParams);
+  if (!options.ok) {
+    return ctx.response(apiError(400, "VALIDATION_ERROR", options.message, { requestId: ctx.requestId }));
+  }
+  const { version, language } = options;
   if (!process.env.DEEPSEEK_API_KEY) {
     return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY not set", { requestId: ctx.requestId }));
   }
