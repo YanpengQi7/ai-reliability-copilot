@@ -58,15 +58,19 @@ export default async function EvalsPage() {
   }
 
   const sb = supabaseAdmin();
-  const { data: evals } = await sb.from("evaluations").select("*").order("created_at", { ascending: false }).limit(200);
+  const { data: evals, error: evalError } = await sb.from("evaluations").select("*").order("created_at", { ascending: false }).limit(200);
+  if (evalError) throw evalError;
   const rows = (evals ?? []) as EvalRow[];
   const analysisIds = [...new Set(rows.map((r) => r.analysis_id))];
-  const { data: analyses } = analysisIds.length
+  const analysesResult = analysisIds.length
     ? await sb.from("analyses").select("id, incident_id, prompt_version, output_language, severity, model, tokens_in, tokens_out, cost_usd, latency_ms").in("id", analysisIds)
-    : { data: [] };
+    : { data: [], error: null };
+  if (analysesResult.error) throw analysesResult.error;
+  const analyses = analysesResult.data;
 
   // Cost rollup across all analyses (not just judged ones)
-  const { data: costRows } = await sb.from("analyses").select("model, tokens_in, tokens_out, cost_usd, latency_ms");
+  const { data: costRows, error: costError } = await sb.from("analyses").select("model, tokens_in, tokens_out, cost_usd, latency_ms");
+  if (costError) throw costError;
   type CostRow = { model: string | null; tokens_in: number | null; tokens_out: number | null; cost_usd: string | number | null; latency_ms: number | null };
   const costAll = (costRows ?? []) as CostRow[];
   const costWithData = costAll.filter((r) => r.cost_usd != null);
@@ -79,9 +83,11 @@ export default async function EvalsPage() {
   for (const a of (analyses ?? []) as AnalysisLite[]) aMap.set(a.id, a);
 
   const incidentIds = [...new Set((analyses ?? []).map((a: AnalysisLite) => a.incident_id))];
-  const { data: incidents } = incidentIds.length
+  const incidentsResult = incidentIds.length
     ? await sb.from("incidents").select("id, title").in("id", incidentIds)
-    : { data: [] };
+    : { data: [], error: null };
+  if (incidentsResult.error) throw incidentsResult.error;
+  const incidents = incidentsResult.data;
   const iMap = new Map<string, IncidentLite>();
   for (const i of (incidents ?? []) as IncidentLite[]) iMap.set(i.id, i);
 

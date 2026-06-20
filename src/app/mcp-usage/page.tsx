@@ -37,11 +37,12 @@ export default async function McpUsagePage() {
   // because the whole page is `force-dynamic` and we WANT a fresh wall-clock per request.
   // eslint-disable-next-line react-hooks/purity
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: rows7d } = await sb
+  const { data: rows7d, error: usageError } = await sb
     .from("mcp_tool_calls")
     .select("*")
     .gte("created_at", since)
     .order("created_at", { ascending: false });
+  if (usageError) throw usageError;
   const rows = (rows7d ?? []) as Row[];
 
   // Aggregate by tool
