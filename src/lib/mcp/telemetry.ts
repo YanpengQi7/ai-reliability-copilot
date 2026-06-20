@@ -40,7 +40,7 @@ export async function logToolCall(payload: LogPayload): Promise<void> {
   if (!hasSupabase()) return;
   try {
     const sb = supabaseAdmin();
-    await sb.from("mcp_tool_calls").insert({
+    const { error } = await sb.from("mcp_tool_calls").insert({
       tool_name: payload.tool_name,
       ok: payload.ok,
       latency_ms: payload.latency_ms,
@@ -49,6 +49,7 @@ export async function logToolCall(payload: LogPayload): Promise<void> {
       input_summary: payload.input_summary ? safeErrorDetail(payload.input_summary, 200) : null,
       result_size_bytes: payload.result_size_bytes ?? null,
     });
+    if (error) throw error;
   } catch (e) {
     console.error("[mcp telemetry] failed:", safeErrorDetail(e));
   }
