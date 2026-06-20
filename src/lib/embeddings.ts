@@ -43,9 +43,11 @@ export async function embed(text: string, requestSignal?: AbortSignal): Promise<
     );
     return res.data[0]?.embedding ?? null;
   } catch (err) {
-    console.error("[embed] failed:", safeErrorDetail(err), {
-      timed_out: deadline.timeoutSignal.aborted,
-    });
+    if (!requestSignal?.aborted) {
+      console.error("[embed] failed:", safeErrorDetail(err), {
+        timed_out: deadline.timeoutSignal.aborted,
+      });
+    }
     return null;
   }
 }

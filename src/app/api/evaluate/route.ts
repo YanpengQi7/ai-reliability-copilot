@@ -3,7 +3,7 @@ import { z } from "zod";
 import { judge } from "@/lib/eval/judge";
 import { RUBRIC_VERSION, overallScore } from "@/lib/eval/rubric";
 import { supabaseAdmin } from "@/lib/supabase";
-import { hasSupabase } from "@/lib/db";
+import { getAnalysis, hasSupabase } from "@/lib/db";
 import { JUDGE_MODEL } from "@/lib/ai";
 import { SCENARIOS } from "@/lib/scenarios";
 import { apiError } from "@/lib/http";
@@ -50,8 +50,18 @@ export async function POST(req: Request) {
   }
   const { analysis_id, scenario_slug } = parsed.data;
   const sb = supabaseAdmin();
-  const { data: a, error: e0 } = await sb.from("analyses").select("*").eq("id", analysis_id).single();
-  if (e0 || !a) {
+  let a: Awaited<ReturnType<typeof getAnalysis>>;
+  try {
+    a = await getAnalysis(analysis_id, { abortSignal: req.signal });
+  } catch (error) {
+    if (req.signal.aborted) {
+      ctx.log("warn", "evaluation_analysis_query_aborted", { analysis_id });
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Analysis query was cancelled.", { requestId: ctx.requestId }));
+    }
+    ctx.log("error", "evaluation_analysis_query_failed", { error: safeErrorDetail(error), analysis_id });
+    return ctx.response(apiError(500, "DB_ERROR", "Could not load the analysis.", { requestId: ctx.requestId }));
+  }
+  if (!a) {
     return ctx.response(apiError(404, "NOT_FOUND", "analysis not found", { requestId: ctx.requestId }));
   }
 
@@ -99,8 +109,13 @@ export async function POST(req: Request) {
       judge_notes: scores.overall_notes,
     })
     .select("id")
+    .abortSignal(req.signal)
     .single();
   if (e1 || !row) {
+    if (req.signal.aborted) {
+      ctx.log("warn", "evaluation_write_aborted", { analysis_id });
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Evaluation save was cancelled.", { requestId: ctx.requestId }));
+    }
     ctx.log("error", "evaluation_insert_failed", {
       error: safeErrorDetail(e1 ?? new Error("Evaluation insert returned no row.")),
       analysis_id,

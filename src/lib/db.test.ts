@@ -4,10 +4,23 @@ const mocks = vi.hoisted(() => ({ supabaseAdmin: vi.fn() }));
 
 vi.mock("./supabase", () => ({ supabaseAdmin: mocks.supabaseAdmin }));
 
-import { getIncidentWithAnalyses } from "./db";
+import { getAnalysis, getIncident, getIncidentWithAnalyses } from "./db";
 
 const originalUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+beforeEach(() => {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
+  mocks.supabaseAdmin.mockReset();
+});
+
+afterEach(() => {
+  if (originalUrl === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+  else process.env.NEXT_PUBLIC_SUPABASE_URL = originalUrl;
+  if (originalKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  else process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
+});
 
 function mockClient(
   incidentResult: unknown,
@@ -29,19 +42,6 @@ function mockClient(
 }
 
 describe("getIncidentWithAnalyses", () => {
-  beforeEach(() => {
-    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
-    process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
-    mocks.supabaseAdmin.mockReset();
-  });
-
-  afterEach(() => {
-    if (originalUrl === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
-    else process.env.NEXT_PUBLIC_SUPABASE_URL = originalUrl;
-    if (originalKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-    else process.env.SUPABASE_SERVICE_ROLE_KEY = originalKey;
-  });
-
   it("returns null only when the incident does not exist", async () => {
     const { order } = mockClient({ data: null, error: null });
 
@@ -73,5 +73,63 @@ describe("getIncidentWithAnalyses", () => {
 
     expect(incidentAbortSignal).toHaveBeenCalledWith(signal);
     expect(analysisAbortSignal).toHaveBeenCalledWith(signal);
+  });
+});
+
+describe("getIncident", () => {
+  it("returns null only when the incident does not exist", async () => {
+    mockClient({ data: null, error: null });
+
+    await expect(getIncident("missing")).resolves.toBeNull();
+  });
+
+  it("propagates database failures", async () => {
+    const error = new Error("database unavailable");
+    mockClient({ data: null, error });
+
+    await expect(getIncident("incident-1")).rejects.toBe(error);
+  });
+
+  it("propagates request cancellation to the database query", async () => {
+    const incident = { id: "incident-1", raw_context: "context" };
+    const signal = new AbortController().signal;
+    const { incidentAbortSignal } = mockClient({ data: incident, error: null });
+
+    await expect(getIncident(incident.id, { abortSignal: signal })).resolves.toEqual(incident);
+    expect(incidentAbortSignal).toHaveBeenCalledWith(signal);
+  });
+});
+
+describe("getAnalysis", () => {
+  function mockAnalysisQuery(result: unknown) {
+    const maybeSingle = vi.fn().mockResolvedValue(result);
+    const abortSignal = vi.fn();
+    const eq = vi.fn(() => ({ abortSignal, maybeSingle }));
+    mocks.supabaseAdmin.mockReturnValue({
+      from: vi.fn(() => ({ select: vi.fn(() => ({ eq })) })),
+    });
+    return { abortSignal };
+  }
+
+  it("returns null only when the analysis does not exist", async () => {
+    mockAnalysisQuery({ data: null, error: null });
+
+    await expect(getAnalysis("missing")).resolves.toBeNull();
+  });
+
+  it("propagates database failures", async () => {
+    const error = new Error("database unavailable");
+    mockAnalysisQuery({ data: null, error });
+
+    await expect(getAnalysis("analysis-1")).rejects.toBe(error);
+  });
+
+  it("propagates request cancellation to the database query", async () => {
+    const analysis = { id: "analysis-1", incident_id: "incident-1" };
+    const signal = new AbortController().signal;
+    const { abortSignal } = mockAnalysisQuery({ data: analysis, error: null });
+
+    await expect(getAnalysis(analysis.id, { abortSignal: signal })).resolves.toEqual(analysis);
+    expect(abortSignal).toHaveBeenCalledWith(signal);
   });
 });

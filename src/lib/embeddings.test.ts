@@ -38,7 +38,7 @@ describe("embed", () => {
 
   it("propagates request cancellation and preserves the null fallback", async () => {
     const controller = new AbortController();
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
     mocks.create.mockImplementation(async (_body, options) => {
       await new Promise((_resolve, reject) => {
         options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
@@ -49,6 +49,20 @@ describe("embed", () => {
     controller.abort();
 
     await expect(result).resolves.toBeNull();
+    expect(errorLog).not.toHaveBeenCalled();
+  });
+
+  it("logs provider failures while preserving the null fallback", async () => {
+    const error = new Error("provider unavailable");
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.create.mockRejectedValue(error);
+
+    await expect(embed("incident signature")).resolves.toBeNull();
+    expect(errorLog).toHaveBeenCalledWith(
+      "[embed] failed:",
+      error.message,
+      { timed_out: false },
+    );
   });
 });
 

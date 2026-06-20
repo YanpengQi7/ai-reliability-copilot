@@ -102,9 +102,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       embedding,
     }))
     .select("id")
+    .abortSignal(req.signal)
     .single();
-  if (e1) {
-    ctx.log("error", "scenario_incident_insert_failed", { error: safeErrorDetail(e1), scenario_slug: slug });
+  if (e1 || !inc) {
+    if (req.signal.aborted) {
+      ctx.log("warn", "scenario_incident_write_aborted", { scenario_slug: slug });
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Scenario save was cancelled.", { requestId: ctx.requestId }));
+    }
+    ctx.log("error", "scenario_incident_insert_failed", {
+      error: safeErrorDetail(e1 ?? new Error("Incident insert returned no row.")),
+      scenario_slug: slug,
+    });
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the scenario run.", { requestId: ctx.requestId }));
   }
 
@@ -118,18 +126,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       latencyMs: latency,
       usage: { tokens_in, tokens_out, cost_usd },
     }),
-  ).select("id").single();
+  ).select("id").abortSignal(req.signal).single();
   if (e2 || !anaRow) {
     const { error: cleanupError } = await sb.from("incidents").delete().eq("id", inc.id);
-    ctx.log("error", "scenario_analysis_insert_failed", {
+    const fields = {
       error: safeErrorDetail(e2 ?? new Error("Analysis insert returned no row.")),
       cleanup_error: cleanupError ? safeErrorDetail(cleanupError) : undefined,
       incident_id: inc.id,
       scenario_slug: slug,
-    });
+    };
+    if (req.signal.aborted) {
+      ctx.log("warn", "scenario_analysis_write_aborted", fields);
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Scenario analysis save was cancelled.", { requestId: ctx.requestId }));
+    }
+    ctx.log("error", "scenario_analysis_insert_failed", fields);
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the scenario analysis.", { requestId: ctx.requestId }));
   }
-  await recordRetrievedChunks(anaRow.id, retrieved.chunks);
+  try {
+    await recordRetrievedChunks(anaRow.id, retrieved.chunks, { abortSignal: req.signal });
+  } catch (error) {
+    if (!req.signal.aborted) {
+      ctx.log("warn", "scenario_kb_audit_write_failed", {
+        error: safeErrorDetail(error),
+        analysis_id: anaRow.id,
+        incident_id: inc.id,
+        scenario_slug: slug,
+      });
+    }
+  }
 
   return ctx.response(NextResponse.json({ incident_id: inc.id, latency_ms: latency }), {
     incident_id: inc.id,

@@ -89,9 +89,16 @@ export async function POST(req: NextRequest) {
       embedding,
     }))
     .select("id")
+    .abortSignal(req.signal)
     .single();
-  if (e1) {
-    ctx.log("error", "incident_insert_failed", { error: safeErrorDetail(e1) });
+  if (e1 || !inc) {
+    if (req.signal.aborted) {
+      ctx.log("warn", "incident_write_aborted");
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Incident save was cancelled.", { requestId: ctx.requestId }));
+    }
+    ctx.log("error", "incident_insert_failed", {
+      error: safeErrorDetail(e1 ?? new Error("Incident insert returned no row.")),
+    });
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the incident.", { requestId: ctx.requestId }));
   }
 
@@ -107,11 +114,21 @@ export async function POST(req: NextRequest) {
       usage: input.usage,
     }))
     .select("id")
+    .abortSignal(req.signal)
     .single();
-  if (e2) {
+  if (e2 || !ana) {
     // Keep the two-step write atomic from the user's perspective.
-    await sb.from("incidents").delete().eq("id", inc.id);
-    ctx.log("error", "analysis_insert_failed", { error: safeErrorDetail(e2), incident_id: inc.id });
+    const { error: cleanupError } = await sb.from("incidents").delete().eq("id", inc.id);
+    const fields = {
+      error: safeErrorDetail(e2 ?? new Error("Analysis insert returned no row.")),
+      cleanup_error: cleanupError ? safeErrorDetail(cleanupError) : undefined,
+      incident_id: inc.id,
+    };
+    if (req.signal.aborted) {
+      ctx.log("warn", "analysis_write_aborted", fields);
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Analysis save was cancelled.", { requestId: ctx.requestId }));
+    }
+    ctx.log("error", "analysis_insert_failed", fields);
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the analysis.", { requestId: ctx.requestId }));
   }
 
@@ -121,12 +138,14 @@ export async function POST(req: NextRequest) {
   try {
     const queryText = [input.title, input.service, input.symptoms, input.raw_context].filter(Boolean).join(" ").slice(0, 4000);
     const r = await retrieveContext(queryText, { limit: 5, abortSignal: req.signal });
-    await recordRetrievedChunks(ana.id, r.chunks);
+    await recordRetrievedChunks(ana.id, r.chunks, { abortSignal: req.signal });
   } catch (err) {
-    ctx.log("warn", "kb_audit_write_failed", {
-      error: safeErrorDetail(err),
-      analysis_id: ana.id,
-    });
+    if (!req.signal.aborted) {
+      ctx.log("warn", "kb_audit_write_failed", {
+        error: safeErrorDetail(err),
+        analysis_id: ana.id,
+      });
+    }
   }
 
   return ctx.response(NextResponse.json({ persisted: true, incident_id: inc.id, analysis_id: ana.id }), {

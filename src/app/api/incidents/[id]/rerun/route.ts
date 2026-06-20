@@ -4,7 +4,7 @@ import { AnalysisSchema, type Analysis } from "@/lib/schema";
 import { deepseek, ANALYSIS_MODEL } from "@/lib/ai";
 import { getSystemPrompt, buildUserPrompt, DEFAULT_PROMPT_VERSION, type PromptVersion } from "@/lib/prompts";
 import { supabaseAdmin } from "@/lib/supabase";
-import { hasSupabase } from "@/lib/db";
+import { getIncident, hasSupabase } from "@/lib/db";
 import { calcCost, normalizeUsage } from "@/lib/cost";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
@@ -39,8 +39,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
   const sb = supabaseAdmin();
-  const { data: incident, error: e0 } = await sb.from("incidents").select("*").eq("id", id).single();
-  if (e0 || !incident) {
+  let incident: Awaited<ReturnType<typeof getIncident>>;
+  try {
+    incident = await getIncident(id, { abortSignal: req.signal });
+  } catch (error) {
+    if (req.signal.aborted) {
+      ctx.log("warn", "rerun_incident_query_aborted", { incident_id: id });
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Incident query was cancelled.", { requestId: ctx.requestId }));
+    }
+    ctx.log("error", "rerun_incident_query_failed", { error: safeErrorDetail(error), incident_id: id });
+    return ctx.response(apiError(500, "DB_ERROR", "Could not load the incident.", { requestId: ctx.requestId }));
+  }
+  if (!incident) {
     return ctx.response(apiError(404, "NOT_FOUND", "incident not found", { requestId: ctx.requestId }));
   }
 
@@ -94,15 +104,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       latencyMs: latency,
       usage: { tokens_in, tokens_out, cost_usd },
     }),
-  ).select("id").single();
+  ).select("id").abortSignal(req.signal).single();
   if (e1 || !anaRow) {
+    if (req.signal.aborted) {
+      ctx.log("warn", "rerun_analysis_write_aborted", { incident_id: id });
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Analysis save was cancelled.", { requestId: ctx.requestId }));
+    }
     ctx.log("error", "rerun_analysis_insert_failed", {
       error: safeErrorDetail(e1 ?? new Error("Analysis insert returned no row.")),
       incident_id: id,
     });
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the analysis.", { requestId: ctx.requestId }));
   }
-  await recordRetrievedChunks(anaRow.id, retrieved.chunks);
+  try {
+    await recordRetrievedChunks(anaRow.id, retrieved.chunks, { abortSignal: req.signal });
+  } catch (error) {
+    if (!req.signal.aborted) {
+      ctx.log("warn", "rerun_kb_audit_write_failed", {
+        error: safeErrorDetail(error),
+        analysis_id: anaRow.id,
+        incident_id: id,
+      });
+    }
+  }
   return ctx.response(NextResponse.json({ ok: true, latency_ms: latency }), {
     incident_id: id,
     prompt_version: version,

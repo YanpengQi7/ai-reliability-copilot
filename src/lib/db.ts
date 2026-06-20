@@ -47,6 +47,24 @@ export async function listIncidents(limit = 50): Promise<IncidentRow[]> {
   return data as IncidentRow[];
 }
 
+export async function getIncident(id: string, options: { abortSignal?: AbortSignal } = {}): Promise<IncidentRow | null> {
+  if (!hasSupabase()) return null;
+  const query = supabaseAdmin().from("incidents").select("*").eq("id", id);
+  if (options.abortSignal) query.abortSignal(options.abortSignal);
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return data as IncidentRow | null;
+}
+
+export async function getAnalysis(id: string, options: { abortSignal?: AbortSignal } = {}): Promise<AnalysisRow | null> {
+  if (!hasSupabase()) return null;
+  const query = supabaseAdmin().from("analyses").select("*").eq("id", id);
+  if (options.abortSignal) query.abortSignal(options.abortSignal);
+  const { data, error } = await query.maybeSingle();
+  if (error) throw error;
+  return data as AnalysisRow | null;
+}
+
 export async function getIncidentWithAnalyses(id: string, options: { abortSignal?: AbortSignal } = {}) {
   if (!hasSupabase()) return null;
   const sb = supabaseAdmin();

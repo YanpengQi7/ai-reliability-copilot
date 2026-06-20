@@ -197,10 +197,14 @@ export async function retrieveContext(
 /**
  * Persist which chunks were used for an analysis (audit trail).
  */
-export async function recordRetrievedChunks(analysisId: string, chunks: RetrievedChunk[]) {
+export async function recordRetrievedChunks(
+  analysisId: string,
+  chunks: RetrievedChunk[],
+  options: { abortSignal?: AbortSignal } = {},
+) {
   if (!hasSupabase() || chunks.length === 0) return;
   const sb = supabaseAdmin();
-  await sb.from("analysis_kb_chunks").insert(
+  const query = sb.from("analysis_kb_chunks").insert(
     chunks.map((c, i) => ({
       analysis_id: analysisId,
       chunk_id: c.chunk_id,
@@ -208,6 +212,9 @@ export async function recordRetrievedChunks(analysisId: string, chunks: Retrieve
       rank: i,
     })),
   );
+  if (options.abortSignal) query.abortSignal(options.abortSignal);
+  const { error } = await query;
+  if (error) throw error;
 }
 
 /**

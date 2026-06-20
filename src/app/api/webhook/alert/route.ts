@@ -169,7 +169,17 @@ export async function POST(req: Request) {
         });
         throw e2;
       }
-      if (anaRow) await recordRetrievedChunks(anaRow.id, retrieved.chunks);
+      if (anaRow) {
+        try {
+          await recordRetrievedChunks(anaRow.id, retrieved.chunks, { abortSignal: deadline.signal });
+        } catch (auditError) {
+          ctx.log("warn", "webhook_kb_audit_write_failed", {
+            error: safeErrorDetail(auditError),
+            analysis_id: anaRow.id,
+            incident_id: inc.id,
+          });
+        }
+      }
       ctx.log("info", "webhook_analysis_completed", {
         incident_id: inc.id,
         analysis_id: anaRow?.id,
