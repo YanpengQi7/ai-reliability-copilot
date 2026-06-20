@@ -33,10 +33,11 @@ import { deepseek, resolveModel, ANALYSIS_MODEL, JUDGE_MODEL, JUDGE_MODEL_CROSS 
 import { getSystemPrompt, buildUserPrompt, type PromptVersion, type OutputLanguage } from "../src/lib/prompts";
 import { judge } from "../src/lib/eval/judge";
 import { overallScore, type RubricDim } from "../src/lib/eval/rubric";
+import { parseEvalRepeats } from "../src/lib/eval/runConfig";
 
 const VERSION = (process.env.EVAL_VERSION as PromptVersion) ?? "v3";
 const LANGUAGES: OutputLanguage[] = ["en", "zh"];
-const REPEATS = Math.max(1, parseInt(process.env.EVAL_REPEATS ?? "2", 10));
+const REPEATS = parseEvalRepeats(process.env.EVAL_REPEATS, 2);
 const JUDGE_A = JUDGE_MODEL; // same family as the generator
 const JUDGE_B = JUDGE_MODEL_CROSS; // independent vendor
 
@@ -187,6 +188,12 @@ async function main() {
   };
   writeFileSync("notes/generated/crossjudge-latest.json", JSON.stringify(out, null, 2));
   console.log(`\nWrote notes/generated/crossjudge-latest.json`);
+
+  const expectedRows = SCENARIOS.length * LANGUAGES.length * REPEATS;
+  if (rows.length < expectedRows) {
+    console.error(`\n✗ ${expectedRows - rows.length} cross-judge run(s) failed; results are incomplete.`);
+    process.exitCode = 1;
+  }
 }
 
 main();

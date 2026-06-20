@@ -22,6 +22,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 import { writeFileSync } from "node:fs";
+import { parseEvalRepeats } from "../src/lib/eval/runConfig";
 import { generateObject } from "ai";
 import { SCENARIOS, type Scenario } from "../src/lib/scenarios";
 import { AnalysisSchema, type Analysis } from "../src/lib/schema";
@@ -126,7 +127,7 @@ async function main() {
   const quick = args.includes("--quick");
   const languages: OutputLanguage[] = args.includes("--en") || quick ? ["en"] : ["en", "zh"];
   const scenarios = quick ? SCENARIOS.slice(0, 1) : SCENARIOS;
-  const repeats = quick ? 1 : Math.max(1, parseInt(process.env.EVAL_REPEATS ?? "2", 10));
+  const repeats = quick ? 1 : parseEvalRepeats(process.env.EVAL_REPEATS, 2);
   const modes: Mode[] = ["single", "agentic"];
 
   if (!process.env.DEEPSEEK_API_KEY) {
@@ -153,6 +154,8 @@ async function main() {
       }
     }
   }
+
+  if (rows.length === 0) throw new Error("No successful agentic evaluation rows — nothing to report.");
 
   // ── Report ──────────────────────────────────────────────────────────
   const of = (f: (r: Row) => boolean) => rows.filter(f);
@@ -211,6 +214,12 @@ async function main() {
   const out = `notes/generated/eval-agentic-latest.json`;
   writeFileSync(out, JSON.stringify({ generated_at: new Date().toISOString(), repeats, rows }, null, 2));
   console.log(`\nRaw rows written to ${out}`);
+
+  const expectedRows = scenarios.length * modes.length * languages.length * repeats;
+  if (rows.length < expectedRows) {
+    console.error(`\n✗ ${expectedRows - rows.length} agentic evaluation run(s) failed; results are incomplete.`);
+    process.exitCode = 1;
+  }
 }
 
 main().catch((e) => {

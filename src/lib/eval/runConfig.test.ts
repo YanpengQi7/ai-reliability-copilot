@@ -4,6 +4,7 @@ import { DEFAULT_EVAL_REPEATS, MAX_EVAL_REPEATS, parseEvalRepeats } from "./runC
 describe("parseEvalRepeats", () => {
   it("uses the calibrated default and accepts the configured bounds", () => {
     expect(parseEvalRepeats(undefined)).toBe(DEFAULT_EVAL_REPEATS);
+    expect(parseEvalRepeats(undefined, 2)).toBe(2);
     expect(parseEvalRepeats("1")).toBe(1);
     expect(parseEvalRepeats(String(MAX_EVAL_REPEATS))).toBe(MAX_EVAL_REPEATS);
   });
