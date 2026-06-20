@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ supabaseAdmin: vi.fn() }));
 
 vi.mock("./supabase", () => ({ supabaseAdmin: mocks.supabaseAdmin }));
 
-import { recordRetrievedChunks, type RetrievedChunk } from "./kb";
+import { ingestDocument, recordRetrievedChunks, type RetrievedChunk } from "./kb";
 
 const originalUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -68,5 +68,47 @@ describe("recordRetrievedChunks", () => {
   it("does not open a database client when there are no chunks", async () => {
     await expect(recordRetrievedChunks("analysis-1", [])).resolves.toBeUndefined();
     expect(mocks.supabaseAdmin).not.toHaveBeenCalled();
+  });
+});
+
+describe("ingestDocument", () => {
+  const input = {
+    source_path: "runbooks/worker.md",
+    kind: "runbook" as const,
+    raw_text: "Restart the unhealthy worker after checking the queue depth.",
+  };
+
+  it("stops when the existing-document lookup fails", async () => {
+    const error = new Error("lookup unavailable");
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error });
+    const eq = vi.fn(() => ({ maybeSingle }));
+    const select = vi.fn(() => ({ eq }));
+    mocks.supabaseAdmin.mockReturnValue({
+      from: vi.fn(() => ({ select })),
+    });
+
+    await expect(ingestDocument(input)).rejects.toBe(error);
+  });
+
+  it("stops when old chunks cannot be deleted", async () => {
+    const error = new Error("chunk delete unavailable");
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const selectExisting = vi.fn(() => ({
+      eq: vi.fn(() => ({ maybeSingle })),
+    }));
+    const single = vi.fn().mockResolvedValue({ data: { id: "document-1" }, error: null });
+    const upsert = vi.fn(() => ({
+      select: vi.fn(() => ({ single })),
+    }));
+    const deleteChunks = vi.fn(() => ({
+      eq: vi.fn().mockResolvedValue({ error }),
+    }));
+    mocks.supabaseAdmin.mockReturnValue({
+      from: vi.fn((table: string) => table === "kb_documents"
+        ? { select: selectExisting, upsert }
+        : { delete: deleteChunks }),
+    });
+
+    await expect(ingestDocument(input)).rejects.toBe(error);
   });
 });

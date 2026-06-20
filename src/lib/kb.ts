@@ -88,11 +88,12 @@ export async function ingestDocument(input: {
   const sb = supabaseAdmin();
   const hash = hashContent(input.raw_text);
 
-  const { data: existing } = await sb
+  const { data: existing, error: lookupError } = await sb
     .from("kb_documents")
     .select("id, content_hash")
     .eq("source_path", input.source_path)
     .maybeSingle();
+  if (lookupError) throw lookupError;
 
   if (existing && existing.content_hash === hash) {
     return { document_id: existing.id, chunks_written: 0, skipped: true };
@@ -115,10 +116,11 @@ export async function ingestDocument(input: {
     )
     .select("id")
     .single();
-  if (e1) throw e1;
+  if (e1 || !doc) throw e1 ?? new Error("Knowledge document upsert returned no row.");
 
   // Delete old chunks (cascade off — explicit)
-  await sb.from("kb_chunks").delete().eq("document_id", doc.id);
+  const { error: deleteError } = await sb.from("kb_chunks").delete().eq("document_id", doc.id);
+  if (deleteError) throw deleteError;
 
   // Chunk + embed + insert
   const chunks = chunkMarkdown(input.raw_text);
