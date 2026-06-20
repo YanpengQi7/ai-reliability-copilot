@@ -5,6 +5,7 @@
 //
 // Response shape:
 //   200 { incident, analysis: AnalysisRow | null, url: string }
+//   400 { error: "VALIDATION_ERROR", ... }
 //   404 { error: "NOT_FOUND", ... }
 //   499 { error: "REQUEST_ABORTED", ... }
 //   500 { error: "DB_ERROR", ... }
@@ -15,6 +16,7 @@ import { hasSupabase, getIncidentWithAnalyses } from "@/lib/db";
 import { apiError } from "@/lib/http";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
+import { isIncidentId } from "@/lib/identifiers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +26,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   if (!requestHasIncidentDataAccess(req)) {
     return ctx.response(apiError(403, "INCIDENT_DATA_PRIVATE", "Persisted incident data is private on this deployment.", { requestId: ctx.requestId }));
+  }
+  if (!isIncidentId(id)) {
+    return ctx.response(apiError(400, "VALIDATION_ERROR", "Incident id must be a UUID.", { requestId: ctx.requestId }));
   }
   if (!hasSupabase()) {
     return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase not configured", { requestId: ctx.requestId }));

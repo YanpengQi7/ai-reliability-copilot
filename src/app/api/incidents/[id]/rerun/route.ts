@@ -14,6 +14,7 @@ import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 import { classifyProviderDeadlineFailure, createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
 import { parseAnalysisOptions } from "@/lib/analysisOptions";
+import { isIncidentId } from "@/lib/identifiers";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -23,6 +24,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   if (!requestHasIncidentDataAccess(req)) {
     return ctx.response(apiError(403, "INCIDENT_DATA_PRIVATE", "Persisted incident data is private on this deployment.", { requestId: ctx.requestId }));
+  }
+  if (!isIncidentId(id)) {
+    return ctx.response(apiError(400, "VALIDATION_ERROR", "Incident id must be a UUID.", { requestId: ctx.requestId }));
   }
   const url = new URL(req.url);
   const options = parseAnalysisOptions(url.searchParams);
