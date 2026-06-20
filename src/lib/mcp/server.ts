@@ -26,6 +26,7 @@ import { AnalysisSchema } from "@/lib/schema";
 import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { embed, buildSignature } from "@/lib/embeddings";
+import { INPUT_LIMITS } from "@/lib/requestSafety";
 import { withTelemetry } from "./telemetry";
 
 const SEVERITY_RUBRIC = `# Severity rubric (from src/lib/prompts.ts SYSTEM_PROMPT_V2)
@@ -60,6 +61,17 @@ Produce these fields (use the analysis JSON schema we provide):
 9. \`follow_ups\` (array of 3-8) — { item, owner_role (team/role, not person), priority: P0|P1|P2 }
 
 Code/commands/JSON keys/enum values stay in English regardless of output language.`;
+
+export const SAVE_INCIDENT_INPUT_SCHEMA = {
+  title: z.string().max(INPUT_LIMITS.shortText).optional(),
+  service: z.string().max(INPUT_LIMITS.shortText).optional(),
+  symptoms: z.string().max(INPUT_LIMITS.shortText).optional(),
+  raw_context: z.string().min(20).max(INPUT_LIMITS.rawContext),
+  analysis: AnalysisSchema,
+  output_language: z.enum(["en", "zh"]).optional().default("en"),
+  client_model: z.string().max(INPUT_LIMITS.shortText).optional()
+    .describe("Name of the LLM that generated this analysis (e.g. claude-opus-4-5), recorded for audit"),
+};
 
 export function buildMcpServer() {
   const server = new McpServer({
@@ -177,15 +189,7 @@ export function buildMcpServer() {
     {
       title: "Save an incident + analysis you generated",
       description: "Persist a completed incident analysis to the database. The analysis must conform to the structured 9-section schema (call get_output_schema for the spec). Returns the incident_id you can later fetch by URL or via find_similar_incidents.",
-      inputSchema: {
-        title: z.string().optional(),
-        service: z.string().optional(),
-        symptoms: z.string().optional(),
-        raw_context: z.string().min(20),
-        analysis: AnalysisSchema,
-        output_language: z.enum(["en", "zh"]).optional().default("en"),
-        client_model: z.string().optional().describe("Name of the LLM that generated this analysis (e.g. claude-opus-4-5), recorded for audit"),
-      },
+      inputSchema: SAVE_INCIDENT_INPUT_SCHEMA,
     },
     withTelemetry(
       "save_incident_analysis",
@@ -209,8 +213,12 @@ export function buildMcpServer() {
         signature,
         embedding,
       })).select("id").single();
-      if (e1) {
-        console.error(JSON.stringify({ level: "error", event: "mcp_incident_insert_failed", error: safeErrorDetail(e1) }));
+      if (e1 || !inc) {
+        console.error(JSON.stringify({
+          level: "error",
+          event: "mcp_incident_insert_failed",
+          error: safeErrorDetail(e1 ?? new Error("Incident insert returned no row.")),
+        }));
         return { content: [{ type: "text", text: "Database error while saving the incident." }], isError: true };
       }
 
@@ -223,12 +231,12 @@ export function buildMcpServer() {
           outputLanguage: input.output_language ?? "en",
         }),
       ).select("id").single();
-      if (e2) {
+      if (e2 || !ana) {
         const { error: cleanupError } = await sb.from("incidents").delete().eq("id", inc.id);
         console.error(JSON.stringify({
           level: "error",
           event: "mcp_analysis_insert_failed",
-          error: safeErrorDetail(e2),
+          error: safeErrorDetail(e2 ?? new Error("Analysis insert returned no row.")),
           cleanup_error: cleanupError ? safeErrorDetail(cleanupError) : undefined,
           incident_id: inc.id,
         }));
