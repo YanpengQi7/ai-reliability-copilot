@@ -30,12 +30,12 @@ import { generateObject } from "ai";
 import { SCENARIOS } from "../src/lib/scenarios";
 import { AnalysisSchema } from "../src/lib/schema";
 import { deepseek, resolveModel, ANALYSIS_MODEL, JUDGE_MODEL, JUDGE_MODEL_CROSS } from "../src/lib/ai";
-import { getSystemPrompt, buildUserPrompt, type PromptVersion, type OutputLanguage } from "../src/lib/prompts";
+import { getSystemPrompt, buildUserPrompt, type OutputLanguage } from "../src/lib/prompts";
 import { judge } from "../src/lib/eval/judge";
 import { overallScore, type RubricDim } from "../src/lib/eval/rubric";
-import { parseEvalRepeats } from "../src/lib/eval/runConfig";
+import { parseEvalPromptVersion, parseEvalRepeats } from "../src/lib/eval/runConfig";
 
-const VERSION = (process.env.EVAL_VERSION as PromptVersion) ?? "v3";
+const VERSION = parseEvalPromptVersion(process.env.EVAL_VERSION);
 const LANGUAGES: OutputLanguage[] = ["en", "zh"];
 const REPEATS = parseEvalRepeats(process.env.EVAL_REPEATS, 2);
 const JUDGE_A = JUDGE_MODEL; // same family as the generator
