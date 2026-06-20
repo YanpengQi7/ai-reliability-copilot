@@ -98,7 +98,7 @@ async function main() {
             }))
             .select("id")
             .single();
-          if (e1) throw e1;
+          if (e1 || !inc) throw e1 ?? new Error("Eval incident insert returned no row.");
           const { data: ana, error: e2 } = await sb
             .from("analyses")
             .insert(buildAnalysisRecord({
@@ -112,12 +112,18 @@ async function main() {
             }))
             .select("id")
             .single();
-          if (e2) throw e2;
+          if (e2 || !ana) {
+            const { error: cleanupError } = await sb.from("incidents").delete().eq("id", inc.id);
+            if (cleanupError) {
+              console.error(`  ✗ failed to clean up incident ${inc.id}: ${cleanupError.message}`);
+            }
+            throw e2 ?? new Error("Eval analysis insert returned no row.");
+          }
 
           const scores = await judge({ analysis, scenario });
           const overall = overallScore(scores);
 
-          await sb.from("evaluations").insert({
+          const { error: e3 } = await sb.from("evaluations").insert({
             analysis_id: ana.id,
             rubric_version: RUBRIC_VERSION,
             scores,
@@ -125,6 +131,7 @@ async function main() {
             judge_model: JUDGE_MODEL,
             judge_notes: scores.overall_notes,
           });
+          if (e3) throw e3;
 
           console.log(`  overall: ${overall} · spec:${scores.specificity.score} saf:${scores.safety.score} act:${scores.actionability.score} dom:${scores.domain_correctness.score} comp:${scores.completeness.score}`);
           results.push({ scenario: scenario.slug, version, language, overall, latency_ms });
