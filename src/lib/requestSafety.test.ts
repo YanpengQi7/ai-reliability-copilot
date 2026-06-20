@@ -52,10 +52,12 @@ describe("bounded request body readers", () => {
 });
 
 describe("machineEndpointNeedsSecret", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
   const originalVercelEnv = process.env.VERCEL_ENV;
   const originalAllowPublic = process.env.ALLOW_PUBLIC_MACHINE_API;
 
   afterEach(() => {
+    restoreEnv("NODE_ENV", originalNodeEnv);
     if (originalVercelEnv === undefined) delete process.env.VERCEL_ENV;
     else process.env.VERCEL_ENV = originalVercelEnv;
     if (originalAllowPublic === undefined) delete process.env.ALLOW_PUBLIC_MACHINE_API;
@@ -63,12 +65,25 @@ describe("machineEndpointNeedsSecret", () => {
   });
 
   it("fails closed on Vercel production when the token is missing", () => {
+    Reflect.set(process.env, "NODE_ENV", "test");
     process.env.VERCEL_ENV = "production";
     delete process.env.ALLOW_PUBLIC_MACHINE_API;
     expect(machineEndpointNeedsSecret(undefined)).toBe(true);
   });
 
+  it("fails closed on self-hosted production and Vercel previews", () => {
+    delete process.env.VERCEL_ENV;
+    delete process.env.ALLOW_PUBLIC_MACHINE_API;
+    Reflect.set(process.env, "NODE_ENV", "production");
+    expect(machineEndpointNeedsSecret(undefined)).toBe(true);
+
+    Reflect.set(process.env, "NODE_ENV", "test");
+    process.env.VERCEL_ENV = "preview";
+    expect(machineEndpointNeedsSecret(undefined)).toBe(true);
+  });
+
   it("allows local development and explicit public deployments", () => {
+    Reflect.set(process.env, "NODE_ENV", "test");
     delete process.env.VERCEL_ENV;
     expect(machineEndpointNeedsSecret(undefined)).toBe(false);
 
@@ -77,6 +92,11 @@ describe("machineEndpointNeedsSecret", () => {
     expect(machineEndpointNeedsSecret(undefined)).toBe(false);
   });
 });
+
+function restoreEnv(key: string, value: string | undefined) {
+  if (value === undefined) delete process.env[key];
+  else Reflect.set(process.env, key, value);
+}
 
 describe("validateImageFile", () => {
   it("accepts supported images within the size limit", () => {

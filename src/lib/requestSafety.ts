@@ -83,7 +83,10 @@ export async function readJsonBody(req: Request, maxBytes: number): Promise<Body
 
 /** Public machine endpoints must be explicitly opted into on Vercel production. */
 export function machineEndpointNeedsSecret(secret: string | undefined): boolean {
-  return process.env.VERCEL_ENV === "production"
+  const hosted = process.env.NODE_ENV === "production"
+    || process.env.VERCEL_ENV === "production"
+    || process.env.VERCEL_ENV === "preview";
+  return hosted
     && !secret
     && process.env.ALLOW_PUBLIC_MACHINE_API !== "true";
 }
