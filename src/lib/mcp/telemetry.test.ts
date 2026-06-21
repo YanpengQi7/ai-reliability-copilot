@@ -30,7 +30,10 @@ function deferred() {
 function mockTelemetryInsert(result: { error: unknown }) {
   const abortSignal = vi.fn();
   const query = Object.assign(Promise.resolve(result), { abortSignal });
-  const insert = vi.fn(() => query);
+  const insert = vi.fn((row: { client_ip: string | null }) => {
+    void row;
+    return query;
+  });
   mocks.supabaseAdmin.mockReturnValue({
     from: vi.fn(() => ({ insert })),
   });
@@ -89,7 +92,8 @@ describe("MCP telemetry persistence", () => {
       client_ip: "203.0.113.42",
     });
 
-    const stored = insert.mock.calls[0][0].client_ip as string;
+    const stored = insert.mock.calls.at(0)?.[0].client_ip;
+    if (typeof stored !== "string") throw new Error("Telemetry insert did not receive a client digest.");
     expect(stored).toBe(telemetryClientKey("203.0.113.42"));
     expect(stored).toMatch(/^client_[a-f0-9]{24}$/);
     expect(stored).not.toContain("203.0.113.42");
