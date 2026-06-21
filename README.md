@@ -188,6 +188,11 @@ Vercel production deployments fail closed for MCP and webhook traffic when
 these tokens are missing. Set `ALLOW_PUBLIC_MACHINE_API=true` only for an
 intentionally public deployment.
 
+Vercel-provided client IP headers are used for rate limiting. Self-hosted
+deployments ignore forwarded IP headers by default; set
+`TRUST_PROXY_HEADERS=true` only when a trusted reverse proxy overwrites
+`X-Forwarded-For` before traffic reaches the app.
+
 Health endpoints: `/api/livez` is a dependency-free liveness probe;
 `/api/healthz` is readiness and verifies required configuration plus Supabase.
 Hosted deployments expose only status/version publicly; set `HEALTHCHECK_TOKEN`

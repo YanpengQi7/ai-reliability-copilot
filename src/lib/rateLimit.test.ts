@@ -1,12 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMemoryRateLimiter, createRateLimiter, rateLimit, withRateLimitHeaders } from "./rateLimit";
+import { clientKey, createMemoryRateLimiter, createRateLimiter, rateLimit, withRateLimitHeaders } from "./rateLimit";
 
 const originalUrl = process.env.UPSTASH_REDIS_REST_URL;
 const originalToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+const originalVercel = process.env.VERCEL;
+const originalVercelEnv = process.env.VERCEL_ENV;
+const originalTrustProxy = process.env.TRUST_PROXY_HEADERS;
 
 afterEach(() => {
   restore("UPSTASH_REDIS_REST_URL", originalUrl);
   restore("UPSTASH_REDIS_REST_TOKEN", originalToken);
+  restore("VERCEL", originalVercel);
+  restore("VERCEL_ENV", originalVercelEnv);
+  restore("TRUST_PROXY_HEADERS", originalTrustProxy);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -15,6 +21,42 @@ function restore(key: string, value: string | undefined) {
   if (value === undefined) delete process.env[key];
   else process.env[key] = value;
 }
+
+describe("clientKey", () => {
+  it("prefers Vercel's stable forwarded address", () => {
+    process.env.VERCEL_ENV = "production";
+    const req = new Request("https://example.com", {
+      headers: {
+        "x-forwarded-for": "198.51.100.10",
+        "x-vercel-forwarded-for": "203.0.113.42",
+      },
+    });
+
+    expect(clientKey(req)).toBe("203.0.113.42");
+  });
+
+  it("ignores self-hosted proxy headers unless explicitly trusted", () => {
+    delete process.env.VERCEL;
+    delete process.env.VERCEL_ENV;
+    delete process.env.TRUST_PROXY_HEADERS;
+    const req = new Request("https://example.com", {
+      headers: { "x-forwarded-for": "203.0.113.42" },
+    });
+
+    expect(clientKey(req)).toBe("anonymous");
+    process.env.TRUST_PROXY_HEADERS = "true";
+    expect(clientKey(req)).toBe("203.0.113.42");
+  });
+
+  it("rejects malformed forwarded addresses", () => {
+    process.env.TRUST_PROXY_HEADERS = "true";
+    const req = new Request("https://example.com", {
+      headers: { "x-forwarded-for": "attacker-controlled-value" },
+    });
+
+    expect(clientKey(req)).toBe("anonymous");
+  });
+});
 
 describe("rateLimit", () => {
   it("uses the in-memory fallback when Redis is not configured", async () => {

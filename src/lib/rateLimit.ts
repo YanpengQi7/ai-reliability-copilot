@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { isIP } from "node:net";
 import { safeErrorDetail } from "./observability";
 
 // Fixed-window limiter. It uses Upstash Redis when configured so counters are
@@ -184,7 +185,12 @@ export function withRateLimitHeaders(response: Response, result: RateLimitResult
 }
 
 export function clientKey(req: Request): string {
-  const fwd = req.headers.get("x-forwarded-for");
-  const ip = fwd?.split(",")[0]?.trim() || "anonymous";
-  return ip;
+  const onVercel = Boolean(process.env.VERCEL_ENV) || process.env.VERCEL === "1";
+  const forwarded = onVercel
+    ? req.headers.get("x-vercel-forwarded-for") ?? req.headers.get("x-forwarded-for")
+    : process.env.TRUST_PROXY_HEADERS === "true"
+      ? req.headers.get("x-forwarded-for")
+      : null;
+  const candidate = forwarded?.split(",")[0]?.trim();
+  return candidate && isIP(candidate) ? candidate : "anonymous";
 }
