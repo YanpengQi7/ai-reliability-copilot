@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ supabaseAdmin: vi.fn() }));
 
 vi.mock("../supabase", () => ({ supabaseAdmin: mocks.supabaseAdmin }));
 
-import { getTelemetryClientIp, logToolCall, telemetryClientKey, withClientIp } from "./telemetry";
+import { getTelemetryClientIp, logToolCall, telemetryClientKey, TELEMETRY_WRITE_TIMEOUT_MS, withClientIp } from "./telemetry";
 
 const originalUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -25,6 +25,16 @@ function deferred() {
   let resolve!: () => void;
   const promise = new Promise<void>((done) => { resolve = done; });
   return { promise, resolve };
+}
+
+function mockTelemetryInsert(result: { error: unknown }) {
+  const abortSignal = vi.fn();
+  const query = Object.assign(Promise.resolve(result), { abortSignal });
+  const insert = vi.fn(() => query);
+  mocks.supabaseAdmin.mockReturnValue({
+    from: vi.fn(() => ({ insert })),
+  });
+  return { abortSignal, insert };
 }
 
 describe("MCP telemetry request context", () => {
@@ -70,10 +80,7 @@ describe("MCP telemetry persistence", () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
     process.env.MCP_TELEMETRY_SALT = "telemetry-test-salt";
-    const insert = vi.fn().mockResolvedValue({ error: null });
-    mocks.supabaseAdmin.mockReturnValue({
-      from: vi.fn(() => ({ insert })),
-    });
+    const { abortSignal, insert } = mockTelemetryInsert({ error: null });
 
     await logToolCall({
       tool_name: "search_kb",
@@ -86,16 +93,15 @@ describe("MCP telemetry persistence", () => {
     expect(stored).toBe(telemetryClientKey("203.0.113.42"));
     expect(stored).toMatch(/^client_[a-f0-9]{24}$/);
     expect(stored).not.toContain("203.0.113.42");
+    expect(TELEMETRY_WRITE_TIMEOUT_MS).toBe(3_000);
+    expect(abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal));
   });
 
   it("logs Supabase response errors without failing the tool call", async () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
     const error = new Error("telemetry table unavailable");
-    const insert = vi.fn().mockResolvedValue({ error });
-    mocks.supabaseAdmin.mockReturnValue({
-      from: vi.fn(() => ({ insert })),
-    });
+    mockTelemetryInsert({ error });
     const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(logToolCall({
