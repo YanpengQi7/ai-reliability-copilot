@@ -16,6 +16,7 @@ import { classifyProviderDeadlineFailure, createProviderDeadline, PROVIDER_TIMEO
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
 import { buildIncidentRecord } from "@/lib/incidentRecord";
 import { parseAnalysisOptions } from "@/lib/analysisOptions";
+import { classifyDatabaseDeadlineFailure, createDatabaseDeadline, DATABASE_QUERY_TIMEOUT_MS } from "@/lib/databaseDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -93,6 +94,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     severity: object.severity,
   });
   const embedding = await embed(signature, deadline.signal);
+  const incidentDeadline = createDatabaseDeadline(req.signal);
   const { data: inc, error: e1 } = await sb
     .from("incidents")
     .insert(buildIncidentRecord({
@@ -104,10 +106,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       embedding,
     }))
     .select("id")
-    .abortSignal(req.signal)
+    .abortSignal(incidentDeadline.signal)
     .single();
   if (e1 || !inc) {
-    if (req.signal.aborted) {
+    const failure = classifyDatabaseDeadlineFailure(req.signal, incidentDeadline);
+    if (failure === "request_aborted") {
       ctx.log("warn", "scenario_incident_write_aborted", { scenario_slug: slug });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Scenario save was cancelled.", { requestId: ctx.requestId }));
     }
@@ -115,9 +118,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       error: safeErrorDetail(e1 ?? new Error("Incident insert returned no row.")),
       scenario_slug: slug,
     });
+    if (failure === "timed_out") {
+      return ctx.response(apiError(504, "DB_TIMEOUT", `Scenario save timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the scenario run.", { requestId: ctx.requestId }));
   }
 
+  const analysisDeadline = createDatabaseDeadline(req.signal);
   const { data: anaRow, error: e2 } = await sb.from("analyses").insert(
     buildAnalysisRecord({
       incidentId: inc.id,
@@ -128,24 +135,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       latencyMs: latency,
       usage: { tokens_in, tokens_out, cost_usd },
     }),
-  ).select("id").abortSignal(req.signal).single();
+  ).select("id").abortSignal(analysisDeadline.signal).single();
   if (e2 || !anaRow) {
-    const { error: cleanupError } = await sb.from("incidents").delete().eq("id", inc.id);
+    const cleanupDeadline = createDatabaseDeadline();
+    const { error: cleanupError } = await sb
+      .from("incidents")
+      .delete()
+      .eq("id", inc.id)
+      .abortSignal(cleanupDeadline.signal);
     const fields = {
       error: safeErrorDetail(e2 ?? new Error("Analysis insert returned no row.")),
       cleanup_error: cleanupError ? safeErrorDetail(cleanupError) : undefined,
       incident_id: inc.id,
       scenario_slug: slug,
     };
-    if (req.signal.aborted) {
+    const failure = classifyDatabaseDeadlineFailure(req.signal, analysisDeadline);
+    if (failure === "request_aborted") {
       ctx.log("warn", "scenario_analysis_write_aborted", fields);
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Scenario analysis save was cancelled.", { requestId: ctx.requestId }));
     }
     ctx.log("error", "scenario_analysis_insert_failed", fields);
+    if (failure === "timed_out") {
+      return ctx.response(apiError(504, "DB_TIMEOUT", `Scenario analysis save timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the scenario analysis.", { requestId: ctx.requestId }));
   }
   try {
-    await recordRetrievedChunks(anaRow.id, retrieved.chunks, { abortSignal: req.signal });
+    const auditDeadline = createDatabaseDeadline(req.signal);
+    await recordRetrievedChunks(anaRow.id, retrieved.chunks, { abortSignal: auditDeadline.signal });
   } catch (error) {
     if (!req.signal.aborted) {
       ctx.log("warn", "scenario_kb_audit_write_failed", {
