@@ -139,6 +139,21 @@ create table if not exists analysis_kb_chunks (
 );
 create index if not exists analysis_kb_chunks_analysis_idx on analysis_kb_chunks (analysis_id);
 
+-- Best-effort MCP tool-call telemetry (metadata only; never full inputs/outputs)
+create table if not exists mcp_tool_calls (
+  id uuid primary key default gen_random_uuid(),
+  tool_name text not null,
+  ok boolean not null,
+  latency_ms int,
+  error text,
+  client_ip text,
+  input_summary text,
+  result_size_bytes bigint,
+  created_at timestamptz default now()
+);
+create index if not exists mcp_tool_calls_created_at_idx on mcp_tool_calls (created_at desc);
+create index if not exists mcp_tool_calls_tool_name_idx on mcp_tool_calls (tool_name);
+
 -- KB retrieval RPCs (see kb.ts retrieveContext())
 create or replace function match_kb_chunks_by_embedding(
   query_embedding vector(1536),
@@ -197,11 +212,12 @@ alter table evaluations enable row level security;
 alter table kb_documents enable row level security;
 alter table kb_chunks enable row level security;
 alter table analysis_kb_chunks enable row level security;
+alter table mcp_tool_calls enable row level security;
 
 revoke all on table incidents, analyses, scenarios, evaluations,
-  kb_documents, kb_chunks, analysis_kb_chunks from anon, authenticated;
+  kb_documents, kb_chunks, analysis_kb_chunks, mcp_tool_calls from anon, authenticated;
 grant all on table incidents, analyses, scenarios, evaluations,
-  kb_documents, kb_chunks, analysis_kb_chunks to service_role;
+  kb_documents, kb_chunks, analysis_kb_chunks, mcp_tool_calls to service_role;
 
 revoke execute on function match_incidents_by_embedding(vector, float, int, uuid)
   from public, anon, authenticated;
