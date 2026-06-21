@@ -15,7 +15,7 @@ import { buildMcpServer } from "@/lib/mcp/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { withClientIp } from "@/lib/mcp/telemetry";
-import { machineEndpointNeedsSecret } from "@/lib/requestSafety";
+import { INPUT_LIMITS, machineEndpointNeedsSecret, readTextBody } from "@/lib/requestSafety";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { hasBearerToken } from "@/lib/serverAuth";
 
@@ -46,6 +46,13 @@ function authNotConfigured(): Response {
   );
 }
 
+function payloadTooLarge(): Response {
+  return new Response(
+    JSON.stringify({ jsonrpc: "2.0", error: { code: -32003, message: "MCP request body is too large" } }),
+    { status: 413, headers: { "content-type": "application/json" } },
+  );
+}
+
 function checkAuth(req: Request): boolean {
   const required = process.env.MCP_AUTH_TOKEN;
   if (!required) return true; // public mode
@@ -62,6 +69,13 @@ async function handle(req: Request): Promise<Response> {
   const rl = await rateLimit(ip, { max: RATE_LIMIT_PER_MIN, namespace: "mcp" });
   if (!rl.allowed) return ctx.response(withRateLimitHeaders(rateLimited(rl.retryAfterSec), rl), { method: req.method });
 
+  let transportRequest = req;
+  if (req.method !== "GET") {
+    const body = await readTextBody(req, INPUT_LIMITS.mcpJson);
+    if (!body.ok) return ctx.response(payloadTooLarge(), { method: req.method });
+    transportRequest = new Request(req, { body: body.value });
+  }
+
   return withClientIp(ip, async () => {
     const server = buildMcpServer();
     const transport = new WebStandardStreamableHTTPServerTransport({
@@ -70,7 +84,7 @@ async function handle(req: Request): Promise<Response> {
     });
     try {
       await server.connect(transport);
-      const response = await transport.handleRequest(req);
+      const response = await transport.handleRequest(transportRequest);
       return ctx.response(response, { method: req.method });
     } catch (error) {
       ctx.log("error", "mcp_request_failed", {

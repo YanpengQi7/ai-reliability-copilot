@@ -6,6 +6,7 @@ export const INPUT_LIMITS = {
   imagePayload: 8_000_000,
   imageFileBytes: 5_000_000,
   smallJson: 16_384,
+  mcpJson: 262_144,
 } as const;
 
 export const ALLOWED_IMAGE_TYPES = [
