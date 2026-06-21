@@ -78,7 +78,7 @@ export function sanitizeMcpIncidentInput<T>(input: T): T {
   return redactSensitiveValue(input);
 }
 
-export function buildMcpServer() {
+export function buildMcpServer(options: { requestUrl?: string } = {}) {
   const server = new McpServer({
     name: "ai-reliability-copilot",
     version: "1.0.0",
@@ -249,7 +249,7 @@ export function buildMcpServer() {
         return { content: [{ type: "text", text: "Database error while saving the analysis." }], isError: true };
       }
 
-      const base = resolveAppBaseUrl();
+      const base = resolveAppBaseUrl(options.requestUrl);
       return {
         content: [{ type: "text", text: `Saved.\n  incident_id: ${inc.id}\n  analysis_id: ${ana.id}\n  url: ${base}/incidents/${inc.id}` }],
       };

@@ -77,7 +77,7 @@ async function handle(req: Request): Promise<Response> {
   }
 
   return withClientIp(ip, async () => {
-    const server = buildMcpServer();
+    const server = buildMcpServer({ requestUrl: req.url });
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // stateless — Vercel-friendly
       enableJsonResponse: true,
