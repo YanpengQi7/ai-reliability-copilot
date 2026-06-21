@@ -8,11 +8,17 @@ describe("Next.js security headers", () => {
     const globalRule = rules.find((rule) => rule.source === "/:path*");
     const headers = new Map(globalRule?.headers.map((header) => [header.key, header.value]));
 
-    expect(headers.get("Content-Security-Policy")).toContain("frame-ancestors 'none'");
+    const csp = headers.get("Content-Security-Policy");
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("connect-src 'self'");
+    expect(csp).not.toContain("connect-src 'self' https:");
+    expect(csp).toContain("upgrade-insecure-requests");
     expect(headers.has("Content-Security-Policy-Report-Only")).toBe(false);
     expect(headers.get("X-Content-Type-Options")).toBe("nosniff");
     expect(headers.get("X-Frame-Options")).toBe("DENY");
     expect(headers.get("Permissions-Policy")).toContain("camera=()");
+    expect(headers.get("Cross-Origin-Resource-Policy")).toBe("same-origin");
+    expect(headers.get("Strict-Transport-Security")).toBe("max-age=31536000");
   });
 
   it("prevents caching API responses", async () => {
