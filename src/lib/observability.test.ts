@@ -79,4 +79,25 @@ describe("safeErrorDetail", () => {
     expect(detail.length).toBeLessThanOrEqual(101);
     expect(detail).toContain("[REDACTED:");
   });
+
+  it("preserves useful messages from PostgREST-style error objects", () => {
+    const secret = "sk-" + "z".repeat(32);
+    const detail = safeErrorDetail({
+      code: "PGRST500",
+      message: `database unavailable\ntoken=${secret}`,
+    });
+
+    expect(detail).toContain("database unavailable");
+    expect(detail).not.toContain("[object Object]");
+    expect(detail).not.toContain(secret);
+    expect(detail).not.toContain("\n");
+  });
+
+  it("handles hostile error objects without throwing", () => {
+    const hostile = Object.defineProperty({}, "message", {
+      get() { throw new Error("getter failed"); },
+    });
+
+    expect(safeErrorDetail(hostile)).toBe("Unknown error");
+  });
 });
