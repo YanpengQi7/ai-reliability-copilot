@@ -14,6 +14,7 @@ import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
 import { buildIncidentRecord } from "@/lib/incidentRecord";
+import { classifyDatabaseDeadlineFailure, createDatabaseDeadline, DATABASE_QUERY_TIMEOUT_MS } from "@/lib/databaseDeadline";
 
 export const runtime = "nodejs";
 
@@ -78,6 +79,7 @@ export async function POST(req: NextRequest) {
   });
   const embedding = await embed(signature, req.signal); // null when no OPENAI_API_KEY or on failure
 
+  const incidentDeadline = createDatabaseDeadline(req.signal);
   const { data: inc, error: e1 } = await sb
     .from("incidents")
     .insert(buildIncidentRecord({
@@ -89,19 +91,24 @@ export async function POST(req: NextRequest) {
       embedding,
     }))
     .select("id")
-    .abortSignal(req.signal)
+    .abortSignal(incidentDeadline.signal)
     .single();
   if (e1 || !inc) {
-    if (req.signal.aborted) {
+    const failure = classifyDatabaseDeadlineFailure(req.signal, incidentDeadline);
+    if (failure === "request_aborted") {
       ctx.log("warn", "incident_write_aborted");
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Incident save was cancelled.", { requestId: ctx.requestId }));
     }
     ctx.log("error", "incident_insert_failed", {
       error: safeErrorDetail(e1 ?? new Error("Incident insert returned no row.")),
     });
+    if (failure === "timed_out") {
+      return ctx.response(apiError(504, "DB_TIMEOUT", `Incident save timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the incident.", { requestId: ctx.requestId }));
   }
 
+  const analysisDeadline = createDatabaseDeadline(req.signal);
   const { data: ana, error: e2 } = await sb
     .from("analyses")
     .insert(buildAnalysisRecord({
@@ -114,21 +121,31 @@ export async function POST(req: NextRequest) {
       usage: input.usage,
     }))
     .select("id")
-    .abortSignal(req.signal)
+    .abortSignal(analysisDeadline.signal)
     .single();
   if (e2 || !ana) {
-    // Keep the two-step write atomic from the user's perspective.
-    const { error: cleanupError } = await sb.from("incidents").delete().eq("id", inc.id);
+    // Compensating cleanup must still run after client cancellation, but must
+    // not be allowed to hang the route indefinitely.
+    const cleanupDeadline = createDatabaseDeadline();
+    const { error: cleanupError } = await sb
+      .from("incidents")
+      .delete()
+      .eq("id", inc.id)
+      .abortSignal(cleanupDeadline.signal);
     const fields = {
       error: safeErrorDetail(e2 ?? new Error("Analysis insert returned no row.")),
       cleanup_error: cleanupError ? safeErrorDetail(cleanupError) : undefined,
       incident_id: inc.id,
     };
-    if (req.signal.aborted) {
+    const failure = classifyDatabaseDeadlineFailure(req.signal, analysisDeadline);
+    if (failure === "request_aborted") {
       ctx.log("warn", "analysis_write_aborted", fields);
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Analysis save was cancelled.", { requestId: ctx.requestId }));
     }
     ctx.log("error", "analysis_insert_failed", fields);
+    if (failure === "timed_out") {
+      return ctx.response(apiError(504, "DB_TIMEOUT", `Analysis save timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the analysis.", { requestId: ctx.requestId }));
   }
 
