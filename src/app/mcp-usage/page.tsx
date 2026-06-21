@@ -5,6 +5,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
 import { publicIncidentDataEnabled } from "@/lib/incidentAccess";
 import { PrivateDataNotice } from "@/components/PrivateDataNotice";
+import { createDatabaseQuerySignal } from "@/lib/databaseDeadline";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,7 @@ export default async function McpUsagePage() {
   }
 
   const sb = supabaseAdmin();
+  const databaseSignal = createDatabaseQuerySignal();
   // 7-day window — `Date.now()` is intentionally impure in this server component
   // because the whole page is `force-dynamic` and we WANT a fresh wall-clock per request.
   // eslint-disable-next-line react-hooks/purity
@@ -41,7 +43,8 @@ export default async function McpUsagePage() {
     .from("mcp_tool_calls")
     .select("*")
     .gte("created_at", since)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .abortSignal(databaseSignal);
   if (usageError) throw usageError;
   const rows = (rows7d ?? []) as Row[];
 

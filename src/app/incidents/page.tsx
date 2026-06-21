@@ -4,6 +4,7 @@ import { Nav } from "@/components/Nav";
 import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
 import { publicIncidentDataEnabled } from "@/lib/incidentAccess";
+import { createDatabaseQuerySignal } from "@/lib/databaseDeadline";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function IncidentsPage() {
       </PageShell>
     );
   }
-  const incidents = await listIncidents();
+  const incidents = await listIncidents(50, { abortSignal: createDatabaseQuerySignal() });
   return (
     <PageShell title={tr("incidents.title")}>
       {incidents.length === 0 ? (

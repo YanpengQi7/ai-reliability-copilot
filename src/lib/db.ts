@@ -35,14 +35,16 @@ export function hasSupabase() {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
-export async function listIncidents(limit = 50): Promise<IncidentRow[]> {
+export async function listIncidents(limit = 50, options: { abortSignal?: AbortSignal } = {}): Promise<IncidentRow[]> {
   if (!hasSupabase()) return [];
   const sb = supabaseAdmin();
-  const { data, error } = await sb
+  const query = sb
     .from("incidents")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (options.abortSignal) query.abortSignal(options.abortSignal);
+  const { data, error } = await query;
   if (error) throw error;
   return data as IncidentRow[];
 }

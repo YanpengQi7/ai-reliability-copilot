@@ -5,6 +5,7 @@ import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
 import { publicIncidentDataEnabled } from "@/lib/incidentAccess";
 import { PrivateDataNotice } from "@/components/PrivateDataNotice";
+import { createDatabaseQuerySignal } from "@/lib/databaseDeadline";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +24,12 @@ export default async function KbPage() {
   }
 
   const sb = supabaseAdmin();
-  const { data: docs, error: docsError } = await sb.from("kb_documents").select("id, source_path, kind, title, updated_at").order("updated_at", { ascending: false });
+  const databaseSignal = createDatabaseQuerySignal();
+  const { data: docs, error: docsError } = await sb.from("kb_documents").select("id, source_path, kind, title, updated_at").order("updated_at", { ascending: false }).abortSignal(databaseSignal);
   if (docsError) throw docsError;
-  const { count: chunkCount, error: chunkError } = await sb.from("kb_chunks").select("*", { count: "exact", head: true });
+  const { count: chunkCount, error: chunkError } = await sb.from("kb_chunks").select("*", { count: "exact", head: true }).abortSignal(databaseSignal);
   if (chunkError) throw chunkError;
-  const { count: embeddedCount, error: embeddedError } = await sb.from("kb_chunks").select("*", { count: "exact", head: true }).not("embedding", "is", null);
+  const { count: embeddedCount, error: embeddedError } = await sb.from("kb_chunks").select("*", { count: "exact", head: true }).not("embedding", "is", null).abortSignal(databaseSignal);
   if (embeddedError) throw embeddedError;
 
   const documents = (docs ?? []) as DocRow[];
