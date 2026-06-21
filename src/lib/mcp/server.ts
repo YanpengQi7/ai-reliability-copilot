@@ -27,6 +27,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
+import { resolveAppBaseUrl } from "@/lib/appUrl";
 import { withTelemetry } from "./telemetry";
 
 const SEVERITY_RUBRIC = `# Severity rubric (from src/lib/prompts.ts SYSTEM_PROMPT_V2)
@@ -248,7 +249,7 @@ export function buildMcpServer() {
         return { content: [{ type: "text", text: "Database error while saving the analysis." }], isError: true };
       }
 
-      const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://ai-reliability-copilot.vercel.app";
+      const base = resolveAppBaseUrl();
       return {
         content: [{ type: "text", text: `Saved.\n  incident_id: ${inc.id}\n  analysis_id: ${ana.id}\n  url: ${base}/incidents/${inc.id}` }],
       };

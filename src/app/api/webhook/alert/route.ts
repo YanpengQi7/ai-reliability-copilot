@@ -37,6 +37,7 @@ import { bearerToken, secureTokenEqual } from "@/lib/serverAuth";
 import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
 import { buildIncidentRecord } from "@/lib/incidentRecord";
+import { resolveAppBaseUrl } from "@/lib/appUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -108,7 +109,7 @@ export async function POST(req: Request) {
     return ctx.response(apiError(500, "DB_ERROR", "Could not record the incident.", { requestId: ctx.requestId }));
   }
 
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://ai-reliability-copilot.vercel.app";
+  const base = resolveAppBaseUrl(req.url);
   const url = `${base}/incidents/${inc.id}`;
 
   // 2. Schedule analysis to run AFTER the response is sent

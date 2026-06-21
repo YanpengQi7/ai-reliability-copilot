@@ -17,6 +17,7 @@ import { apiError } from "@/lib/http";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 import { isIncidentId } from "@/lib/identifiers";
+import { resolveAppBaseUrl } from "@/lib/appUrl";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +48,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!result) {
     return ctx.response(apiError(404, "NOT_FOUND", "incident not found", { requestId: ctx.requestId }));
   }
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+  const base = resolveAppBaseUrl(req.url);
   return ctx.response(NextResponse.json({
     incident: result.incident,
     analysis: result.analyses[0] ?? null,
