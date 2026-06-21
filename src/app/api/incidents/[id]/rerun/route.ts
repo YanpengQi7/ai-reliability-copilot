@@ -15,6 +15,7 @@ import { classifyProviderDeadlineFailure, createProviderDeadline, PROVIDER_TIMEO
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
 import { parseAnalysisOptions } from "@/lib/analysisOptions";
 import { isIncidentId } from "@/lib/identifiers";
+import { classifyDatabaseDeadlineFailure, createDatabaseDeadline, DATABASE_QUERY_TIMEOUT_MS } from "@/lib/databaseDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -45,15 +46,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
   const sb = supabaseAdmin();
+  const readDeadline = createDatabaseDeadline(req.signal);
   let incident: Awaited<ReturnType<typeof getIncident>>;
   try {
-    incident = await getIncident(id, { abortSignal: req.signal });
+    incident = await getIncident(id, { abortSignal: readDeadline.signal });
   } catch (error) {
-    if (req.signal.aborted) {
+    const failure = classifyDatabaseDeadlineFailure(req.signal, readDeadline);
+    if (failure === "request_aborted") {
       ctx.log("warn", "rerun_incident_query_aborted", { incident_id: id });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Incident query was cancelled.", { requestId: ctx.requestId }));
     }
     ctx.log("error", "rerun_incident_query_failed", { error: safeErrorDetail(error), incident_id: id });
+    if (failure === "timed_out") {
+      return ctx.response(apiError(504, "DB_TIMEOUT", `Incident query timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
     return ctx.response(apiError(500, "DB_ERROR", "Could not load the incident.", { requestId: ctx.requestId }));
   }
   if (!incident) {
@@ -100,6 +106,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const latency = Date.now() - started;
   const cost_usd = calcCost(ANALYSIS_MODEL, tokens_in, tokens_out);
+  const writeDeadline = createDatabaseDeadline(req.signal);
   const { data: anaRow, error: e1 } = await sb.from("analyses").insert(
     buildAnalysisRecord({
       incidentId: id,
@@ -110,9 +117,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       latencyMs: latency,
       usage: { tokens_in, tokens_out, cost_usd },
     }),
-  ).select("id").abortSignal(req.signal).single();
+  ).select("id").abortSignal(writeDeadline.signal).single();
   if (e1 || !anaRow) {
-    if (req.signal.aborted) {
+    const failure = classifyDatabaseDeadlineFailure(req.signal, writeDeadline);
+    if (failure === "request_aborted") {
       ctx.log("warn", "rerun_analysis_write_aborted", { incident_id: id });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Analysis save was cancelled.", { requestId: ctx.requestId }));
     }
@@ -120,10 +128,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       error: safeErrorDetail(e1 ?? new Error("Analysis insert returned no row.")),
       incident_id: id,
     });
+    if (failure === "timed_out") {
+      return ctx.response(apiError(504, "DB_TIMEOUT", `Analysis save timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
     return ctx.response(apiError(500, "DB_ERROR", "Could not save the analysis.", { requestId: ctx.requestId }));
   }
   try {
-    await recordRetrievedChunks(anaRow.id, retrieved.chunks, { abortSignal: req.signal });
+    await recordRetrievedChunks(anaRow.id, retrieved.chunks, { abortSignal: writeDeadline.signal });
   } catch (error) {
     if (!req.signal.aborted) {
       ctx.log("warn", "rerun_kb_audit_write_failed", {

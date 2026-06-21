@@ -18,6 +18,7 @@ import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 import { isIncidentId } from "@/lib/identifiers";
 import { resolveAppBaseUrl } from "@/lib/appUrl";
+import { classifyDatabaseDeadlineFailure, createDatabaseDeadline, DATABASE_QUERY_TIMEOUT_MS } from "@/lib/databaseDeadline";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,15 +35,20 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!hasSupabase()) {
     return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase not configured", { requestId: ctx.requestId }));
   }
+  const databaseDeadline = createDatabaseDeadline(req.signal);
   let result: Awaited<ReturnType<typeof getIncidentWithAnalyses>>;
   try {
-    result = await getIncidentWithAnalyses(id, { abortSignal: req.signal });
+    result = await getIncidentWithAnalyses(id, { abortSignal: databaseDeadline.signal });
   } catch (error) {
-    if (req.signal.aborted) {
+    const failure = classifyDatabaseDeadlineFailure(req.signal, databaseDeadline);
+    if (failure === "request_aborted") {
       ctx.log("warn", "incident_query_aborted", { incident_id: id });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Incident query was cancelled.", { requestId: ctx.requestId }));
     }
     ctx.log("error", "incident_query_failed", { error: safeErrorDetail(error), incident_id: id });
+    if (failure === "timed_out") {
+      return ctx.response(apiError(504, "DB_TIMEOUT", `Incident query timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
     return ctx.response(apiError(500, "DB_ERROR", "Could not load the incident.", { requestId: ctx.requestId }));
   }
   if (!result) {
