@@ -10,8 +10,10 @@
 // What we do NOT record:
 //   - full input or full output (privacy + storage cost)
 //   - bearer tokens or headers
+//   - raw client IPs (only a stable keyed digest)
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { createHmac } from "node:crypto";
 import { supabaseAdmin } from "../supabase";
 import { hasSupabase } from "../db";
 import { safeErrorDetail } from "../observability";
@@ -36,6 +38,15 @@ export function getTelemetryClientIp(): string | null {
   return clientIpStorage.getStore() ?? null;
 }
 
+export function telemetryClientKey(clientIp: string | null | undefined): string | null {
+  if (!clientIp) return null;
+  const key = process.env.MCP_TELEMETRY_SALT
+    || process.env.SUPABASE_SERVICE_ROLE_KEY
+    || "local-development-only";
+  const digest = createHmac("sha256", key).update(clientIp).digest("hex").slice(0, 24);
+  return `client_${digest}`;
+}
+
 export async function logToolCall(payload: LogPayload): Promise<void> {
   if (!hasSupabase()) return;
   try {
@@ -45,7 +56,7 @@ export async function logToolCall(payload: LogPayload): Promise<void> {
       ok: payload.ok,
       latency_ms: payload.latency_ms,
       error: payload.error ? safeErrorDetail(payload.error, 500) : null,
-      client_ip: payload.client_ip ?? getTelemetryClientIp(),
+      client_ip: telemetryClientKey(payload.client_ip ?? getTelemetryClientIp()),
       input_summary: payload.input_summary ? safeErrorDetail(payload.input_summary, 200) : null,
       result_size_bytes: payload.result_size_bytes ?? null,
     });

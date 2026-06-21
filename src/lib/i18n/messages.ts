@@ -158,7 +158,7 @@ export const MESSAGES: Messages = {
   "mcp.totalCalls": { en: "Calls (7d)", zh: "调用数 (7d)" },
   "mcp.errorRate": { en: "Error rate", zh: "错误率" },
   "mcp.avgLatency": { en: "Avg latency", zh: "平均延迟" },
-  "mcp.uniqueIps": { en: "Unique IPs (7d)", zh: "独立 IP (7d)" },
+  "mcp.uniqueIps": { en: "Unique clients (7d)", zh: "独立客户端 (7d)" },
   "mcp.byTool": { en: "By tool (last 7 days)", zh: "按工具（最近 7 天）" },
   "mcp.recentFailures": { en: "Recent failures", zh: "最近失败" },
   "mcp.noData": { en: "No tool calls yet. Wire up your Claude Code and call a tool.", zh: "暂无调用记录。把你的 Claude Code 接上来调一次工具试试。" },

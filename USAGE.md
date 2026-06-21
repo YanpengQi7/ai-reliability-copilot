@@ -370,7 +370,7 @@ claude mcp add --transport http ai-reliability \
 
 **其他默认防御**：
 - **50 req/min/IP rate limit**（in-memory，cold-start 重置）
-- **每次 tool call 记 audit log** 到 `mcp_tool_calls` 表：tool / ok / 延迟 / IP / 输入预览（前 200 字符）/ 响应字节数。**不存完整输入或输出**。
+- **每次 tool call 记 audit log** 到 `mcp_tool_calls` 表：tool / ok / 延迟 / 不可逆客户端摘要 / 输入预览（前 200 字符）/ 响应字节数。**不存原始 IP、完整输入或输出**。
 - 想看用量：`select tool_name, count(*), avg(latency_ms)::int from mcp_tool_calls where created_at > now() - interval '1 day' group by 1 order by 2 desc;`
 
 ---
