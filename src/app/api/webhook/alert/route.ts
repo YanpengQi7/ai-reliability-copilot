@@ -38,6 +38,7 @@ import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadl
 import { buildAnalysisRecord } from "@/lib/analysisRecord";
 import { buildIncidentRecord } from "@/lib/incidentRecord";
 import { resolveAppBaseUrl } from "@/lib/appUrl";
+import { classifyDatabaseDeadlineFailure, createDatabaseDeadline, DATABASE_QUERY_TIMEOUT_MS } from "@/lib/databaseDeadline";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,6 +93,7 @@ export async function POST(req: Request) {
   const sb = supabaseAdmin();
 
   // 1. Insert the incident IMMEDIATELY so the webhook caller gets a fast ACK
+  const incidentDeadline = createDatabaseDeadline(req.signal);
   const { data: inc, error: e1 } = await sb
     .from("incidents")
     .insert(buildIncidentRecord({
@@ -101,11 +103,20 @@ export async function POST(req: Request) {
       rawContext: parsed.raw_context,
     }))
     .select("id")
+    .abortSignal(incidentDeadline.signal)
     .single();
   if (e1 || !inc) {
+    const failure = classifyDatabaseDeadlineFailure(req.signal, incidentDeadline);
+    if (failure === "request_aborted") {
+      ctx.log("warn", "webhook_incident_write_aborted");
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Webhook persistence was cancelled.", { requestId: ctx.requestId }));
+    }
     ctx.log("error", "webhook_incident_insert_failed", {
       error: safeErrorDetail(e1 ?? new Error("Incident insert returned no row.")),
     });
+    if (failure === "timed_out") {
+      return ctx.response(apiError(504, "DB_TIMEOUT", `Webhook persistence timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
     return ctx.response(apiError(500, "DB_ERROR", "Could not record the incident.", { requestId: ctx.requestId }));
   }
 
@@ -149,10 +160,11 @@ export async function POST(req: Request) {
         severity: object.severity,
       });
       const embedding = await embed(signature, deadline.signal);
+      const signatureDeadline = createDatabaseDeadline();
       const { error: signatureError } = await sb.from("incidents").update({
         signature,
         embedding: embeddingForDatabase(embedding),
-      }).eq("id", inc.id).abortSignal(deadline.signal);
+      }).eq("id", inc.id).abortSignal(signatureDeadline.signal);
       if (signatureError) {
         ctx.log("warn", "webhook_signature_update_failed", {
           error: safeErrorDetail(signatureError),
@@ -160,6 +172,7 @@ export async function POST(req: Request) {
         });
       }
 
+      const analysisDeadline = createDatabaseDeadline();
       const { data: anaRow, error: e2 } = await sb.from("analyses").insert(
         buildAnalysisRecord({
           incidentId: inc.id,
@@ -170,7 +183,7 @@ export async function POST(req: Request) {
           latencyMs: latency_ms,
           usage: { tokens_in, tokens_out, cost_usd },
         }),
-      ).select("id").abortSignal(deadline.signal).single();
+      ).select("id").abortSignal(analysisDeadline.signal).single();
       if (e2 || !anaRow) {
         const analysisError = e2 ?? new Error("Analysis insert returned no row.");
         ctx.log("error", "webhook_analysis_insert_failed", {
@@ -180,7 +193,8 @@ export async function POST(req: Request) {
         throw analysisError;
       }
       try {
-        await recordRetrievedChunks(anaRow.id, retrieved.chunks, { abortSignal: deadline.signal });
+        const auditDeadline = createDatabaseDeadline();
+        await recordRetrievedChunks(anaRow.id, retrieved.chunks, { abortSignal: auditDeadline.signal });
       } catch (auditError) {
         ctx.log("warn", "webhook_kb_audit_write_failed", {
           error: safeErrorDetail(auditError),
@@ -204,6 +218,7 @@ export async function POST(req: Request) {
       });
       // Don't lose the failure — log it on the incident itself so /incidents/[id] shows it
       try {
+        const failureWriteDeadline = createDatabaseDeadline();
         const { error: failureWriteError } = await sb.from("analyses").insert({
           incident_id: inc.id,
           model: ANALYSIS_MODEL,
@@ -217,7 +232,7 @@ export async function POST(req: Request) {
           customer_impact: "n/a",
           postmortem_draft: "n/a",
           follow_ups: [],
-        });
+        }).abortSignal(failureWriteDeadline.signal);
         if (failureWriteError) throw failureWriteError;
       } catch (failureWriteError) {
         ctx.log("error", "webhook_failure_record_failed", {

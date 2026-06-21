@@ -71,10 +71,11 @@ describe("webhook persistence", () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = "test-key";
     process.env.DEEPSEEK_API_KEY = "test-key";
     const single = vi.fn().mockResolvedValue({ data: null, error: null });
+    const abortSignal = vi.fn(() => ({ single }));
     mocks.supabaseAdmin.mockReturnValue({
       from: vi.fn(() => ({
         insert: vi.fn(() => ({
-          select: vi.fn(() => ({ single })),
+          select: vi.fn(() => ({ abortSignal })),
         })),
       })),
     });
@@ -84,5 +85,6 @@ describe("webhook persistence", () => {
 
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toMatchObject({ error: "DB_ERROR" });
+    expect(abortSignal).toHaveBeenCalledWith(expect.any(AbortSignal));
   });
 });
