@@ -48,7 +48,7 @@ export async function listIncidents(limit = 50, options: { abortSignal?: AbortSi
   const { data, error } = await query;
   options.abortSignal?.throwIfAborted();
   if (error) throw error;
-  return data as IncidentRow[];
+  return (data ?? []) as IncidentRow[];
 }
 
 export async function getIncident(id: string, options: { abortSignal?: AbortSignal } = {}): Promise<IncidentRow | null> {

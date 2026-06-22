@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ supabaseAdmin: vi.fn() }));
 
 vi.mock("./supabase", () => ({ supabaseAdmin: mocks.supabaseAdmin }));
 
-import { getAnalysis, getIncident, getIncidentWithAnalyses } from "./db";
+import { getAnalysis, getIncident, getIncidentWithAnalyses, listIncidents } from "./db";
 
 const originalUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -40,6 +40,51 @@ function mockClient(
   mocks.supabaseAdmin.mockReturnValue({ from });
   return { maybeSingle, order, incidentAbortSignal, analysisAbortSignal };
 }
+
+function mockListQuery(result: { data: unknown[] | null; error: unknown }) {
+  const abortSignal = vi.fn();
+  const query = Object.assign(Promise.resolve(result), { abortSignal });
+  const limit = vi.fn(() => query);
+  const order = vi.fn(() => ({ limit }));
+  const select = vi.fn(() => ({ order }));
+  mocks.supabaseAdmin.mockReturnValue({
+    from: vi.fn(() => ({ select })),
+  });
+  return { abortSignal, limit, order };
+}
+
+describe("listIncidents", () => {
+  it("returns incidents in the requested bounded query", async () => {
+    const incidents = [{ id: "incident-1", raw_context: "context" }];
+    const { limit, order } = mockListQuery({ data: incidents, error: null });
+
+    await expect(listIncidents(25)).resolves.toEqual(incidents);
+    expect(order).toHaveBeenCalledWith("created_at", { ascending: false });
+    expect(limit).toHaveBeenCalledWith(25);
+  });
+
+  it("normalizes a null data response to an empty list", async () => {
+    mockListQuery({ data: null, error: null });
+
+    await expect(listIncidents()).resolves.toEqual([]);
+  });
+
+  it("propagates list query failures", async () => {
+    const error = new Error("database unavailable");
+    mockListQuery({ data: null, error });
+
+    await expect(listIncidents()).rejects.toBe(error);
+  });
+
+  it("passes cancellation to the list query", async () => {
+    const signal = new AbortController().signal;
+    const { abortSignal } = mockListQuery({ data: [], error: null });
+
+    await listIncidents(50, { abortSignal: signal });
+
+    expect(abortSignal).toHaveBeenCalledWith(signal);
+  });
+});
 
 describe("getIncidentWithAnalyses", () => {
   it("returns null only when the incident does not exist", async () => {
