@@ -69,12 +69,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const started = Date.now();
   const deadline = createProviderDeadline(req.signal);
   const queryText = [incident.title, incident.service, incident.symptoms, incident.raw_context].filter(Boolean).join(" ").slice(0, 4000);
-  const retrieved = await retrieveContext(queryText, { limit: 5, abortSignal: deadline.signal });
-  const internal_context = formatChunksForPrompt(retrieved.chunks);
+  let retrieved: Awaited<ReturnType<typeof retrieveContext>>;
   let object: Analysis;
   let tokens_in = 0;
   let tokens_out = 0;
   try {
+    retrieved = await retrieveContext(queryText, { limit: 5, abortSignal: deadline.signal });
+    const internal_context = formatChunksForPrompt(retrieved.chunks);
     const result = await generateObject({
       model: deepseek(ANALYSIS_MODEL),
       schema: AnalysisSchema,

@@ -10,7 +10,7 @@ import { normalizeUsage, calcCost } from "@/lib/cost";
 import { usageTrailer } from "@/lib/streamUsage";
 import { apiError } from "@/lib/http";
 import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
-import { createRequestContext } from "@/lib/observability";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { classifyProviderDeadlineFailure, createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
@@ -54,8 +54,22 @@ export async function POST(req: NextRequest) {
   // Best-effort — if KB is empty or retrieval fails, we still produce a response.
   const deadline = createProviderDeadline(req.signal);
   const queryText = [input.title, input.service, input.symptoms, input.raw_context].filter(Boolean).join(" ").slice(0, 4000);
-  const retrieved = await retrieveContext(queryText, { limit: 5, abortSignal: deadline.signal });
-  const internal_context = formatChunksForPrompt(retrieved.chunks);
+  let internal_context = "";
+  try {
+    const retrieved = await retrieveContext(queryText, { limit: 5, abortSignal: deadline.signal });
+    internal_context = formatChunksForPrompt(retrieved.chunks);
+  } catch (err) {
+    const failure = classifyProviderDeadlineFailure(req.signal, deadline);
+    if (failure === "request_aborted") {
+      ctx.log("warn", "analysis_retrieval_aborted");
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Analysis was cancelled.", { requestId: ctx.requestId }));
+    }
+    if (failure === "timed_out") {
+      ctx.log("error", "analysis_retrieval_timed_out", { timeout_ms: PROVIDER_TIMEOUT_MS });
+      return ctx.response(apiError(504, "ANALYSIS_TIMEOUT", `Analysis timed out after ${PROVIDER_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
+    ctx.log("warn", "analysis_retrieval_failed", { error: safeErrorDetail(err) });
+  }
 
   const result = streamObject({
     model: deepseek(ANALYSIS_MODEL),
