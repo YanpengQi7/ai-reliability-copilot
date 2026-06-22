@@ -165,6 +165,7 @@ export async function retrieveContext(
   queryText: string,
   opts: { limit?: number; vectorThreshold?: number; trigramThreshold?: number; abortSignal?: AbortSignal } = {},
 ): Promise<RetrieveResult> {
+  opts.abortSignal?.throwIfAborted();
   if (!hasSupabase()) return { mode: "none", chunks: [] };
   const sb = supabaseAdmin();
   const limit = opts.limit ?? 5;
@@ -173,6 +174,7 @@ export async function retrieveContext(
 
   if (hasEmbeddingProvider()) {
     const vec = await embed(queryText, opts.abortSignal);
+    opts.abortSignal?.throwIfAborted();
     if (vec) {
       const query = sb.rpc("match_kb_chunks_by_embedding", {
         query_embedding: vec,
@@ -181,6 +183,7 @@ export async function retrieveContext(
       });
       if (opts.abortSignal) query.abortSignal(opts.abortSignal);
       const { data, error } = await query;
+      opts.abortSignal?.throwIfAborted();
       if (!error && data) return { mode: "vector", chunks: data as RetrievedChunk[] };
     }
   }
@@ -192,6 +195,7 @@ export async function retrieveContext(
   });
   if (opts.abortSignal) query.abortSignal(opts.abortSignal);
   const { data, error } = await query;
+  opts.abortSignal?.throwIfAborted();
   if (error || !data) return { mode: "trigram", chunks: [] };
   return { mode: "trigram", chunks: data as RetrievedChunk[] };
 }

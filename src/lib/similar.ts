@@ -33,6 +33,7 @@ export async function findSimilarIncidents(
   queryText: string,
   opts: { excludeId?: string; limit?: number; vectorThreshold?: number; trigramThreshold?: number; abortSignal?: AbortSignal } = {},
 ): Promise<SimilarResult> {
+  opts.abortSignal?.throwIfAborted();
   if (!hasSupabase()) return { mode: "none", hits: [] };
   const sb = supabaseAdmin();
   const excludeId = opts.excludeId ?? null;
@@ -42,6 +43,7 @@ export async function findSimilarIncidents(
 
   if (hasEmbeddingProvider()) {
     const vec = await embed(queryText, opts.abortSignal);
+    opts.abortSignal?.throwIfAborted();
     if (vec) {
       const query = sb.rpc("match_incidents_by_embedding", {
         query_embedding: vec,
@@ -51,6 +53,7 @@ export async function findSimilarIncidents(
       });
       if (opts.abortSignal) query.abortSignal(opts.abortSignal);
       const { data, error } = await query;
+      opts.abortSignal?.throwIfAborted();
       if (!error && data) {
         return { mode: "vector", hits: data as SimilarIncident[] };
       }
@@ -66,6 +69,7 @@ export async function findSimilarIncidents(
   });
   if (opts.abortSignal) query.abortSignal(opts.abortSignal);
   const { data, error } = await query;
+  opts.abortSignal?.throwIfAborted();
   if (error || !data) return { mode: "trigram", hits: [] };
   return { mode: "trigram", hits: data as SimilarIncident[] };
 }

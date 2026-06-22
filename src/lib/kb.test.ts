@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ supabaseAdmin: vi.fn() }));
 
 vi.mock("./supabase", () => ({ supabaseAdmin: mocks.supabaseAdmin }));
 
-import { ingestDocument, recordRetrievedChunks, type RetrievedChunk } from "./kb";
+import { ingestDocument, recordRetrievedChunks, retrieveContext, type RetrievedChunk } from "./kb";
 
 const originalUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const originalKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -67,6 +67,17 @@ describe("recordRetrievedChunks", () => {
 
   it("does not open a database client when there are no chunks", async () => {
     await expect(recordRetrievedChunks("analysis-1", [])).resolves.toBeUndefined();
+    expect(mocks.supabaseAdmin).not.toHaveBeenCalled();
+  });
+});
+
+describe("retrieveContext", () => {
+  it("propagates cancellation before opening a database client", async () => {
+    const controller = new AbortController();
+    controller.abort(new Error("search cancelled"));
+
+    await expect(retrieveContext("worker queue", { abortSignal: controller.signal }))
+      .rejects.toThrow("search cancelled");
     expect(mocks.supabaseAdmin).not.toHaveBeenCalled();
   });
 });
