@@ -231,6 +231,7 @@ Now produce the structured 9-section incident response based on this evidence.${
     analysis = r.object;
     accumulate(usage, r.usage, model);
   } catch (err) {
+    opts.abortSignal?.throwIfAborted();
     // Retry once on parse error (DeepSeek JSON mode is occasionally invalid).
     const msg = err instanceof Error ? err.message : String(err);
     if (!/parse|invalid json|schema|JSON/i.test(msg)) throw err;
