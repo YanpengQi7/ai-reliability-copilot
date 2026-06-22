@@ -95,7 +95,7 @@ export async function investigate(opts: InvestigateOptions): Promise<Investigati
 
   const tools = buildToolDefs();
   const scratch = new Scratchpad();
-  const dctx: DispatchContext = { ctx: input, callCounts: {} };
+  const dctx: DispatchContext = { ctx: input, callCounts: {}, abortSignal: opts.abortSignal };
   const trace: TraceStep[] = [];
   const usage: UsageTotals = { model_calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
 
