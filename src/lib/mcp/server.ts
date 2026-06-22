@@ -28,6 +28,7 @@ import { hasSupabase } from "@/lib/db";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
 import { resolveAppBaseUrl } from "@/lib/appUrl";
+import { createDatabaseDeadline, DATABASE_QUERY_TIMEOUT_MS } from "@/lib/databaseDeadline";
 import { withTelemetry } from "./telemetry";
 
 const SEVERITY_RUBRIC = `# Severity rubric (from src/lib/prompts.ts SYSTEM_PROMPT_V2)
@@ -211,6 +212,7 @@ export function buildMcpServer(options: { requestUrl?: string } = {}) {
         severity: safeInput.analysis.severity,
       });
       const embedding = await embed(signature);
+      const incidentDeadline = createDatabaseDeadline();
       const { data: inc, error: e1 } = await sb.from("incidents").insert(buildIncidentRecord({
         title: safeInput.title,
         service: safeInput.service,
@@ -218,16 +220,26 @@ export function buildMcpServer(options: { requestUrl?: string } = {}) {
         rawContext: safeInput.raw_context,
         signature,
         embedding,
-      })).select("id").single();
+      })).select("id").abortSignal(incidentDeadline.signal).single();
       if (e1 || !inc) {
+        const timedOut = incidentDeadline.timeoutSignal.aborted;
         console.error(JSON.stringify({
           level: "error",
           event: "mcp_incident_insert_failed",
           error: safeErrorDetail(e1 ?? new Error("Incident insert returned no row.")),
+          timed_out: timedOut,
+          ...(timedOut ? { timeout_ms: DATABASE_QUERY_TIMEOUT_MS } : {}),
         }));
-        return { content: [{ type: "text", text: "Database error while saving the incident." }], isError: true };
+        return {
+          content: [{
+            type: "text",
+            text: timedOut ? "Database timed out while saving the incident." : "Database error while saving the incident.",
+          }],
+          isError: true,
+        };
       }
 
+      const analysisDeadline = createDatabaseDeadline();
       const { data: ana, error: e2 } = await sb.from("analyses").insert(
         buildAnalysisRecord({
           incidentId: inc.id,
@@ -236,17 +248,32 @@ export function buildMcpServer(options: { requestUrl?: string } = {}) {
           promptVersion: "mcp",
           outputLanguage: safeInput.output_language ?? "en",
         }),
-      ).select("id").single();
+      ).select("id").abortSignal(analysisDeadline.signal).single();
       if (e2 || !ana) {
-        const { error: cleanupError } = await sb.from("incidents").delete().eq("id", inc.id);
+        const cleanupDeadline = createDatabaseDeadline();
+        const { error: cleanupError } = await sb
+          .from("incidents")
+          .delete()
+          .eq("id", inc.id)
+          .abortSignal(cleanupDeadline.signal);
+        const timedOut = analysisDeadline.timeoutSignal.aborted;
         console.error(JSON.stringify({
           level: "error",
           event: "mcp_analysis_insert_failed",
           error: safeErrorDetail(e2 ?? new Error("Analysis insert returned no row.")),
           cleanup_error: cleanupError ? safeErrorDetail(cleanupError) : undefined,
+          cleanup_timed_out: cleanupDeadline.timeoutSignal.aborted,
           incident_id: inc.id,
+          timed_out: timedOut,
+          ...(timedOut ? { timeout_ms: DATABASE_QUERY_TIMEOUT_MS } : {}),
         }));
-        return { content: [{ type: "text", text: "Database error while saving the analysis." }], isError: true };
+        return {
+          content: [{
+            type: "text",
+            text: timedOut ? "Database timed out while saving the analysis." : "Database error while saving the analysis.",
+          }],
+          isError: true,
+        };
       }
 
       const base = resolveAppBaseUrl(options.requestUrl);
