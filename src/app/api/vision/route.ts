@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (!hasVisionProvider()) {
     return ctx.response(apiError(503, "MISSING_API_KEY", "OPENAI_API_KEY required for image analysis", { requestId: ctx.requestId }));
   }
-  const rl = await rateLimit(clientKey(req), { max: 3, namespace: "vision" });
+  const rl = await rateLimit(clientKey(req), { max: 3, namespace: "vision", abortSignal: req.signal });
   if (!rl.allowed) {
     return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }

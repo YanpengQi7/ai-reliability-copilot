@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   if (!hasSupabase()) {
     return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase env vars not set", { requestId: ctx.requestId }));
   }
-  const rl = await rateLimit(clientKey(req), { max: 10, namespace: "save" });
+  const rl = await rateLimit(clientKey(req), { max: 10, namespace: "save", abortSignal: req.signal });
   if (!rl.allowed) {
     return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }

@@ -26,7 +26,7 @@ export type RateLimitResult = {
   backend: "redis" | "memory";
 };
 
-type RateLimitOptions = { max?: number; windowMs?: number; namespace?: string };
+type RateLimitOptions = { max?: number; windowMs?: number; namespace?: string; abortSignal?: AbortSignal };
 
 function removeExpiredBuckets(bucketset: Bucketset, now: number) {
   for (const [key, bucket] of bucketset) {
@@ -102,6 +102,10 @@ async function redisRateLimit(
 ): Promise<RateLimitResult> {
   const max = opts.max ?? MAX_PER_WINDOW;
   const windowMs = opts.windowMs ?? WINDOW_MS;
+  const timeoutSignal = AbortSignal.timeout(1_000);
+  const signal = opts.abortSignal
+    ? AbortSignal.any([opts.abortSignal, timeoutSignal])
+    : timeoutSignal;
   const response = await fetch(config.url, {
     method: "POST",
     headers: {
@@ -110,7 +114,7 @@ async function redisRateLimit(
     },
     body: JSON.stringify(["EVAL", FIXED_WINDOW_SCRIPT, 1, redisKey(key, opts.namespace), windowMs]),
     cache: "no-store",
-    signal: AbortSignal.timeout(1_000),
+    signal,
   });
   if (!response.ok) throw new Error(`Redis returned HTTP ${response.status}`);
   const body = await response.json() as { result?: unknown; error?: string };
@@ -150,6 +154,7 @@ export function createRateLimiter(options: {
         redisUnavailableUntil = 0;
         return result;
       } catch (error) {
+        if (opts.abortSignal?.aborted) throw error;
         redisUnavailableUntil = currentTime + redisFailureBackoffMs;
         console.warn(JSON.stringify({
           level: "warn",

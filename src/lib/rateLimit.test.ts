@@ -159,4 +159,24 @@ describe("createRateLimiter", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(console.warn).toHaveBeenCalledTimes(2);
   });
+
+  it("propagates request cancellation without opening the Redis failure circuit", async () => {
+    process.env.UPSTASH_REDIS_REST_URL = "https://redis.example.com";
+    process.env.UPSTASH_REDIS_REST_TOKEN = "secret-token";
+    const controller = new AbortController();
+    vi.stubGlobal("fetch", vi.fn(async (_url, init) => {
+      await new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      });
+      return new Response();
+    }));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const limit = createRateLimiter();
+
+    const result = limit("client-a", { abortSignal: controller.signal });
+    controller.abort(new Error("request cancelled"));
+
+    await expect(result).rejects.toThrow("request cancelled");
+    expect(warn).not.toHaveBeenCalled();
+  });
 });

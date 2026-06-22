@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   if (!process.env.DEEPSEEK_API_KEY) {
     return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY is not configured on the server.", { requestId: ctx.requestId }));
   }
-  const rl = await rateLimit(clientKey(req));
+  const rl = await rateLimit(clientKey(req), { abortSignal: req.signal });
   if (!rl.allowed) {
     return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Demo limit: 5 requests/min. Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }

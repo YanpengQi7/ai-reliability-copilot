@@ -63,7 +63,7 @@ export async function POST(req: Request) {
   if (!checkAuth(req)) {
     return ctx.response(apiError(401, "UNAUTHORIZED", "Missing or wrong secret", { requestId: ctx.requestId }));
   }
-  const rl = await rateLimit(clientKey(req), { max: RATE_LIMIT, namespace: "webhook" });
+  const rl = await rateLimit(clientKey(req), { max: RATE_LIMIT, namespace: "webhook", abortSignal: req.signal });
   if (!rl.allowed) {
     return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`, { requestId: ctx.requestId }), rl));
   }

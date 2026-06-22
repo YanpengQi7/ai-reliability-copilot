@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   if (!hasSupabase()) {
     return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase not configured", { requestId: ctx.requestId }));
   }
-  const rl = await rateLimit(clientKey(req), { max: 3, namespace: "evaluate" });
+  const rl = await rateLimit(clientKey(req), { max: 3, namespace: "evaluate", abortSignal: req.signal });
   if (!rl.allowed) {
     return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
