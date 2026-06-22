@@ -27,6 +27,18 @@ describe("redactSensitiveValue", () => {
 });
 
 describe("bounded request body readers", () => {
+  it("rejects a pre-cancelled request before reading its body", async () => {
+    const controller = new AbortController();
+    const req = new Request("https://example.com", {
+      method: "POST",
+      body: "still buffered",
+      signal: controller.signal,
+    });
+    controller.abort(new Error("request cancelled"));
+
+    await expect(readTextBody(req, 100)).rejects.toThrow("request cancelled");
+  });
+
   it("rejects an oversized body even without Content-Length", async () => {
     const req = new Request("https://example.com", {
       method: "POST",

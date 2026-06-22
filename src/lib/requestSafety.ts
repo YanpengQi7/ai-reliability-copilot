@@ -46,6 +46,7 @@ export type BodyReadResult<T> =
 
 /** Read a request body with a real byte limit, even when Content-Length is absent or false. */
 export async function readTextBody(req: Request, maxBytes: number): Promise<BodyReadResult<string>> {
+  req.signal.throwIfAborted();
   if (contentLengthExceeds(req, maxBytes)) return { ok: false, error: "payload_too_large" };
   if (!req.body) return { ok: true, value: "" };
 
@@ -54,6 +55,7 @@ export async function readTextBody(req: Request, maxBytes: number): Promise<Body
   let total = 0;
   while (true) {
     const { done, value } = await reader.read();
+    req.signal.throwIfAborted();
     if (done) break;
     total += value.byteLength;
     if (total > maxBytes) {
