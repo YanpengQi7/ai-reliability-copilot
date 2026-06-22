@@ -77,6 +77,15 @@ describe("getIncidentWithAnalyses", () => {
 });
 
 describe("getIncident", () => {
+  it("propagates pre-cancellation before opening a database client", async () => {
+    const controller = new AbortController();
+    controller.abort(new Error("query cancelled"));
+
+    await expect(getIncident("incident-1", { abortSignal: controller.signal }))
+      .rejects.toThrow("query cancelled");
+    expect(mocks.supabaseAdmin).not.toHaveBeenCalled();
+  });
+
   it("returns null only when the incident does not exist", async () => {
     mockClient({ data: null, error: null });
 

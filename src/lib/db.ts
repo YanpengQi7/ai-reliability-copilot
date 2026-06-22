@@ -37,6 +37,7 @@ export function hasSupabase() {
 
 export async function listIncidents(limit = 50, options: { abortSignal?: AbortSignal } = {}): Promise<IncidentRow[]> {
   if (!hasSupabase()) return [];
+  options.abortSignal?.throwIfAborted();
   const sb = supabaseAdmin();
   const query = sb
     .from("incidents")
@@ -45,34 +46,41 @@ export async function listIncidents(limit = 50, options: { abortSignal?: AbortSi
     .limit(limit);
   if (options.abortSignal) query.abortSignal(options.abortSignal);
   const { data, error } = await query;
+  options.abortSignal?.throwIfAborted();
   if (error) throw error;
   return data as IncidentRow[];
 }
 
 export async function getIncident(id: string, options: { abortSignal?: AbortSignal } = {}): Promise<IncidentRow | null> {
   if (!hasSupabase()) return null;
+  options.abortSignal?.throwIfAborted();
   const query = supabaseAdmin().from("incidents").select("*").eq("id", id);
   if (options.abortSignal) query.abortSignal(options.abortSignal);
   const { data, error } = await query.maybeSingle();
+  options.abortSignal?.throwIfAborted();
   if (error) throw error;
   return data as IncidentRow | null;
 }
 
 export async function getAnalysis(id: string, options: { abortSignal?: AbortSignal } = {}): Promise<AnalysisRow | null> {
   if (!hasSupabase()) return null;
+  options.abortSignal?.throwIfAborted();
   const query = supabaseAdmin().from("analyses").select("*").eq("id", id);
   if (options.abortSignal) query.abortSignal(options.abortSignal);
   const { data, error } = await query.maybeSingle();
+  options.abortSignal?.throwIfAborted();
   if (error) throw error;
   return data as AnalysisRow | null;
 }
 
 export async function getIncidentWithAnalyses(id: string, options: { abortSignal?: AbortSignal } = {}) {
   if (!hasSupabase()) return null;
+  options.abortSignal?.throwIfAborted();
   const sb = supabaseAdmin();
   const incidentQuery = sb.from("incidents").select("*").eq("id", id);
   if (options.abortSignal) incidentQuery.abortSignal(options.abortSignal);
   const { data: incident, error: e1 } = await incidentQuery.maybeSingle();
+  options.abortSignal?.throwIfAborted();
   if (e1) throw e1;
   if (!incident) return null;
   const analysesQuery = sb
@@ -81,6 +89,7 @@ export async function getIncidentWithAnalyses(id: string, options: { abortSignal
     .eq("incident_id", id);
   if (options.abortSignal) analysesQuery.abortSignal(options.abortSignal);
   const { data: analyses, error: e2 } = await analysesQuery.order("created_at", { ascending: false });
+  options.abortSignal?.throwIfAborted();
   if (e2) throw e2;
   return { incident: incident as IncidentRow, analyses: (analyses ?? []) as AnalysisRow[] };
 }
