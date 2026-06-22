@@ -209,6 +209,7 @@ export async function recordRetrievedChunks(
   options: { abortSignal?: AbortSignal } = {},
 ) {
   if (!hasSupabase() || chunks.length === 0) return;
+  options.abortSignal?.throwIfAborted();
   const sb = supabaseAdmin();
   const query = sb.from("analysis_kb_chunks").insert(
     chunks.map((c, i) => ({
@@ -220,6 +221,7 @@ export async function recordRetrievedChunks(
   );
   if (options.abortSignal) query.abortSignal(options.abortSignal);
   const { error } = await query;
+  options.abortSignal?.throwIfAborted();
   if (error) throw error;
 }
 

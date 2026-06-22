@@ -65,6 +65,15 @@ describe("recordRetrievedChunks", () => {
     await expect(recordRetrievedChunks("analysis-1", [chunk])).rejects.toBe(error);
   });
 
+  it("propagates cancellation before opening a database client", async () => {
+    const controller = new AbortController();
+    controller.abort(new Error("audit cancelled"));
+
+    await expect(recordRetrievedChunks("analysis-1", [chunk], { abortSignal: controller.signal }))
+      .rejects.toThrow("audit cancelled");
+    expect(mocks.supabaseAdmin).not.toHaveBeenCalled();
+  });
+
   it("does not open a database client when there are no chunks", async () => {
     await expect(recordRetrievedChunks("analysis-1", [])).resolves.toBeUndefined();
     expect(mocks.supabaseAdmin).not.toHaveBeenCalled();
