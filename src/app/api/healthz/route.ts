@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
 import { distributedRateLimitConfigured } from "@/lib/rateLimit";
 import { requestCanSeeHealthDetails } from "@/lib/deployment";
+import { createDatabaseDeadline } from "@/lib/databaseDeadline";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,19 +28,22 @@ export async function GET(req: Request) {
   checks.supabase_env = { ok: hasSupabase() };
 
   if (checks.supabase_env.ok) {
+    const deadline = createDatabaseDeadline(req.signal, DB_TIMEOUT_MS);
     try {
       const sb = supabaseAdmin();
       const { error } = await sb
         .from("incidents")
         .select("id")
         .limit(1)
-        .abortSignal(AbortSignal.timeout(DB_TIMEOUT_MS));
+        .abortSignal(deadline.signal);
+      deadline.signal.throwIfAborted();
       checks.supabase_query = { ok: !error, detail: error?.message };
     } catch (e) {
-      const timedOut = e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError");
       checks.supabase_query = {
         ok: false,
-        detail: timedOut ? `timed out after ${DB_TIMEOUT_MS}ms` : safeErrorDetail(e),
+        detail: deadline.timeoutSignal.aborted
+          ? `timed out after ${DB_TIMEOUT_MS}ms`
+          : req.signal.aborted ? "cancelled by client" : safeErrorDetail(e),
       };
     }
   } else {
