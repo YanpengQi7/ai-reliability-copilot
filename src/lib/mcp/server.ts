@@ -101,7 +101,14 @@ export function buildMcpServer(options: { requestUrl?: string } = {}) {
       "search_kb",
       (a) => `q=${a.query}`,
       async ({ query, limit }) => {
-        const r = await retrieveContext(query, { limit });
+        const deadline = createDatabaseDeadline();
+        const r = await retrieveContext(query, { limit, abortSignal: deadline.signal });
+        if (deadline.timeoutSignal.aborted) {
+          return {
+            content: [{ type: "text", text: `Knowledge base search timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.` }],
+            isError: true,
+          };
+        }
         const body = r.chunks.length === 0
           ? `No KB chunks matched (mode=${r.mode}). The KB may be empty or your threshold is too tight.`
           : r.chunks.map((c, i) => `[${i + 1}] ${c.document_title ?? c.source_path} (${c.document_kind}) · similarity ${(c.similarity * 100).toFixed(0)}%\n${c.text}`).join("\n\n---\n\n");
@@ -124,7 +131,14 @@ export function buildMcpServer(options: { requestUrl?: string } = {}) {
       "find_similar_incidents",
       (a) => `text=${String(a.text ?? "").slice(0, 200)}`,
       async ({ text, limit }) => {
-        const r = await findSimilarIncidents(text, { limit });
+        const deadline = createDatabaseDeadline();
+        const r = await findSimilarIncidents(text, { limit, abortSignal: deadline.signal });
+        if (deadline.timeoutSignal.aborted) {
+          return {
+            content: [{ type: "text", text: `Similar incident search timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.` }],
+            isError: true,
+          };
+        }
         const body = r.hits.length === 0
           ? `No similar incidents found (mode=${r.mode}).`
           : r.hits.map((h, i) => `[${i + 1}] ${h.title ?? h.service ?? h.id} · similarity ${(h.similarity * 100).toFixed(0)}%\n  service: ${h.service ?? "n/a"} · symptoms: ${h.symptoms ?? "n/a"}\n  incident_id: ${h.id}`).join("\n\n");
