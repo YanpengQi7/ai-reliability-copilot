@@ -153,9 +153,11 @@ export async function POST(req: NextRequest) {
   // We re-run retrieval with the same query so the junction is consistent
   // — slight cost (1 extra embed call), but the audit trail is now complete.
   try {
+    const auditDeadline = createDatabaseDeadline(req.signal);
     const queryText = [input.title, input.service, input.symptoms, input.raw_context].filter(Boolean).join(" ").slice(0, 4000);
-    const r = await retrieveContext(queryText, { limit: 5, abortSignal: req.signal });
-    await recordRetrievedChunks(ana.id, r.chunks, { abortSignal: req.signal });
+    const r = await retrieveContext(queryText, { limit: 5, abortSignal: auditDeadline.signal });
+    auditDeadline.signal.throwIfAborted();
+    await recordRetrievedChunks(ana.id, r.chunks, { abortSignal: auditDeadline.signal });
   } catch (err) {
     if (!req.signal.aborted) {
       ctx.log("warn", "kb_audit_write_failed", {
