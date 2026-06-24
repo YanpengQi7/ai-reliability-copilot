@@ -118,4 +118,24 @@ describe("makeUsageCapturingFetch", () => {
       globalThis.fetch = orig;
     }
   });
+
+  it("bounds oversized usage trailers without dropping the JSON body", async () => {
+    const body = '{"summary":"oversized trailer"}';
+    let captured: StreamUsage | null = { tokens_in: 1, tokens_out: 1, cost_usd: 1 };
+    const wrapped = makeUsageCapturingFetch((u) => {
+      captured = u;
+    });
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async () => streamingResponse([
+      body + STREAM_USAGE_SENTINEL,
+      "x".repeat(5000),
+    ])) as typeof fetch;
+    try {
+      const res = await wrapped("/api/analyze", { method: "POST" });
+      expect(await readAll(res)).toBe(body);
+      expect(captured).toBeNull();
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
 });
