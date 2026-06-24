@@ -53,16 +53,20 @@ export async function readTextBody(req: Request, maxBytes: number): Promise<Body
   const reader = req.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    req.signal.throwIfAborted();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel("payload too large").catch(() => undefined);
-      return { ok: false, error: "payload_too_large" };
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      req.signal.throwIfAborted();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel("payload too large").catch(() => undefined);
+        return { ok: false, error: "payload_too_large" };
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } finally {
+    reader.releaseLock();
   }
 
   const bytes = new Uint8Array(total);

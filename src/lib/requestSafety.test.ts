@@ -39,6 +39,29 @@ describe("bounded request body readers", () => {
     await expect(readTextBody(req, 100)).rejects.toThrow("request cancelled");
   });
 
+  it("releases the body reader when cancellation happens mid-read", async () => {
+    const abortController = new AbortController();
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(encoder.encode("partial"));
+        abortController.abort(new Error("request cancelled"));
+      },
+    });
+    const req = new Request("https://example.com", {
+      method: "POST",
+      body: stream,
+      signal: abortController.signal,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+
+    await expect(readTextBody(req, 100)).rejects.toThrow("request cancelled");
+
+    const reader = req.body?.getReader();
+    expect(reader).toBeDefined();
+    reader?.releaseLock();
+  });
+
   it("rejects an oversized body even without Content-Length", async () => {
     const req = new Request("https://example.com", {
       method: "POST",
