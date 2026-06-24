@@ -89,6 +89,7 @@ export async function judge(
   model = deepseek(JUDGE_MODEL),
   options: { abortSignal?: AbortSignal } = {},
 ) {
+  options.abortSignal?.throwIfAborted();
   const { object } = await generateObject({
     model,
     schema: RubricScores,
@@ -97,6 +98,7 @@ export async function judge(
     temperature: 0,
     abortSignal: options.abortSignal,
   });
+  options.abortSignal?.throwIfAborted();
   return object;
 }
 
@@ -114,6 +116,7 @@ export async function judgeWithGrounding(
   judgeModel: string = JUDGE_MODEL_GROUNDING,
   options: { abortSignal?: AbortSignal } = {},
 ) {
+  options.abortSignal?.throwIfAborted();
   const { object } = await generateObject({
     model: deepseek(judgeModel),
     schema: RubricScoresWithGrounding,
@@ -122,5 +125,6 @@ export async function judgeWithGrounding(
     temperature: 0,
     abortSignal: options.abortSignal,
   });
+  options.abortSignal?.throwIfAborted();
   return object;
 }
