@@ -42,6 +42,7 @@ If the image is not operationally useful (random photo, unrelated UI), say so in
  * Returns null when no vision provider is configured.
  */
 export async function describeImage(image: string, signal?: AbortSignal): Promise<string | null> {
+  signal?.throwIfAborted();
   const client = getClient();
   if (!client) return null;
   const res = await client.chat.completions.create(
@@ -62,5 +63,6 @@ export async function describeImage(image: string, signal?: AbortSignal): Promis
     },
     { signal },
   );
+  signal?.throwIfAborted();
   return res.choices[0]?.message?.content ?? null;
 }
