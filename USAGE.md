@@ -170,12 +170,15 @@ printf '%s' "$TOKEN" | vercel env add WEBHOOK_SECRET production
 vercel --prod
 ```
 
-在 alerter 里配 webhook URL：
+在 alerter 里配置 URL `https://your-deployment/api/webhook/alert`，并添加请求头：
+
 ```
-https://your-deployment/api/webhook/alert?secret=<TOKEN>
-# 或者 header 形式：
-X-Webhook-Secret: <TOKEN>
+Authorization: Bearer <TOKEN>
 ```
+
+如果告警平台不支持 `Authorization`，也可以使用 `X-Webhook-Secret: <TOKEN>`。
+不要把 token 放进 URL；旧版 `?secret=` 仅在显式设置
+`ALLOW_LEGACY_QUERY_SECRET=true` 时兼容。
 
 行为：
 - 自动 parser 识别 Datadog / PagerDuty / Sentry payload（任何 JSON 都接，识别不出来就当 raw text）
@@ -310,9 +313,15 @@ NODE_ENV=production npm start   # 默认 :3000
 
 ### Health check
 ```
+GET /api/livez
+→ 200：进程存活，不访问外部依赖
+
 GET /api/healthz
-→ 200 OK + JSON 包含每个依赖的健康状态
-→ 503 + 哪个失败 + 失败原因
+→ 200/503：公开响应只包含 status、version、timestamp
+
+GET /api/healthz
+Authorization: Bearer <HEALTHCHECK_TOKEN>
+→ 包含每个依赖的详细状态和能力配置
 ```
 
 接 BetterStack / Pingdom / Vercel Monitor 一键配监控。
@@ -361,7 +370,7 @@ claude mcp add --transport http ai-reliability \
 
 **其他默认防御**：
 - **50 req/min/IP rate limit**（in-memory，cold-start 重置）
-- **每次 tool call 记 audit log** 到 `mcp_tool_calls` 表：tool / ok / 延迟 / IP / 输入预览（前 200 字符）/ 响应字节数。**不存完整输入或输出**。
+- **每次 tool call 记 audit log** 到 `mcp_tool_calls` 表：tool / ok / 延迟 / 不可逆客户端摘要 / 输入预览（前 200 字符）/ 响应字节数。**不存原始 IP、完整输入或输出**。
 - 想看用量：`select tool_name, count(*), avg(latency_ms)::int from mcp_tool_calls where created_at > now() - interval '1 day' group by 1 order by 2 desc;`
 
 ---

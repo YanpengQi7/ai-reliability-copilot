@@ -4,13 +4,14 @@ import { z } from "zod";
 import { AnalysisSchema } from "@/lib/schema";
 import { deepseek, ANALYSIS_MODEL } from "@/lib/ai";
 import { getSystemPrompt, buildUserPrompt, DEFAULT_PROMPT_VERSION, type PromptVersion } from "@/lib/prompts";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { retrieveContext, formatChunksForPrompt } from "@/lib/kb";
 import { normalizeUsage, calcCost } from "@/lib/cost";
 import { usageTrailer } from "@/lib/streamUsage";
 import { apiError } from "@/lib/http";
-import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
-import { createRequestContext } from "@/lib/observability";
+import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
+import { classifyProviderDeadlineFailure, createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -29,21 +30,18 @@ export async function POST(req: NextRequest) {
   if (!process.env.DEEPSEEK_API_KEY) {
     return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY is not configured on the server.", { requestId: ctx.requestId }));
   }
-  const rl = rateLimit(clientKey(req));
+  const rl = await rateLimit(clientKey(req), { abortSignal: req.signal });
   if (!rl.allowed) {
-    return ctx.response(apiError(429, "RATE_LIMITED", `Demo limit: 5 requests/min. Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
+    return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Demo limit: 5 requests/min. Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
-  if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 2)) {
+  const bodyResult = await readJsonBody(req, INPUT_LIMITS.rawContext * 2);
+  if (!bodyResult.ok && bodyResult.error === "payload_too_large") {
     return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.", { requestId: ctx.requestId }));
   }
-
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
+  if (!bodyResult.ok) {
     return ctx.response(apiError(400, "INVALID_JSON", "Body must be JSON", { requestId: ctx.requestId }));
   }
-  const parsed = InputSchema.safeParse(body);
+  const parsed = InputSchema.safeParse(bodyResult.value);
   if (!parsed.success) {
     const message = parsed.error.issues.map((issue) => issue.message).join("; ");
     return ctx.response(apiError(400, "VALIDATION_ERROR", message, { requestId: ctx.requestId }));
@@ -54,9 +52,24 @@ export async function POST(req: NextRequest) {
 
   // RAG: retrieve relevant internal docs based on what the user typed.
   // Best-effort — if KB is empty or retrieval fails, we still produce a response.
+  const deadline = createProviderDeadline(req.signal);
   const queryText = [input.title, input.service, input.symptoms, input.raw_context].filter(Boolean).join(" ").slice(0, 4000);
-  const retrieved = await retrieveContext(queryText, { limit: 5 });
-  const internal_context = formatChunksForPrompt(retrieved.chunks);
+  let internal_context = "";
+  try {
+    const retrieved = await retrieveContext(queryText, { limit: 5, abortSignal: deadline.signal });
+    internal_context = formatChunksForPrompt(retrieved.chunks);
+  } catch (err) {
+    const failure = classifyProviderDeadlineFailure(req.signal, deadline);
+    if (failure === "request_aborted") {
+      ctx.log("warn", "analysis_retrieval_aborted");
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Analysis was cancelled.", { requestId: ctx.requestId }));
+    }
+    if (failure === "timed_out") {
+      ctx.log("error", "analysis_retrieval_timed_out", { timeout_ms: PROVIDER_TIMEOUT_MS });
+      return ctx.response(apiError(504, "ANALYSIS_TIMEOUT", `Analysis timed out after ${PROVIDER_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
+    ctx.log("warn", "analysis_retrieval_failed", { error: safeErrorDetail(err) });
+  }
 
   const result = streamObject({
     model: deepseek(ANALYSIS_MODEL),
@@ -64,7 +77,7 @@ export async function POST(req: NextRequest) {
     system: getSystemPrompt(version),
     prompt: buildUserPrompt({ ...input, language: input.output_language ?? "en", internal_context }),
     temperature: 0.2,
-    abortSignal: req.signal,
+    abortSignal: deadline.signal,
   });
 
   // Stream the object JSON, then append a usage TRAILER once the stream ends
@@ -85,6 +98,12 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(usageTrailer({ tokens_in, tokens_out, cost_usd })));
         controller.close();
       } catch (err) {
+        const failure = classifyProviderDeadlineFailure(req.signal, deadline);
+        if (failure === "request_aborted") {
+          ctx.log("warn", "analysis_request_aborted");
+        } else if (failure === "timed_out") {
+          ctx.log("error", "analysis_provider_timed_out", { timeout_ms: PROVIDER_TIMEOUT_MS });
+        }
         controller.error(err);
       }
     },

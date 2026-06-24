@@ -5,7 +5,7 @@
 //   npm run evals:agentic -- --quick      # smoke: 1 scenario, en, 1 rep
 //   npm run evals:agentic -- --en         # English only
 //
-// Methodology (continues notes/eval-run-3.md): n repeats per cell, report
+// Methodology (continues notes/reports/eval-run-3.md): n repeats per cell, report
 // mean ± std, and call a gap "stands out" only when |Δmean| > pooled std.
 //
 // What's held constant so the comparison is honest: same model, same judge,
@@ -16,12 +16,13 @@
 // dims for BOTH (comparable). `evidence_grounding` is scored for the agentic
 // arm ONLY (the baseline has no trace) and reported separately.
 //
-// No Supabase required — results print to stdout and write to notes/eval-agentic-latest.json.
+// No Supabase required — results print to stdout and write to notes/generated/eval-agentic-latest.json.
 
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
 import { writeFileSync } from "node:fs";
+import { parseEvalRepeats } from "../src/lib/eval/runConfig";
 import { generateObject } from "ai";
 import { SCENARIOS, type Scenario } from "../src/lib/scenarios";
 import { AnalysisSchema, type Analysis } from "../src/lib/schema";
@@ -126,7 +127,7 @@ async function main() {
   const quick = args.includes("--quick");
   const languages: OutputLanguage[] = args.includes("--en") || quick ? ["en"] : ["en", "zh"];
   const scenarios = quick ? SCENARIOS.slice(0, 1) : SCENARIOS;
-  const repeats = quick ? 1 : Math.max(1, parseInt(process.env.EVAL_REPEATS ?? "2", 10));
+  const repeats = quick ? 1 : parseEvalRepeats(process.env.EVAL_REPEATS, 2);
   const modes: Mode[] = ["single", "agentic"];
 
   if (!process.env.DEEPSEEK_API_KEY) {
@@ -153,6 +154,8 @@ async function main() {
       }
     }
   }
+
+  if (rows.length === 0) throw new Error("No successful agentic evaluation rows — nothing to report.");
 
   // ── Report ──────────────────────────────────────────────────────────
   const of = (f: (r: Row) => boolean) => rows.filter(f);
@@ -208,9 +211,15 @@ async function main() {
   console.log(`  overall Δ (agentic − single): ${dOverall >= 0 ? "+" : ""}${dOverall.toFixed(3)} (pooled std ${pooled.toFixed(3)} → ${Math.abs(dOverall) > pooled ? "stands out" : "inside noise"})`);
   console.log(`  agentic costs ${costMult.toFixed(1)}× the single-shot baseline`);
 
-  const out = `notes/eval-agentic-latest.json`;
+  const out = `notes/generated/eval-agentic-latest.json`;
   writeFileSync(out, JSON.stringify({ generated_at: new Date().toISOString(), repeats, rows }, null, 2));
   console.log(`\nRaw rows written to ${out}`);
+
+  const expectedRows = scenarios.length * modes.length * languages.length * repeats;
+  if (rows.length < expectedRows) {
+    console.error(`\n✗ ${expectedRows - rows.length} agentic evaluation run(s) failed; results are incomplete.`);
+    process.exitCode = 1;
+  }
 }
 
 main().catch((e) => {

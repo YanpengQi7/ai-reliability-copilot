@@ -15,7 +15,7 @@
 //   npm run calib:grounding            # all 5 scenarios, en
 //   npm run calib:grounding -- --all   # include zh
 //
-// Writes notes/calib-grounding.md for the audit.
+// Writes notes/generated/calib-grounding.md for the audit.
 
 import { config } from "dotenv";
 config({ path: ".env.local" });
@@ -129,8 +129,8 @@ async function main() {
     "> Caveat: the deterministic check undercounts — paraphrased or derived claims (e.g. 'connection pool exhausted' with no number) won't match a token even when fully grounded. Treat the ratio as a FLOOR on grounding and eyeball the ungrounded list.",
   );
 
-  writeFileSync("notes/calib-grounding.md", lines.join("\n"));
-  console.log(`\nMean judge ${avgJudge.toFixed(2)}/5 vs deterministic grounded ${(avgRatio * 100).toFixed(0)}%. Audit → notes/calib-grounding.md`);
+  writeFileSync("notes/generated/calib-grounding.md", lines.join("\n"));
+  console.log(`\nMean judge ${avgJudge.toFixed(2)}/5 vs deterministic grounded ${(avgRatio * 100).toFixed(0)}%. Audit → notes/generated/calib-grounding.md`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -61,13 +61,13 @@ jobs:
         run: |
           ARGS=""
           if [ "${{ inputs.english_only }}" = "true" ]; then ARGS="-- --en"; fi
-          npm run evals:agentic $ARGS | tee notes/eval-agentic-run.log
+          npm run evals:agentic $ARGS | tee notes/generated/eval-agentic-run.log
 
       - name: Run grounding calibration (optional)
         if: ${{ inputs.run_calibration }}
         env:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        run: npm run calib:grounding | tee notes/calib-grounding-run.log
+        run: npm run calib:grounding | tee notes/generated/calib-grounding-run.log
 
       - name: Upload results
         if: always()
@@ -75,9 +75,9 @@ jobs:
         with:
           name: eval-results
           path: |
-            notes/eval-agentic-latest.json
-            notes/eval-agentic-run.log
-            notes/calib-grounding.md
-            notes/calib-grounding-run.log
+            notes/generated/eval-agentic-latest.json
+            notes/generated/eval-agentic-run.log
+            notes/generated/calib-grounding.md
+            notes/generated/calib-grounding-run.log
           if-no-files-found: warn
           retention-days: 30

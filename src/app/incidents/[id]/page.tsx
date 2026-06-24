@@ -11,17 +11,21 @@ import { t } from "@/lib/i18n/messages";
 import { findSimilarIncidents } from "@/lib/similar";
 import { buildSignature } from "@/lib/embeddings";
 import { supabaseAdmin } from "@/lib/supabase";
+import { publicIncidentDataEnabled } from "@/lib/incidentAccess";
+import { createDatabaseQuerySignal } from "@/lib/databaseDeadline";
 
 export const dynamic = "force-dynamic";
 
 export default async function IncidentDetail({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!publicIncidentDataEnabled()) return notFound();
   const locale = await getLocale();
   const tr = (k: string) => t(locale, k);
   if (!hasSupabase()) {
     return <Shell><p className="text-neutral-400">{tr("incidents.dbMissing.title")}</p></Shell>;
   }
-  const data = await getIncidentWithAnalyses(id);
+  const databaseSignal = createDatabaseQuerySignal();
+  const data = await getIncidentWithAnalyses(id, { abortSignal: databaseSignal });
   if (!data) return notFound();
   const { incident, analyses } = data;
   const latest = analyses[0];
@@ -34,7 +38,7 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
     summary: latest?.summary,
     severity: latest?.severity,
   });
-  const similar = await findSimilarIncidents(similarQuery, { excludeId: incident.id, limit: 5 });
+  const similar = await findSimilarIncidents(similarQuery, { excludeId: incident.id, limit: 5, abortSignal: databaseSignal });
 
   // Knowledge chunks that the latest analysis used (audit trail from analysis_kb_chunks)
   type UsedChunk = { chunk_id: string; similarity: number; rank: number; kb_chunks: { text: string; kb_documents: { title: string | null; source_path: string; kind: string } } };
@@ -45,7 +49,8 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
       .from("analysis_kb_chunks")
       .select("chunk_id, similarity, rank, kb_chunks(text, kb_documents(title, source_path, kind))")
       .eq("analysis_id", latest.id)
-      .order("rank");
+      .order("rank")
+      .abortSignal(databaseSignal);
     usedChunks = (data ?? []) as unknown as UsedChunk[];
   }
 

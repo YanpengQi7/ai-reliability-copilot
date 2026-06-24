@@ -1,4 +1,29 @@
+import { redactSecrets } from "./secretScan";
+
 type LogLevel = "info" | "warn" | "error";
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === "object") {
+    try {
+      const message = Reflect.get(error, "message");
+      if (typeof message === "string") return message;
+    } catch {
+      return "Unknown error";
+    }
+  }
+  try {
+    return String(error);
+  } catch {
+    return "Unknown error";
+  }
+}
+
+export function safeErrorDetail(error: unknown, maxLength = 1_000): string {
+  const detail = errorMessage(error);
+  const redacted = redactSecrets(detail).replace(/[\r\n\t]+/g, " ");
+  return redacted.length <= maxLength ? redacted : `${redacted.slice(0, maxLength)}…`;
+}
 
 function safeRequestId(value: string | null): string | null {
   if (!value || value.length > 100) return null;

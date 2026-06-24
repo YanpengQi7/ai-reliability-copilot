@@ -5,6 +5,9 @@ import { type RubricDim } from "@/lib/eval/rubric";
 import { Nav } from "@/components/Nav";
 import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
+import { publicIncidentDataEnabled } from "@/lib/incidentAccess";
+import { PrivateDataNotice } from "@/components/PrivateDataNotice";
+import { createDatabaseQuerySignal } from "@/lib/databaseDeadline";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,17 @@ type IncidentLite = {
 export default async function EvalsPage() {
   const locale = await getLocale();
   const tr = (k: string) => t(locale, k);
+  if (!publicIncidentDataEnabled()) {
+    return (
+      <Shell>
+        <header className="flex items-end justify-between gap-4 flex-wrap">
+          <h1 className="text-2xl font-bold">{tr("evals.title")}</h1>
+          <Nav />
+        </header>
+        <PrivateDataNotice title={tr("privateData.title")} body={tr("privateData.body")} />
+      </Shell>
+    );
+  }
   if (!hasSupabase()) {
     return (
       <Shell>
@@ -45,15 +59,20 @@ export default async function EvalsPage() {
   }
 
   const sb = supabaseAdmin();
-  const { data: evals } = await sb.from("evaluations").select("*").order("created_at", { ascending: false }).limit(200);
+  const databaseSignal = createDatabaseQuerySignal();
+  const { data: evals, error: evalError } = await sb.from("evaluations").select("*").order("created_at", { ascending: false }).limit(200).abortSignal(databaseSignal);
+  if (evalError) throw evalError;
   const rows = (evals ?? []) as EvalRow[];
   const analysisIds = [...new Set(rows.map((r) => r.analysis_id))];
-  const { data: analyses } = analysisIds.length
-    ? await sb.from("analyses").select("id, incident_id, prompt_version, output_language, severity, model, tokens_in, tokens_out, cost_usd, latency_ms").in("id", analysisIds)
-    : { data: [] };
+  const analysesResult = analysisIds.length
+    ? await sb.from("analyses").select("id, incident_id, prompt_version, output_language, severity, model, tokens_in, tokens_out, cost_usd, latency_ms").in("id", analysisIds).abortSignal(databaseSignal)
+    : { data: [], error: null };
+  if (analysesResult.error) throw analysesResult.error;
+  const analyses = analysesResult.data;
 
   // Cost rollup across all analyses (not just judged ones)
-  const { data: costRows } = await sb.from("analyses").select("model, tokens_in, tokens_out, cost_usd, latency_ms");
+  const { data: costRows, error: costError } = await sb.from("analyses").select("model, tokens_in, tokens_out, cost_usd, latency_ms").abortSignal(databaseSignal);
+  if (costError) throw costError;
   type CostRow = { model: string | null; tokens_in: number | null; tokens_out: number | null; cost_usd: string | number | null; latency_ms: number | null };
   const costAll = (costRows ?? []) as CostRow[];
   const costWithData = costAll.filter((r) => r.cost_usd != null);
@@ -66,9 +85,11 @@ export default async function EvalsPage() {
   for (const a of (analyses ?? []) as AnalysisLite[]) aMap.set(a.id, a);
 
   const incidentIds = [...new Set((analyses ?? []).map((a: AnalysisLite) => a.incident_id))];
-  const { data: incidents } = incidentIds.length
-    ? await sb.from("incidents").select("id, title").in("id", incidentIds)
-    : { data: [] };
+  const incidentsResult = incidentIds.length
+    ? await sb.from("incidents").select("id, title").in("id", incidentIds).abortSignal(databaseSignal)
+    : { data: [], error: null };
+  if (incidentsResult.error) throw incidentsResult.error;
+  const incidents = incidentsResult.data;
   const iMap = new Map<string, IncidentLite>();
   for (const i of (incidents ?? []) as IncidentLite[]) iMap.set(i.id, i);
 

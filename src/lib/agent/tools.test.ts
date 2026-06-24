@@ -96,6 +96,15 @@ describe("context budget (get_logs)", () => {
 });
 
 describe("dispatch recovery", () => {
+  it("propagates request cancellation instead of converting it to a tool error", async () => {
+    const controller = new AbortController();
+    controller.abort(new Error("request cancelled"));
+    const ctx = { ...freshCtx(), abortSignal: controller.signal };
+
+    await expect(dispatchTool(0, "get_metrics", { service: "payment-svc" }, ctx))
+      .rejects.toThrow("request cancelled");
+  });
+
   it("returns a normal empty/ok step for a service with no telemetry rather than throwing", async () => {
     // No scenarioSlug → handlers return status:empty, never throw.
     const step = await dispatchTool(

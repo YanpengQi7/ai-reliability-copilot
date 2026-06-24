@@ -18,6 +18,7 @@ import { deepseek, ANALYSIS_MODEL } from "@/lib/ai";
 import { AnalysisSchema } from "@/lib/schema";
 import { getSystemPrompt, DEFAULT_PROMPT_VERSION, type OutputLanguage, type PromptVersion } from "@/lib/prompts";
 import { normalizeUsage, calcCost } from "@/lib/cost";
+import { safeErrorDetail } from "@/lib/observability";
 import { buildToolDefs, dispatchTool, ALLOWED_TOOLS, type DispatchContext } from "./tools";
 import { Scratchpad } from "./state";
 import type { InvestigationInput, InvestigationResult, TraceStep, UsageTotals } from "./types";
@@ -94,7 +95,7 @@ export async function investigate(opts: InvestigateOptions): Promise<Investigati
 
   const tools = buildToolDefs();
   const scratch = new Scratchpad();
-  const dctx: DispatchContext = { ctx: input, callCounts: {} };
+  const dctx: DispatchContext = { ctx: input, callCounts: {}, abortSignal: opts.abortSignal };
   const trace: TraceStep[] = [];
   const usage: UsageTotals = { model_calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
 
@@ -126,7 +127,7 @@ export async function investigate(opts: InvestigateOptions): Promise<Investigati
       if (opts.abortSignal?.aborted) throw err;
       // Recovery: a model/transport error shouldn't kill the run. Stop the loop
       // and let phase 2 produce a best-effort conclusion from what we have.
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = safeErrorDetail(err);
       trace.push({ index: steps, tool: "(model)", input: {}, status: "error", observation: `Model call failed: ${msg}`, reason: "model_error", latency_ms: 0 });
       stopReason = "no_progress";
       break;
@@ -230,6 +231,7 @@ Now produce the structured 9-section incident response based on this evidence.${
     analysis = r.object;
     accumulate(usage, r.usage, model);
   } catch (err) {
+    opts.abortSignal?.throwIfAborted();
     // Retry once on parse error (DeepSeek JSON mode is occasionally invalid).
     const msg = err instanceof Error ? err.message : String(err);
     if (!/parse|invalid json|schema|JSON/i.test(msg)) throw err;

@@ -17,6 +17,7 @@ import { z } from "zod";
 import { tool, type Tool } from "ai";
 import { getScenario, type Scenario, type LogLine } from "@/lib/scenarios";
 import { retrieveContext } from "@/lib/kb";
+import { safeErrorDetail } from "@/lib/observability";
 import type { InvestigationInput, TraceStep } from "./types";
 
 // ── Budget constants ─────────────────────────────────────────────────
@@ -150,6 +151,7 @@ async function runHandler(
   name: ToolName,
   input: Record<string, unknown>,
   ctx: InvestigationInput,
+  abortSignal?: AbortSignal,
 ): Promise<HandlerOut> {
   const scenario = ctx.scenarioSlug ? getScenario(ctx.scenarioSlug) : undefined;
 
@@ -157,7 +159,7 @@ async function runHandler(
     case "search_runbooks": {
       const query = String(input.query ?? "");
       const limit = typeof input.limit === "number" ? input.limit : 4;
-      const r = await retrieveContext(query, { limit });
+      const r = await retrieveContext(query, { limit, abortSignal });
       if (r.chunks.length === 0)
         return { status: "empty", text: `No KB chunks matched (mode=${r.mode}). The runbook KB may be empty for this query.` };
       const body = r.chunks
@@ -228,6 +230,7 @@ async function runHandler(
 export type DispatchContext = {
   ctx: InvestigationInput;
   callCounts: Record<string, number>;
+  abortSignal?: AbortSignal;
 };
 
 export async function dispatchTool(
@@ -238,6 +241,7 @@ export async function dispatchTool(
 ): Promise<TraceStep> {
   const started = Date.now();
   const base = { index, tool: toolName, input };
+  dctx.abortSignal?.throwIfAborted();
 
   // Gate 1: unknown tool.
   if (!(toolName in TOOL_SPECS)) {
@@ -268,10 +272,12 @@ export async function dispatchTool(
 
   // Recovery: a handler throwing must not crash the loop.
   try {
-    const out = await runHandler(toolName as ToolName, input, dctx.ctx);
+    const out = await runHandler(toolName as ToolName, input, dctx.ctx, dctx.abortSignal);
+    dctx.abortSignal?.throwIfAborted();
     return { ...base, status: out.status, observation: clampObservation(out.text), latency_ms: Date.now() - started };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    if (dctx.abortSignal?.aborted) throw err;
+    const msg = safeErrorDetail(err);
     return { ...base, status: "error", observation: `Tool "${toolName}" failed: ${msg}. Continue with other evidence.`, reason: "handler_threw", latency_ms: Date.now() - started };
   }
 }

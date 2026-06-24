@@ -10,9 +10,16 @@
 // What we do NOT record:
 //   - full input or full output (privacy + storage cost)
 //   - bearer tokens or headers
+//   - raw client IPs (only a stable keyed digest)
 
+import { AsyncLocalStorage } from "node:async_hooks";
+import { createHmac } from "node:crypto";
 import { supabaseAdmin } from "../supabase";
 import { hasSupabase } from "../db";
+import { safeErrorDetail } from "../observability";
+import { createDatabaseQuerySignal } from "../databaseDeadline";
+
+export const TELEMETRY_WRITE_TIMEOUT_MS = 3_000;
 
 type LogPayload = {
   tool_name: string;
@@ -24,35 +31,43 @@ type LogPayload = {
   result_size_bytes?: number;
 };
 
-// Per-request IP can be attached via AsyncLocalStorage if we want; for now we
-// keep it simple — the route handler stuffs the IP into a module-level Map
-// keyed by request, and the tool wrapper reads it. Stateless per request is fine
-// because Node's per-invocation isolation means concurrent requests don't collide
-// within a single handler frame (each request gets its own JS engine call stack).
-let _currentIp: string | null = null;
+const clientIpStorage = new AsyncLocalStorage<string | null>();
+
 export function withClientIp<T>(ip: string | null, fn: () => Promise<T>): Promise<T> {
-  const prev = _currentIp;
-  _currentIp = ip;
-  return fn().finally(() => {
-    _currentIp = prev;
-  });
+  return clientIpStorage.run(ip, fn);
+}
+
+export function getTelemetryClientIp(): string | null {
+  return clientIpStorage.getStore() ?? null;
+}
+
+export function telemetryClientKey(clientIp: string | null | undefined): string | null {
+  if (!clientIp) return null;
+  const key = process.env.MCP_TELEMETRY_SALT
+    || process.env.SUPABASE_SERVICE_ROLE_KEY
+    || "local-development-only";
+  const digest = createHmac("sha256", key).update(clientIp).digest("hex").slice(0, 24);
+  return `client_${digest}`;
 }
 
 export async function logToolCall(payload: LogPayload): Promise<void> {
   if (!hasSupabase()) return;
   try {
     const sb = supabaseAdmin();
-    await sb.from("mcp_tool_calls").insert({
+    const query = sb.from("mcp_tool_calls").insert({
       tool_name: payload.tool_name,
       ok: payload.ok,
       latency_ms: payload.latency_ms,
-      error: payload.error?.slice(0, 500) ?? null,
-      client_ip: payload.client_ip ?? _currentIp,
-      input_summary: payload.input_summary?.slice(0, 200) ?? null,
+      error: payload.error ? safeErrorDetail(payload.error, 500) : null,
+      client_ip: telemetryClientKey(payload.client_ip ?? getTelemetryClientIp()),
+      input_summary: payload.input_summary ? safeErrorDetail(payload.input_summary, 200) : null,
       result_size_bytes: payload.result_size_bytes ?? null,
     });
+    query.abortSignal(createDatabaseQuerySignal(TELEMETRY_WRITE_TIMEOUT_MS));
+    const { error } = await query;
+    if (error) throw error;
   } catch (e) {
-    console.error("[mcp telemetry] failed:", e instanceof Error ? e.message : e);
+    console.error("[mcp telemetry] failed:", safeErrorDetail(e));
   }
 }
 
@@ -77,7 +92,7 @@ export function withTelemetry<TArgs extends object, TResult extends { content: A
     try {
       result = await handler(args);
     } catch (e) {
-      err = e instanceof Error ? e.message : String(e);
+      err = safeErrorDetail(e);
       // Re-throw so the SDK surfaces a proper JSON-RPC error to the caller
       void logToolCall({
         tool_name: toolName,

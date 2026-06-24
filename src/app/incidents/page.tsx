@@ -3,12 +3,21 @@ import { listIncidents, hasSupabase } from "@/lib/db";
 import { Nav } from "@/components/Nav";
 import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
+import { publicIncidentDataEnabled } from "@/lib/incidentAccess";
+import { createDatabaseQuerySignal } from "@/lib/databaseDeadline";
 
 export const dynamic = "force-dynamic";
 
 export default async function IncidentsPage() {
   const locale = await getLocale();
   const tr = (k: string) => t(locale, k);
+  if (!publicIncidentDataEnabled()) {
+    return (
+      <PageShell title={tr("incidents.title")}>
+        <EmptyState title={tr("incidents.private.title")} body={tr("incidents.private.body")} />
+      </PageShell>
+    );
+  }
   if (!hasSupabase()) {
     return (
       <PageShell title={tr("incidents.title")}>
@@ -16,7 +25,7 @@ export default async function IncidentsPage() {
       </PageShell>
     );
   }
-  const incidents = await listIncidents();
+  const incidents = await listIncidents(50, { abortSignal: createDatabaseQuerySignal() });
   return (
     <PageShell title={tr("incidents.title")}>
       {incidents.length === 0 ? (

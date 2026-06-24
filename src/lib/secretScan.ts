@@ -12,7 +12,26 @@ export type SecretFinding = {
   line?: number;
 };
 
-const PATTERNS: Array<{ name: string; re: RegExp }> = [
+type SecretPattern = { name: string; re: RegExp; accept?: (match: string) => boolean };
+
+function shannonEntropy(value: string): number {
+  const counts = new Map<string, number>();
+  for (const char of value) counts.set(char, (counts.get(char) ?? 0) + 1);
+  let entropy = 0;
+  for (const count of counts.values()) {
+    const probability = count / value.length;
+    entropy -= probability * Math.log2(probability);
+  }
+  return entropy;
+}
+
+function looksLikeHighEntropyAssignment(match: string): boolean {
+  const value = match.replace(/^[^:=]+[:=]\s*/, "").replace(/^["']|["']$/g, "");
+  const classes = [/[a-z]/.test(value), /[A-Z]/.test(value), /\d/.test(value), /[_./+=-]/.test(value)].filter(Boolean).length;
+  return classes >= 3 && shannonEntropy(value) >= 3.8;
+}
+
+const PATTERNS: SecretPattern[] = [
   { name: "AWS Access Key",       re: /\bAKIA[0-9A-Z]{16}\b/g },
   { name: "AWS Secret Key",       re: /\b[A-Za-z0-9/+=]{40}\b(?=.*aws|.*secret|.*amazonaws)/gi },
   { name: "OpenAI API key",       re: /\bsk-[A-Za-z0-9]{20,}\b/g },
@@ -21,8 +40,17 @@ const PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: "Stripe Secret",        re: /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{20,}\b/g },
   { name: "Slack token",          re: /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g },
   { name: "GitHub token",         re: /\bghp_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{82}\b/g },
-  { name: "Supabase service key", re: /\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{50,}\.[A-Za-z0-9_-]{20,}\b/g },
+  { name: "JWT / service token",  re: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g },
   { name: "Supabase sb_secret",   re: /\bsb_secret_[A-Za-z0-9_-]{20,}\b/g },
+  { name: "Google API key",       re: /\bAIza[A-Za-z0-9_-]{35}\b/g },
+  { name: "GitLab token",         re: /\bglpat-[A-Za-z0-9_-]{20,}\b/g },
+  { name: "Basic auth credential", re: /\bAuthorization\s*:\s*Basic\s+[A-Za-z0-9+/=]{12,}/gi },
+  { name: "Credentialed connection URL", re: /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\/[^\s:/@]+:[^\s/@]+@[^\s]+/gi },
+  {
+    name: "High-entropy secret assignment",
+    re: /\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd)\b\s*[:=]\s*["']?[A-Za-z0-9_./+=-]{20,}["']?/gi,
+    accept: looksLikeHighEntropyAssignment,
+  },
   { name: "Private key (PEM)",    re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/g },
 ];
 
@@ -34,9 +62,9 @@ function redact(match: string): string {
 /** Replace supported credentials before text is sent to a model or persisted. */
 export function redactSecrets(text: string): string {
   let redacted = text;
-  for (const { name, re } of PATTERNS) {
+  for (const { name, re, accept } of PATTERNS) {
     re.lastIndex = 0;
-    redacted = redacted.replace(re, `[REDACTED: ${name}]`);
+    redacted = redacted.replace(re, (match) => accept && !accept(match) ? match : `[REDACTED: ${name}]`);
   }
   return redacted;
 }
@@ -44,11 +72,12 @@ export function redactSecrets(text: string): string {
 export function scanForSecrets(text: string): SecretFinding[] {
   const findings: SecretFinding[] = [];
   const lines = text.split("\n");
-  for (const { name, re } of PATTERNS) {
+  for (const { name, re, accept } of PATTERNS) {
     // Reset regex state for global flag reuse
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
+      if (accept && !accept(m[0])) continue;
       const idx = m.index;
       let lineNum = 1;
       let acc = 0;

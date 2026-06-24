@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { supabaseAdmin } from "./supabase";
 import { hasSupabase } from "./db";
-import { embed, hasEmbeddingProvider } from "./embeddings";
+import { embed, embeddingForDatabase, hasEmbeddingProvider } from "./embeddings";
 import { scanForSecrets } from "./secretScan";
 
 export type KbKind = "runbook" | "postmortem" | "service" | "architecture" | "other";
@@ -88,11 +88,12 @@ export async function ingestDocument(input: {
   const sb = supabaseAdmin();
   const hash = hashContent(input.raw_text);
 
-  const { data: existing } = await sb
+  const { data: existing, error: lookupError } = await sb
     .from("kb_documents")
     .select("id, content_hash")
     .eq("source_path", input.source_path)
     .maybeSingle();
+  if (lookupError) throw lookupError;
 
   if (existing && existing.content_hash === hash) {
     return { document_id: existing.id, chunks_written: 0, skipped: true };
@@ -115,10 +116,11 @@ export async function ingestDocument(input: {
     )
     .select("id")
     .single();
-  if (e1) throw e1;
+  if (e1 || !doc) throw e1 ?? new Error("Knowledge document upsert returned no row.");
 
   // Delete old chunks (cascade off — explicit)
-  await sb.from("kb_chunks").delete().eq("document_id", doc.id);
+  const { error: deleteError } = await sb.from("kb_chunks").delete().eq("document_id", doc.id);
+  if (deleteError) throw deleteError;
 
   // Chunk + embed + insert
   const chunks = chunkMarkdown(input.raw_text);
@@ -146,7 +148,7 @@ export async function ingestDocument(input: {
     // supabase-js wants embeddings as strings for vector(...) columns
     const formatted = rows.map((r) => ({
       ...r,
-      embedding: r.embedding ? (r.embedding as unknown as string) : null,
+      embedding: embeddingForDatabase(r.embedding),
     }));
     const { error: e2 } = await sb.from("kb_chunks").insert(formatted);
     if (e2) throw e2;
@@ -161,8 +163,9 @@ export async function ingestDocument(input: {
  */
 export async function retrieveContext(
   queryText: string,
-  opts: { limit?: number; vectorThreshold?: number; trigramThreshold?: number } = {},
+  opts: { limit?: number; vectorThreshold?: number; trigramThreshold?: number; abortSignal?: AbortSignal } = {},
 ): Promise<RetrieveResult> {
+  opts.abortSignal?.throwIfAborted();
   if (!hasSupabase()) return { mode: "none", chunks: [] };
   const sb = supabaseAdmin();
   const limit = opts.limit ?? 5;
@@ -170,22 +173,29 @@ export async function retrieveContext(
   const tt = opts.trigramThreshold ?? 0.05; // chunks are longer than incident signatures → looser
 
   if (hasEmbeddingProvider()) {
-    const vec = await embed(queryText);
+    const vec = await embed(queryText, opts.abortSignal);
+    opts.abortSignal?.throwIfAborted();
     if (vec) {
-      const { data, error } = await sb.rpc("match_kb_chunks_by_embedding", {
+      const query = sb.rpc("match_kb_chunks_by_embedding", {
         query_embedding: vec,
         match_threshold: vt,
         match_count: limit,
       });
+      if (opts.abortSignal) query.abortSignal(opts.abortSignal);
+      const { data, error } = await query;
+      opts.abortSignal?.throwIfAborted();
       if (!error && data) return { mode: "vector", chunks: data as RetrievedChunk[] };
     }
   }
 
-  const { data, error } = await sb.rpc("match_kb_chunks_by_signature", {
+  const query = sb.rpc("match_kb_chunks_by_signature", {
     query_text: queryText,
     match_threshold: tt,
     match_count: limit,
   });
+  if (opts.abortSignal) query.abortSignal(opts.abortSignal);
+  const { data, error } = await query;
+  opts.abortSignal?.throwIfAborted();
   if (error || !data) return { mode: "trigram", chunks: [] };
   return { mode: "trigram", chunks: data as RetrievedChunk[] };
 }
@@ -193,10 +203,15 @@ export async function retrieveContext(
 /**
  * Persist which chunks were used for an analysis (audit trail).
  */
-export async function recordRetrievedChunks(analysisId: string, chunks: RetrievedChunk[]) {
+export async function recordRetrievedChunks(
+  analysisId: string,
+  chunks: RetrievedChunk[],
+  options: { abortSignal?: AbortSignal } = {},
+) {
   if (!hasSupabase() || chunks.length === 0) return;
+  options.abortSignal?.throwIfAborted();
   const sb = supabaseAdmin();
-  await sb.from("analysis_kb_chunks").insert(
+  const query = sb.from("analysis_kb_chunks").insert(
     chunks.map((c, i) => ({
       analysis_id: analysisId,
       chunk_id: c.chunk_id,
@@ -204,6 +219,10 @@ export async function recordRetrievedChunks(analysisId: string, chunks: Retrieve
       rank: i,
     })),
   );
+  if (options.abortSignal) query.abortSignal(options.abortSignal);
+  const { error } = await query;
+  options.abortSignal?.throwIfAborted();
+  if (error) throw error;
 }
 
 /**

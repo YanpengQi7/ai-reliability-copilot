@@ -1,12 +1,12 @@
 # Judge calibration: the evidence_grounding dimension (stable findings)
 
-> `notes/calib-grounding.md` is regenerated on every `npm run calib:grounding` run —
+> `notes/generated/calib-grounding.md` is regenerated on every `npm run calib:grounding` run —
 > it holds only the latest run. This file is the stable, human-reviewed conclusion.
-> Per-run snapshots preserved as `calib-grounding-chat.md` and `calib-grounding-reasoner.md`.
+> Per-run snapshots are preserved in `notes/archive/`.
 
 ## Why we looked
 
-The full before/after eval (`notes/eval-agentic-latest.json`, n=3) put
+The full before/after eval (`notes/generated/eval-agentic-latest.json`, n=3) put
 **evidence_grounding at 4.93/5** — near ceiling. Near-ceiling on a brand-new
 dimension is a smell: either the agent really is well-grounded, or the judge can't
 grade it. We don't quote a number we haven't pressure-tested.
@@ -59,7 +59,7 @@ the trace (it's inferred from success rate 99.7%→96.8%) — and 5 to
 - The deterministic check is a crude floor, not ground truth. A human spot-check of a
   few traces would tighten it further.
 - **Before quoting grounding as a headline number, re-run the full eval with the reasoner
-  judge** (the 4.93 in `eval-agentic-latest.json` was graded by the uncalibrated
+  judge** (the 4.93 in `notes/generated/eval-agentic-latest.json` was graded by the uncalibrated
   deepseek-chat and should be treated as void for grounding).
 
 Reproduce: `npm run calib:grounding` (reasoner, default) vs

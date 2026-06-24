@@ -14,7 +14,7 @@
 // if Judge A (same family as the generator) sits systematically above the
 // independent Judge B, that quantifies the self-bias.
 //
-// Self-contained: prints + dumps notes/crossjudge-latest.json. Does NOT touch
+// Self-contained: prints + dumps notes/generated/crossjudge-latest.json. Does NOT touch
 // Supabase (holds the judge as the only variable, and stays runnable with just
 // the two API keys).
 //
@@ -30,13 +30,14 @@ import { generateObject } from "ai";
 import { SCENARIOS } from "../src/lib/scenarios";
 import { AnalysisSchema } from "../src/lib/schema";
 import { deepseek, resolveModel, ANALYSIS_MODEL, JUDGE_MODEL, JUDGE_MODEL_CROSS } from "../src/lib/ai";
-import { getSystemPrompt, buildUserPrompt, type PromptVersion, type OutputLanguage } from "../src/lib/prompts";
+import { getSystemPrompt, buildUserPrompt, type OutputLanguage } from "../src/lib/prompts";
 import { judge } from "../src/lib/eval/judge";
 import { overallScore, type RubricDim } from "../src/lib/eval/rubric";
+import { parseEvalPromptVersion, parseEvalRepeats } from "../src/lib/eval/runConfig";
 
-const VERSION = (process.env.EVAL_VERSION as PromptVersion) ?? "v3";
+const VERSION = parseEvalPromptVersion(process.env.EVAL_VERSION);
 const LANGUAGES: OutputLanguage[] = ["en", "zh"];
-const REPEATS = Math.max(1, parseInt(process.env.EVAL_REPEATS ?? "2", 10));
+const REPEATS = parseEvalRepeats(process.env.EVAL_REPEATS, 2);
 const JUDGE_A = JUDGE_MODEL; // same family as the generator
 const JUDGE_B = JUDGE_MODEL_CROSS; // independent vendor
 
@@ -185,8 +186,14 @@ async function main() {
     ),
     rows,
   };
-  writeFileSync("notes/crossjudge-latest.json", JSON.stringify(out, null, 2));
-  console.log(`\nWrote notes/crossjudge-latest.json`);
+  writeFileSync("notes/generated/crossjudge-latest.json", JSON.stringify(out, null, 2));
+  console.log(`\nWrote notes/generated/crossjudge-latest.json`);
+
+  const expectedRows = SCENARIOS.length * LANGUAGES.length * REPEATS;
+  if (rows.length < expectedRows) {
+    console.error(`\n✗ ${expectedRows - rows.length} cross-judge run(s) failed; results are incomplete.`);
+    process.exitCode = 1;
+  }
 }
 
 main();

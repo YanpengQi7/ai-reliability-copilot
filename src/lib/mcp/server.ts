@@ -15,6 +15,9 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { safeErrorDetail } from "@/lib/observability";
+import { buildAnalysisRecord } from "@/lib/analysisRecord";
+import { buildIncidentRecord } from "@/lib/incidentRecord";
 import { SCENARIOS } from "@/lib/scenarios";
 import { retrieveContext } from "@/lib/kb";
 import { findSimilarIncidents } from "@/lib/similar";
@@ -23,6 +26,9 @@ import { AnalysisSchema } from "@/lib/schema";
 import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { embed, buildSignature } from "@/lib/embeddings";
+import { INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
+import { resolveAppBaseUrl } from "@/lib/appUrl";
+import { createDatabaseDeadline, DATABASE_QUERY_TIMEOUT_MS } from "@/lib/databaseDeadline";
 import { withTelemetry } from "./telemetry";
 
 const SEVERITY_RUBRIC = `# Severity rubric (from src/lib/prompts.ts SYSTEM_PROMPT_V2)
@@ -58,7 +64,22 @@ Produce these fields (use the analysis JSON schema we provide):
 
 Code/commands/JSON keys/enum values stay in English regardless of output language.`;
 
-export function buildMcpServer() {
+export const SAVE_INCIDENT_INPUT_SCHEMA = {
+  title: z.string().max(INPUT_LIMITS.shortText).optional(),
+  service: z.string().max(INPUT_LIMITS.shortText).optional(),
+  symptoms: z.string().max(INPUT_LIMITS.shortText).optional(),
+  raw_context: z.string().min(20).max(INPUT_LIMITS.rawContext),
+  analysis: AnalysisSchema,
+  output_language: z.enum(["en", "zh"]).optional().default("en"),
+  client_model: z.string().max(INPUT_LIMITS.shortText).optional()
+    .describe("Name of the LLM that generated this analysis (e.g. claude-opus-4-5), recorded for audit"),
+};
+
+export function sanitizeMcpIncidentInput<T>(input: T): T {
+  return redactSensitiveValue(input);
+}
+
+export function buildMcpServer(options: { requestUrl?: string } = {}) {
   const server = new McpServer({
     name: "ai-reliability-copilot",
     version: "1.0.0",
@@ -80,7 +101,14 @@ export function buildMcpServer() {
       "search_kb",
       (a) => `q=${a.query}`,
       async ({ query, limit }) => {
-        const r = await retrieveContext(query, { limit });
+        const deadline = createDatabaseDeadline();
+        const r = await retrieveContext(query, { limit, abortSignal: deadline.signal });
+        if (deadline.timeoutSignal.aborted) {
+          return {
+            content: [{ type: "text", text: `Knowledge base search timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.` }],
+            isError: true,
+          };
+        }
         const body = r.chunks.length === 0
           ? `No KB chunks matched (mode=${r.mode}). The KB may be empty or your threshold is too tight.`
           : r.chunks.map((c, i) => `[${i + 1}] ${c.document_title ?? c.source_path} (${c.document_kind}) · similarity ${(c.similarity * 100).toFixed(0)}%\n${c.text}`).join("\n\n---\n\n");
@@ -103,7 +131,14 @@ export function buildMcpServer() {
       "find_similar_incidents",
       (a) => `text=${String(a.text ?? "").slice(0, 200)}`,
       async ({ text, limit }) => {
-        const r = await findSimilarIncidents(text, { limit });
+        const deadline = createDatabaseDeadline();
+        const r = await findSimilarIncidents(text, { limit, abortSignal: deadline.signal });
+        if (deadline.timeoutSignal.aborted) {
+          return {
+            content: [{ type: "text", text: `Similar incident search timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.` }],
+            isError: true,
+          };
+        }
         const body = r.hits.length === 0
           ? `No similar incidents found (mode=${r.mode}).`
           : r.hits.map((h, i) => `[${i + 1}] ${h.title ?? h.service ?? h.id} · similarity ${(h.similarity * 100).toFixed(0)}%\n  service: ${h.service ?? "n/a"} · symptoms: ${h.symptoms ?? "n/a"}\n  incident_id: ${h.id}`).join("\n\n");
@@ -174,59 +209,88 @@ export function buildMcpServer() {
     {
       title: "Save an incident + analysis you generated",
       description: "Persist a completed incident analysis to the database. The analysis must conform to the structured 9-section schema (call get_output_schema for the spec). Returns the incident_id you can later fetch by URL or via find_similar_incidents.",
-      inputSchema: {
-        title: z.string().optional(),
-        service: z.string().optional(),
-        symptoms: z.string().optional(),
-        raw_context: z.string().min(20),
-        analysis: AnalysisSchema,
-        output_language: z.enum(["en", "zh"]).optional().default("en"),
-        client_model: z.string().optional().describe("Name of the LLM that generated this analysis (e.g. claude-opus-4-5), recorded for audit"),
-      },
+      inputSchema: SAVE_INCIDENT_INPUT_SCHEMA,
     },
     withTelemetry(
       "save_incident_analysis",
       (a) => `service=${a.service ?? "?"} title=${a.title ?? "?"} model=${a.client_model ?? "?"}`,
       async (input) => {
       if (!hasSupabase()) return { content: [{ type: "text", text: "Database not configured (Supabase env missing)." }], isError: true };
+      const safeInput = sanitizeMcpIncidentInput(input);
       const sb = supabaseAdmin();
       const signature = buildSignature({
-        title: input.title,
-        service: input.service,
-        symptoms: input.symptoms,
-        summary: input.analysis.summary,
-        severity: input.analysis.severity,
+        title: safeInput.title,
+        service: safeInput.service,
+        symptoms: safeInput.symptoms,
+        summary: safeInput.analysis.summary,
+        severity: safeInput.analysis.severity,
       });
       const embedding = await embed(signature);
-      const { data: inc, error: e1 } = await sb.from("incidents").insert({
-        title: input.title ?? null,
-        service: input.service ?? null,
-        symptoms: input.symptoms ?? null,
-        raw_context: input.raw_context,
+      const incidentDeadline = createDatabaseDeadline();
+      const { data: inc, error: e1 } = await sb.from("incidents").insert(buildIncidentRecord({
+        title: safeInput.title,
+        service: safeInput.service,
+        symptoms: safeInput.symptoms,
+        rawContext: safeInput.raw_context,
         signature,
-        embedding: embedding ? (embedding as unknown as string) : null,
-      }).select("id").single();
-      if (e1) return { content: [{ type: "text", text: `DB error: ${e1.message}` }], isError: true };
+        embedding,
+      })).select("id").abortSignal(incidentDeadline.signal).single();
+      if (e1 || !inc) {
+        const timedOut = incidentDeadline.timeoutSignal.aborted;
+        console.error(JSON.stringify({
+          level: "error",
+          event: "mcp_incident_insert_failed",
+          error: safeErrorDetail(e1 ?? new Error("Incident insert returned no row.")),
+          timed_out: timedOut,
+          ...(timedOut ? { timeout_ms: DATABASE_QUERY_TIMEOUT_MS } : {}),
+        }));
+        return {
+          content: [{
+            type: "text",
+            text: timedOut ? "Database timed out while saving the incident." : "Database error while saving the incident.",
+          }],
+          isError: true,
+        };
+      }
 
-      const a = input.analysis;
-      const { data: ana, error: e2 } = await sb.from("analyses").insert({
-        incident_id: inc.id,
-        model: input.client_model ?? "external-mcp-client",
-        prompt_version: "mcp",
-        output_language: input.output_language ?? "en",
-        summary: a.summary,
-        severity: a.severity,
-        severity_reasoning: a.severity_reasoning,
-        root_causes: a.root_causes,
-        investigation_checklist: a.investigation_checklist,
-        mitigation_plan: a.mitigation_plan,
-        customer_impact: a.customer_impact,
-        postmortem_draft: a.postmortem_draft,
-        follow_ups: a.follow_ups,
-      }).select("id").single();
-      if (e2) return { content: [{ type: "text", text: `DB error (analysis): ${e2.message}` }], isError: true };
+      const analysisDeadline = createDatabaseDeadline();
+      const { data: ana, error: e2 } = await sb.from("analyses").insert(
+        buildAnalysisRecord({
+          incidentId: inc.id,
+          analysis: safeInput.analysis,
+          model: safeInput.client_model ?? "external-mcp-client",
+          promptVersion: "mcp",
+          outputLanguage: safeInput.output_language ?? "en",
+        }),
+      ).select("id").abortSignal(analysisDeadline.signal).single();
+      if (e2 || !ana) {
+        const cleanupDeadline = createDatabaseDeadline();
+        const { error: cleanupError } = await sb
+          .from("incidents")
+          .delete()
+          .eq("id", inc.id)
+          .abortSignal(cleanupDeadline.signal);
+        const timedOut = analysisDeadline.timeoutSignal.aborted;
+        console.error(JSON.stringify({
+          level: "error",
+          event: "mcp_analysis_insert_failed",
+          error: safeErrorDetail(e2 ?? new Error("Analysis insert returned no row.")),
+          cleanup_error: cleanupError ? safeErrorDetail(cleanupError) : undefined,
+          cleanup_timed_out: cleanupDeadline.timeoutSignal.aborted,
+          incident_id: inc.id,
+          timed_out: timedOut,
+          ...(timedOut ? { timeout_ms: DATABASE_QUERY_TIMEOUT_MS } : {}),
+        }));
+        return {
+          content: [{
+            type: "text",
+            text: timedOut ? "Database timed out while saving the analysis." : "Database error while saving the analysis.",
+          }],
+          isError: true,
+        };
+      }
 
-      const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://ai-reliability-copilot.vercel.app";
+      const base = resolveAppBaseUrl(options.requestUrl);
       return {
         content: [{ type: "text", text: `Saved.\n  incident_id: ${inc.id}\n  analysis_id: ${ana.id}\n  url: ${base}/incidents/${inc.id}` }],
       };

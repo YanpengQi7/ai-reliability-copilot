@@ -50,11 +50,13 @@ if (!body || body.trim().length < 5) {
 }
 
 const webhookUrl = new URL("/api/webhook/alert", base);
-if (secret) webhookUrl.searchParams.set("secret", secret);
 
 const submit = await fetch(webhookUrl, {
   method: "POST",
-  headers: { "content-type": "text/plain" },
+  headers: {
+    "content-type": "text/plain",
+    ...(secret ? { authorization: `Bearer ${secret}` } : {}),
+  },
   body,
 }).catch((e) => {
   console.error(`error: cannot reach ${base}: ${e?.message ?? e}`);
@@ -87,7 +89,9 @@ process.stderr.write("  analyzing");
 while (Date.now() - startedAt < POLL_TIMEOUT_MS) {
   await sleep(POLL_INTERVAL_MS);
   process.stderr.write(".");
-  const r = await fetch(new URL(`/api/incidents/${incidentId}`, base)).catch(() => null);
+  const r = await fetch(new URL(`/api/incidents/${incidentId}`, base), {
+    headers: secret ? { authorization: `Bearer ${secret}` } : {},
+  }).catch(() => null);
   if (!r || !r.ok) continue;
   const j = await r.json().catch(() => null);
   if (j?.analysis?.summary) {

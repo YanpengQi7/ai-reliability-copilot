@@ -14,12 +14,15 @@ import { getSystemPrompt, buildUserPrompt, type PromptVersion, type OutputLangua
 import { judge } from "../src/lib/eval/judge";
 import { RUBRIC_VERSION, overallScore } from "../src/lib/eval/rubric";
 import { calcCost, normalizeUsage } from "../src/lib/cost";
+import { buildAnalysisRecord } from "../src/lib/analysisRecord";
+import { buildIncidentRecord } from "../src/lib/incidentRecord";
+import { parseEvalRepeats } from "../src/lib/eval/runConfig";
 
 const VERSIONS: PromptVersion[] = ["v1", "v2", "v3"];
 const LANGUAGES: OutputLanguage[] = ["en", "zh"];
 // Repeats per cell — lets us report mean ± std and tell a real gap from run-to-run noise.
 // Override with EVAL_REPEATS=1 for a quick smoke run.
-const REPEATS = Math.max(1, parseInt(process.env.EVAL_REPEATS ?? "3", 10));
+const REPEATS = parseEvalRepeats(process.env.EVAL_REPEATS);
 
 function mean(xs: number[]): number {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN;
@@ -45,6 +48,7 @@ async function main() {
   const sb = createClient(url, key, { auth: { persistSession: false } });
 
   const results: Array<{ scenario: string; version: PromptVersion; language: OutputLanguage; overall: number; latency_ms: number }> = [];
+  let failedRuns = 0;
 
   for (const scenario of SCENARIOS) {
     for (const version of VERSIONS) {
@@ -88,44 +92,40 @@ async function main() {
 
           const { data: inc, error: e1 } = await sb
             .from("incidents")
-            .insert({
+            .insert(buildIncidentRecord({
               title: `[Eval][${version}][${language}] ${scenario.title}`,
               service: scenario.service,
               symptoms: scenario.symptoms,
-              raw_context: scenario.context,
-            })
+              rawContext: scenario.context,
+            }))
             .select("id")
             .single();
-          if (e1) throw e1;
+          if (e1 || !inc) throw e1 ?? new Error("Eval incident insert returned no row.");
           const { data: ana, error: e2 } = await sb
             .from("analyses")
-            .insert({
-              incident_id: inc.id,
+            .insert(buildAnalysisRecord({
+              incidentId: inc.id,
+              analysis,
               model: ANALYSIS_MODEL,
-              prompt_version: version,
-              output_language: language,
-              summary: analysis.summary,
-              severity: analysis.severity,
-              severity_reasoning: analysis.severity_reasoning,
-              root_causes: analysis.root_causes,
-              investigation_checklist: analysis.investigation_checklist,
-              mitigation_plan: analysis.mitigation_plan,
-              customer_impact: analysis.customer_impact,
-              postmortem_draft: analysis.postmortem_draft,
-              follow_ups: analysis.follow_ups,
-              latency_ms,
-              tokens_in,
-              tokens_out,
-              cost_usd,
-            })
+              promptVersion: version,
+              outputLanguage: language,
+              latencyMs: latency_ms,
+              usage: { tokens_in, tokens_out, cost_usd },
+            }))
             .select("id")
             .single();
-          if (e2) throw e2;
+          if (e2 || !ana) {
+            const { error: cleanupError } = await sb.from("incidents").delete().eq("id", inc.id);
+            if (cleanupError) {
+              console.error(`  ✗ failed to clean up incident ${inc.id}: ${cleanupError.message}`);
+            }
+            throw e2 ?? new Error("Eval analysis insert returned no row.");
+          }
 
           const scores = await judge({ analysis, scenario });
           const overall = overallScore(scores);
 
-          await sb.from("evaluations").insert({
+          const { error: e3 } = await sb.from("evaluations").insert({
             analysis_id: ana.id,
             rubric_version: RUBRIC_VERSION,
             scores,
@@ -133,10 +133,12 @@ async function main() {
             judge_model: JUDGE_MODEL,
             judge_notes: scores.overall_notes,
           });
+          if (e3) throw e3;
 
           console.log(`  overall: ${overall} · spec:${scores.specificity.score} saf:${scores.safety.score} act:${scores.actionability.score} dom:${scores.domain_correctness.score} comp:${scores.completeness.score}`);
           results.push({ scenario: scenario.slug, version, language, overall, latency_ms });
         } catch (err) {
+          failedRuns += 1;
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`  ✗ ${msg}`);
         }
@@ -186,6 +188,11 @@ async function main() {
       const verdict = Math.abs(delta) > pooled ? "stands out" : "inside noise";
       console.log(`${VERSIONS[i]} − ${VERSIONS[j]}: ${delta >= 0 ? "+" : ""}${delta.toFixed(3)}  (pooled std ${pooled.toFixed(3)} → ${verdict})`);
     }
+  }
+
+  if (failedRuns > 0) {
+    console.error(`\n✗ ${failedRuns} evaluation run(s) failed; results are incomplete.`);
+    process.exitCode = 1;
   }
 }
 

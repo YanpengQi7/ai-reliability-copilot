@@ -3,6 +3,8 @@ import {
   INPUT_LIMITS,
   isAllowedImageSource,
   machineEndpointNeedsSecret,
+  readJsonBody,
+  readTextBody,
   redactSensitiveValue,
   safeDisplayFilename,
   validateImageFile,
@@ -24,11 +26,73 @@ describe("redactSensitiveValue", () => {
   });
 });
 
+describe("bounded request body readers", () => {
+  it("rejects a pre-cancelled request before reading its body", async () => {
+    const controller = new AbortController();
+    const req = new Request("https://example.com", {
+      method: "POST",
+      body: "still buffered",
+      signal: controller.signal,
+    });
+    controller.abort(new Error("request cancelled"));
+
+    await expect(readTextBody(req, 100)).rejects.toThrow("request cancelled");
+  });
+
+  it("releases the body reader when cancellation happens mid-read", async () => {
+    const abortController = new AbortController();
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(encoder.encode("partial"));
+        abortController.abort(new Error("request cancelled"));
+      },
+    });
+    const req = new Request("https://example.com", {
+      method: "POST",
+      body: stream,
+      signal: abortController.signal,
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+
+    await expect(readTextBody(req, 100)).rejects.toThrow("request cancelled");
+
+    const reader = req.body?.getReader();
+    expect(reader).toBeDefined();
+    reader?.releaseLock();
+  });
+
+  it("rejects an oversized body even without Content-Length", async () => {
+    const req = new Request("https://example.com", {
+      method: "POST",
+      body: "x".repeat(33),
+    });
+    expect(req.headers.get("content-length")).toBeNull();
+
+    await expect(readTextBody(req, 32)).resolves.toEqual({ ok: false, error: "payload_too_large" });
+  });
+
+  it("counts UTF-8 bytes rather than JavaScript characters", async () => {
+    const req = new Request("https://example.com", { method: "POST", body: "故障" });
+    await expect(readTextBody(req, 5)).resolves.toEqual({ ok: false, error: "payload_too_large" });
+  });
+
+  it("parses valid JSON and classifies malformed JSON", async () => {
+    const valid = new Request("https://example.com", { method: "POST", body: JSON.stringify({ ok: true }) });
+    const invalid = new Request("https://example.com", { method: "POST", body: "{nope" });
+
+    await expect(readJsonBody(valid, 100)).resolves.toEqual({ ok: true, value: { ok: true } });
+    await expect(readJsonBody(invalid, 100)).resolves.toEqual({ ok: false, error: "invalid_json" });
+  });
+});
+
 describe("machineEndpointNeedsSecret", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
   const originalVercelEnv = process.env.VERCEL_ENV;
   const originalAllowPublic = process.env.ALLOW_PUBLIC_MACHINE_API;
 
   afterEach(() => {
+    restoreEnv("NODE_ENV", originalNodeEnv);
     if (originalVercelEnv === undefined) delete process.env.VERCEL_ENV;
     else process.env.VERCEL_ENV = originalVercelEnv;
     if (originalAllowPublic === undefined) delete process.env.ALLOW_PUBLIC_MACHINE_API;
@@ -36,12 +100,25 @@ describe("machineEndpointNeedsSecret", () => {
   });
 
   it("fails closed on Vercel production when the token is missing", () => {
+    Reflect.set(process.env, "NODE_ENV", "test");
     process.env.VERCEL_ENV = "production";
     delete process.env.ALLOW_PUBLIC_MACHINE_API;
     expect(machineEndpointNeedsSecret(undefined)).toBe(true);
   });
 
+  it("fails closed on self-hosted production and Vercel previews", () => {
+    delete process.env.VERCEL_ENV;
+    delete process.env.ALLOW_PUBLIC_MACHINE_API;
+    Reflect.set(process.env, "NODE_ENV", "production");
+    expect(machineEndpointNeedsSecret(undefined)).toBe(true);
+
+    Reflect.set(process.env, "NODE_ENV", "test");
+    process.env.VERCEL_ENV = "preview";
+    expect(machineEndpointNeedsSecret(undefined)).toBe(true);
+  });
+
   it("allows local development and explicit public deployments", () => {
+    Reflect.set(process.env, "NODE_ENV", "test");
     delete process.env.VERCEL_ENV;
     expect(machineEndpointNeedsSecret(undefined)).toBe(false);
 
@@ -50,6 +127,11 @@ describe("machineEndpointNeedsSecret", () => {
     expect(machineEndpointNeedsSecret(undefined)).toBe(false);
   });
 });
+
+function restoreEnv(key: string, value: string | undefined) {
+  if (value === undefined) delete process.env[key];
+  else Reflect.set(process.env, key, value);
+}
 
 describe("validateImageFile", () => {
   it("accepts supported images within the size limit", () => {

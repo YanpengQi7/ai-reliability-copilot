@@ -7,7 +7,7 @@ How the `ai-reliability-copilot` grew a *hand-written* harness, and how to run/m
 **The loop is ours, not the SDK's.** No `maxSteps`, no `stopWhen`, no `generateText`
 auto-tool-loop. The single model call inside each iteration uses the AI SDK; the
 control of the loop — tool dispatch, context trimming, termination, recovery — is
-hand-written in [`src/lib/agent/investigate.ts`](../src/lib/agent/investigate.ts).
+hand-written in [`src/lib/agent/investigate.ts`](../../src/lib/agent/investigate.ts).
 If you want to know what the harness does, read that `while`.
 
 The trick that makes it clean: `generateText` with tools that have **no `execute`**
@@ -39,13 +39,13 @@ alert (service + symptoms only — NOT the full incident dump)
 
 | Concern | File |
 |---|---|
-| The loop | [`src/lib/agent/investigate.ts`](../src/lib/agent/investigate.ts) |
-| Tools + control gate + budget | [`src/lib/agent/tools.ts`](../src/lib/agent/tools.ts) |
-| Scratchpad state | [`src/lib/agent/state.ts`](../src/lib/agent/state.ts) |
-| Typed scenario signals | [`src/lib/scenarios.ts`](../src/lib/scenarios.ts) (`signals`) |
-| Evidence-grounding judge | [`src/lib/eval/judge.ts`](../src/lib/eval/judge.ts) (`judgeWithGrounding`) |
-| API | [`src/app/api/investigate/route.ts`](../src/app/api/investigate/route.ts) |
-| Trace UI | [`src/app/investigate/page.tsx`](../src/app/investigate/page.tsx) |
+| The loop | [`src/lib/agent/investigate.ts`](../../src/lib/agent/investigate.ts) |
+| Tools + control gate + budget | [`src/lib/agent/tools.ts`](../../src/lib/agent/tools.ts) |
+| Scratchpad state | [`src/lib/agent/state.ts`](../../src/lib/agent/state.ts) |
+| Typed scenario signals | [`src/lib/scenarios.ts`](../../src/lib/scenarios.ts) (`signals`) |
+| Evidence-grounding judge | [`src/lib/eval/judge.ts`](../../src/lib/eval/judge.ts) (`judgeWithGrounding`) |
+| API | [`src/app/api/investigate/route.ts`](../../src/app/api/investigate/route.ts) |
+| Trace UI | [`src/app/investigate/page.tsx`](../../src/app/investigate/page.tsx) |
 
 ## The boring parts (the SRE differentiation)
 
@@ -79,7 +79,7 @@ npm run dev                         # then open /investigate for the trace UI
 ## Measuring it honestly
 
 `npm run evals:agentic` reports, with mean ± std and a pooled-std "stands out /
-inside noise" verdict (same methodology as `notes/eval-run-3.md`):
+inside noise" verdict (same methodology as `notes/reports/eval-run-3.md`):
 
 - **overall** (mean of the core 5 dims) for single vs agentic — comparable because
   both go through the same judge, model, temperature, scenarios, and ground truth.
@@ -133,8 +133,8 @@ That's the SRE-meaningful finding worth writing about.
 by deepseek-chat, which calibration then showed returns a flat 5.00 with zero variance on
 this dimension (it can't grade it, even with tightened anchors). Switched the grounding
 judge to **deepseek-reasoner**, which discriminates (scores 1/4/5/5/5, tracks a
-deterministic grounded-ratio check) — see `notes/calib-grounding-findings.md`. Re-run the
+deterministic grounded-ratio check) — see `notes/reports/calib-grounding-findings.md`. Re-run the
 full eval with the reasoner judge before quoting any grounding number as a result.
 
-Raw rows: `notes/eval-agentic-latest.json`.
+Raw rows: `notes/generated/eval-agentic-latest.json`.
 ```

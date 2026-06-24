@@ -8,9 +8,13 @@ import { DEFAULT_PROMPT_VERSION } from "@/lib/prompts";
 import { embed, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, recordRetrievedChunks } from "@/lib/kb";
 import { apiError } from "@/lib/http";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
-import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
-import { createRequestContext } from "@/lib/observability";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
+import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
+import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
+import { buildAnalysisRecord } from "@/lib/analysisRecord";
+import { buildIncidentRecord } from "@/lib/incidentRecord";
+import { classifyDatabaseDeadlineFailure, createDatabaseDeadline, DATABASE_QUERY_TIMEOUT_MS } from "@/lib/databaseDeadline";
 
 export const runtime = "nodejs";
 
@@ -36,23 +40,27 @@ const Body = z.object({
 
 export async function POST(req: NextRequest) {
   const ctx = createRequestContext(req, "save_incident");
+  if (!requestHasIncidentDataAccess(req)) {
+    return ctx.response(NextResponse.json({
+      persisted: false,
+      reason: "Incident persistence is disabled on this deployment to protect production data.",
+    }));
+  }
   if (!hasSupabase()) {
     return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase env vars not set", { requestId: ctx.requestId }));
   }
-  const rl = rateLimit(clientKey(req), { max: 10, namespace: "save" });
+  const rl = await rateLimit(clientKey(req), { max: 10, namespace: "save", abortSignal: req.signal });
   if (!rl.allowed) {
-    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
+    return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
-  if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 4)) {
+  const bodyResult = await readJsonBody(req, INPUT_LIMITS.rawContext * 4);
+  if (!bodyResult.ok && bodyResult.error === "payload_too_large") {
     return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.", { requestId: ctx.requestId }));
   }
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
+  if (!bodyResult.ok) {
     return ctx.response(apiError(400, "INVALID_JSON", "Body must be JSON", { requestId: ctx.requestId }));
   }
-  const parsed = Body.safeParse(body);
+  const parsed = Body.safeParse(bodyResult.value);
   if (!parsed.success) {
     const message = parsed.error.issues.map((issue) => issue.message).join("; ");
     return ctx.response(apiError(400, "VALIDATION_ERROR", message, { requestId: ctx.requestId }));
@@ -69,67 +77,97 @@ export async function POST(req: NextRequest) {
     summary: input.analysis.summary,
     severity: input.analysis.severity,
   });
-  const embedding = await embed(signature); // null when no OPENAI_API_KEY or on failure
+  const embedding = await embed(signature, req.signal); // null when no OPENAI_API_KEY or on failure
 
+  const incidentDeadline = createDatabaseDeadline(req.signal);
   const { data: inc, error: e1 } = await sb
     .from("incidents")
-    .insert({
-      title: input.title ?? null,
-      service: input.service ?? null,
-      symptoms: input.symptoms ?? null,
-      raw_context: input.raw_context,
+    .insert(buildIncidentRecord({
+      title: input.title,
+      service: input.service,
+      symptoms: input.symptoms,
+      rawContext: input.raw_context,
       signature,
-      embedding: embedding ? (embedding as unknown as string) : null,
-    })
+      embedding,
+    }))
     .select("id")
+    .abortSignal(incidentDeadline.signal)
     .single();
-  if (e1) return ctx.response(apiError(500, "DB_ERROR", e1.message, { requestId: ctx.requestId }));
+  if (e1 || !inc) {
+    const failure = classifyDatabaseDeadlineFailure(req.signal, incidentDeadline);
+    if (failure === "request_aborted") {
+      ctx.log("warn", "incident_write_aborted");
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Incident save was cancelled.", { requestId: ctx.requestId }));
+    }
+    ctx.log("error", "incident_insert_failed", {
+      error: safeErrorDetail(e1 ?? new Error("Incident insert returned no row.")),
+    });
+    if (failure === "timed_out") {
+      return ctx.response(apiError(504, "DB_TIMEOUT", `Incident save timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
+    return ctx.response(apiError(500, "DB_ERROR", "Could not save the incident.", { requestId: ctx.requestId }));
+  }
 
-  const a = input.analysis;
+  const analysisDeadline = createDatabaseDeadline(req.signal);
   const { data: ana, error: e2 } = await sb
     .from("analyses")
-    .insert({
-      incident_id: inc.id,
+    .insert(buildAnalysisRecord({
+      incidentId: inc.id,
+      analysis: input.analysis,
       model: ANALYSIS_MODEL,
-      prompt_version: input.prompt_version ?? DEFAULT_PROMPT_VERSION,
-      output_language: input.output_language ?? "en",
-      summary: a.summary,
-      severity: a.severity,
-      severity_reasoning: a.severity_reasoning,
-      root_causes: a.root_causes,
-      investigation_checklist: a.investigation_checklist,
-      mitigation_plan: a.mitigation_plan,
-      customer_impact: a.customer_impact,
-      postmortem_draft: a.postmortem_draft,
-      follow_ups: a.follow_ups,
-      latency_ms: input.latency_ms ?? null,
-      tokens_in: input.usage?.tokens_in ?? null,
-      tokens_out: input.usage?.tokens_out ?? null,
-      cost_usd: input.usage?.cost_usd ?? null,
-    })
+      promptVersion: input.prompt_version ?? DEFAULT_PROMPT_VERSION,
+      outputLanguage: input.output_language ?? "en",
+      latencyMs: input.latency_ms,
+      usage: input.usage,
+    }))
     .select("id")
+    .abortSignal(analysisDeadline.signal)
     .single();
-  if (e2) {
-    // Keep the two-step write atomic from the user's perspective.
-    await sb.from("incidents").delete().eq("id", inc.id);
-    return ctx.response(apiError(500, "DB_ERROR", e2.message, { requestId: ctx.requestId }));
+  if (e2 || !ana) {
+    // Compensating cleanup must still run after client cancellation, but must
+    // not be allowed to hang the route indefinitely.
+    const cleanupDeadline = createDatabaseDeadline();
+    const { error: cleanupError } = await sb
+      .from("incidents")
+      .delete()
+      .eq("id", inc.id)
+      .abortSignal(cleanupDeadline.signal);
+    const fields = {
+      error: safeErrorDetail(e2 ?? new Error("Analysis insert returned no row.")),
+      cleanup_error: cleanupError ? safeErrorDetail(cleanupError) : undefined,
+      incident_id: inc.id,
+    };
+    const failure = classifyDatabaseDeadlineFailure(req.signal, analysisDeadline);
+    if (failure === "request_aborted") {
+      ctx.log("warn", "analysis_write_aborted", fields);
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Analysis save was cancelled.", { requestId: ctx.requestId }));
+    }
+    ctx.log("error", "analysis_insert_failed", fields);
+    if (failure === "timed_out") {
+      return ctx.response(apiError(504, "DB_TIMEOUT", `Analysis save timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
+    return ctx.response(apiError(500, "DB_ERROR", "Could not save the analysis.", { requestId: ctx.requestId }));
   }
 
   // Record which KB chunks the streaming /api/analyze pipeline retrieved.
   // We re-run retrieval with the same query so the junction is consistent
   // — slight cost (1 extra embed call), but the audit trail is now complete.
   try {
+    const auditDeadline = createDatabaseDeadline(req.signal);
     const queryText = [input.title, input.service, input.symptoms, input.raw_context].filter(Boolean).join(" ").slice(0, 4000);
-    const r = await retrieveContext(queryText, { limit: 5 });
-    await recordRetrievedChunks(ana.id, r.chunks);
+    const r = await retrieveContext(queryText, { limit: 5, abortSignal: auditDeadline.signal });
+    auditDeadline.signal.throwIfAborted();
+    await recordRetrievedChunks(ana.id, r.chunks, { abortSignal: auditDeadline.signal });
   } catch (err) {
-    ctx.log("warn", "kb_audit_write_failed", {
-      error: err instanceof Error ? err.message : String(err),
-      analysis_id: ana.id,
-    });
+    if (!req.signal.aborted) {
+      ctx.log("warn", "kb_audit_write_failed", {
+        error: safeErrorDetail(err),
+        analysis_id: ana.id,
+      });
+    }
   }
 
-  return ctx.response(NextResponse.json({ incident_id: inc.id, analysis_id: ana.id }), {
+  return ctx.response(NextResponse.json({ persisted: true, incident_id: inc.id, analysis_id: ana.id }), {
     incident_id: inc.id,
     analysis_id: ana.id,
   });

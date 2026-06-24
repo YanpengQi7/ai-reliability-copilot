@@ -24,6 +24,7 @@ export type StreamUsage = {
 // marks where the object JSON ends and the usage trailer begins.
 export const STREAM_USAGE_SENTINEL = "\x1e";
 const SENTINEL_BYTE = 0x1e;
+const MAX_USAGE_TRAILER_BYTES = 4096;
 
 /** Server: the trailing bytes to append after the streamed object JSON. */
 export function usageTrailer(usage: StreamUsage): string {
@@ -74,12 +75,25 @@ export function makeUsageCapturingFetch(onUsage: (u: StreamUsage | null) => void
       return res;
     }
     let sentinelSeen = false;
+    let tailBytes = 0;
+    let tailTooLarge = false;
     const tailChunks: Uint8Array[] = [];
+
+    function appendTail(chunk: Uint8Array) {
+      if (tailTooLarge) return;
+      tailBytes += chunk.byteLength;
+      if (tailBytes > MAX_USAGE_TRAILER_BYTES) {
+        tailTooLarge = true;
+        tailChunks.length = 0;
+        return;
+      }
+      tailChunks.push(chunk);
+    }
 
     const transform = new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {
         if (sentinelSeen) {
-          tailChunks.push(chunk);
+          appendTail(chunk);
           return;
         }
         const idx = chunk.indexOf(SENTINEL_BYTE);
@@ -91,10 +105,10 @@ export function makeUsageCapturingFetch(onUsage: (u: StreamUsage | null) => void
         if (idx > 0) controller.enqueue(chunk.subarray(0, idx));
         sentinelSeen = true;
         const after = chunk.subarray(idx + 1);
-        if (after.length) tailChunks.push(after);
+        if (after.length) appendTail(after);
       },
       flush() {
-        if (!sentinelSeen) {
+        if (!sentinelSeen || tailTooLarge) {
           onUsage(null);
           return;
         }

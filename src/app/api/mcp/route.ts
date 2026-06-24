@@ -8,15 +8,16 @@
 //   - If MCP_AUTH_TOKEN is set in env → require Authorization: Bearer <token> on every request
 //   - If unset → public (development / open-source self-hosting default)
 //
-// Rate limit: 50 req/min per IP, in-memory (cold-start reset acceptable here
-// because abuse mitigation is the goal, not pixel-perfect billing).
+// Rate limit: 50 req/min per IP. Counters are shared through Upstash when its
+// REST credentials are configured, with an in-memory availability fallback.
 
 import { buildMcpServer } from "@/lib/mcp/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { withClientIp } from "@/lib/mcp/telemetry";
-import { machineEndpointNeedsSecret } from "@/lib/requestSafety";
-import { createRequestContext } from "@/lib/observability";
+import { INPUT_LIMITS, machineEndpointNeedsSecret, readTextBody } from "@/lib/requestSafety";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
+import { hasBearerToken } from "@/lib/serverAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,12 +46,17 @@ function authNotConfigured(): Response {
   );
 }
 
+function payloadTooLarge(): Response {
+  return new Response(
+    JSON.stringify({ jsonrpc: "2.0", error: { code: -32003, message: "MCP request body is too large" } }),
+    { status: 413, headers: { "content-type": "application/json" } },
+  );
+}
+
 function checkAuth(req: Request): boolean {
   const required = process.env.MCP_AUTH_TOKEN;
   if (!required) return true; // public mode
-  const header = req.headers.get("authorization") ?? "";
-  const match = /^Bearer\s+(.+)$/i.exec(header);
-  return Boolean(match && match[1] === required);
+  return hasBearerToken(req, required);
 }
 
 async function handle(req: Request): Promise<Response> {
@@ -60,23 +66,30 @@ async function handle(req: Request): Promise<Response> {
   }
   if (!checkAuth(req)) return ctx.response(unauthorized(), { method: req.method });
   const ip = clientKey(req);
-  const rl = rateLimit(ip, { max: RATE_LIMIT_PER_MIN, namespace: "mcp" });
-  if (!rl.allowed) return ctx.response(rateLimited(rl.retryAfterSec), { method: req.method });
+  const rl = await rateLimit(ip, { max: RATE_LIMIT_PER_MIN, namespace: "mcp", abortSignal: req.signal });
+  if (!rl.allowed) return ctx.response(withRateLimitHeaders(rateLimited(rl.retryAfterSec), rl), { method: req.method });
+
+  let transportRequest = req;
+  if (req.method !== "GET") {
+    const body = await readTextBody(req, INPUT_LIMITS.mcpJson);
+    if (!body.ok) return ctx.response(payloadTooLarge(), { method: req.method });
+    transportRequest = new Request(req, { body: body.value });
+  }
 
   return withClientIp(ip, async () => {
-    const server = buildMcpServer();
+    const server = buildMcpServer({ requestUrl: req.url });
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined, // stateless — Vercel-friendly
       enableJsonResponse: true,
     });
     try {
       await server.connect(transport);
-      const response = await transport.handleRequest(req);
+      const response = await transport.handleRequest(transportRequest);
       return ctx.response(response, { method: req.method });
     } catch (error) {
       ctx.log("error", "mcp_request_failed", {
         method: req.method,
-        error: error instanceof Error ? error.message : String(error),
+        error: safeErrorDetail(error),
       });
       throw error;
     } finally {

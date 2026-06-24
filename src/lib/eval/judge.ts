@@ -84,33 +84,47 @@ function groundingRubricBlock(): string {
 // cross-model judge that measures same-family bias — see
 // scripts/run-evals-crossjudge.ts. The analysis being scored is held fixed,
 // so any score delta is attributable to the judge, not the generation.
-export async function judge(input: JudgeInput, model = deepseek(JUDGE_MODEL)) {
+export async function judge(
+  input: JudgeInput,
+  model = deepseek(JUDGE_MODEL),
+  options: { abortSignal?: AbortSignal } = {},
+) {
+  options.abortSignal?.throwIfAborted();
   const { object } = await generateObject({
     model,
     schema: RubricScores,
     system: JUDGE_SYSTEM_PROMPT,
     prompt: buildJudgeUserPrompt({ ...input, trace: undefined }),
     temperature: 0,
+    abortSignal: options.abortSignal,
   });
+  options.abortSignal?.throwIfAborted();
   return object;
 }
 
 // 6-dimension judge for the agentic arm: the core 5 PLUS evidence_grounding,
 // graded against the supplied investigation trace.
 //
-// `judgeModel` override: calibration (notes/calib-grounding.md) showed
+// `judgeModel` override: calibration (notes/generated/calib-grounding.md) showed
 // deepseek-chat returns a flat 5.00 on evidence_grounding with zero variance —
 // too weak to discriminate verbatim-grounded from derived claims even with
 // tightened anchors. The override lets us grade grounding with a stronger model
 // (e.g. deepseek-reasoner) while the core-5 eval keeps deepseek-chat for
 // comparability with the historical single-shot evals.
-export async function judgeWithGrounding(input: JudgeInput & { trace: string }, judgeModel: string = JUDGE_MODEL_GROUNDING) {
+export async function judgeWithGrounding(
+  input: JudgeInput & { trace: string },
+  judgeModel: string = JUDGE_MODEL_GROUNDING,
+  options: { abortSignal?: AbortSignal } = {},
+) {
+  options.abortSignal?.throwIfAborted();
   const { object } = await generateObject({
     model: deepseek(judgeModel),
     schema: RubricScoresWithGrounding,
     system: `${JUDGE_SYSTEM_PROMPT}${groundingRubricBlock()}`,
     prompt: buildJudgeUserPrompt(input),
     temperature: 0,
+    abortSignal: options.abortSignal,
   });
+  options.abortSignal?.throwIfAborted();
   return object;
 }

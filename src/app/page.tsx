@@ -75,7 +75,12 @@ export default function Home() {
           }),
         });
         if (!res.ok) throw new Error(await readApiError(res, t("home.saveFailed")));
-        const { incident_id } = await res.json();
+        const saved = await res.json() as { persisted?: boolean; incident_id?: string; reason?: string };
+        if (!saved.persisted || !saved.incident_id) {
+          setSaveError(saved.reason ?? t("home.persistenceDisabled"));
+          return;
+        }
+        const { incident_id } = saved;
         router.push(`/incidents/${incident_id}`);
       } catch (e) {
         setSaveError(e instanceof Error ? e.message : String(e));

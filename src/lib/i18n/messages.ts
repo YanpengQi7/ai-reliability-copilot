@@ -29,6 +29,11 @@ export const MESSAGES: Messages = {
   "common.cancel": { en: "Cancel", zh: "取消" },
   "common.copy": { en: "Copy", zh: "复制" },
   "common.copied": { en: "Copied", zh: "已复制" },
+  "privateData.title": { en: "Operational data is private", zh: "运营数据为私有内容" },
+  "privateData.body": {
+    en: "This hosted deployment does not expose saved incidents, internal knowledge-base metadata, evaluation records, or MCP telemetry.",
+    zh: "此托管部署不会公开已保存的故障、内部知识库元数据、评测记录或 MCP 遥测数据。",
+  },
 
   // Home (New)
   "home.title": { en: "AI Reliability Copilot", zh: "AI 故障响应副驾" },
@@ -73,6 +78,10 @@ export const MESSAGES: Messages = {
     en: "The analysis was generated, but it was not saved.",
     zh: "分析已生成，但未能保存。",
   },
+  "home.persistenceDisabled": {
+    en: "This deployment analyzes incidents without storing them.",
+    zh: "此部署仅分析故障，不会持久化保存数据。",
+  },
   "home.errorMissingKey": {
     en: "Server is missing DEEPSEEK_API_KEY. Set it in Vercel → Settings → Environment Variables and redeploy.",
     zh: "服务端缺少 DEEPSEEK_API_KEY。请在 Vercel → Settings → Environment Variables 中设置后重新部署。",
@@ -103,6 +112,11 @@ export const MESSAGES: Messages = {
   "incidents.dbMissing.body": {
     en: "Set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to see saved incidents.",
     zh: "设置 NEXT_PUBLIC_SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY 后即可看到保存的故障。",
+  },
+  "incidents.private.title": { en: "Incident history is private", zh: "故障历史为私有数据" },
+  "incidents.private.body": {
+    en: "This hosted deployment does not expose persisted incident logs. Set ALLOW_PUBLIC_INCIDENT_DATA=true only for a sample-data demo.",
+    zh: "此托管部署不会公开已保存的故障日志。仅在纯样例数据 Demo 中设置 ALLOW_PUBLIC_INCIDENT_DATA=true。",
   },
   "incidents.untitled": { en: "Untitled incident", zh: "未命名故障" },
 
@@ -144,7 +158,7 @@ export const MESSAGES: Messages = {
   "mcp.totalCalls": { en: "Calls (7d)", zh: "调用数 (7d)" },
   "mcp.errorRate": { en: "Error rate", zh: "错误率" },
   "mcp.avgLatency": { en: "Avg latency", zh: "平均延迟" },
-  "mcp.uniqueIps": { en: "Unique IPs (7d)", zh: "独立 IP (7d)" },
+  "mcp.uniqueIps": { en: "Unique clients (7d)", zh: "独立客户端 (7d)" },
   "mcp.byTool": { en: "By tool (last 7 days)", zh: "按工具（最近 7 天）" },
   "mcp.recentFailures": { en: "Recent failures", zh: "最近失败" },
   "mcp.noData": { en: "No tool calls yet. Wire up your Claude Code and call a tool.", zh: "暂无调用记录。把你的 Claude Code 接上来调一次工具试试。" },

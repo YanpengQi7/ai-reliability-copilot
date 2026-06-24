@@ -7,8 +7,9 @@
 //   Sentry:     integrations → webhooks → URL above (issue alerts)
 //
 // Auth (optional, env-gated):
-//   WEBHOOK_SECRET set → require ?secret=<token> in URL OR
-//                        X-Webhook-Secret header
+//   WEBHOOK_SECRET set → require Authorization: Bearer <token> or
+//                        X-Webhook-Secret. Query tokens require an explicit
+//                        legacy opt-in because URLs are commonly logged.
 //   unset → public (don't do this on prod)
 //
 // Response pattern (fast ACK):
@@ -26,12 +27,18 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { hasSupabase } from "@/lib/db";
 import { tryParseAlert } from "@/lib/alertParsers";
 import { calcCost, normalizeUsage } from "@/lib/cost";
-import { embed, buildSignature } from "@/lib/embeddings";
+import { embed, embeddingForDatabase, buildSignature } from "@/lib/embeddings";
 import { retrieveContext, formatChunksForPrompt, recordRetrievedChunks } from "@/lib/kb";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
-import { contentLengthExceeds, INPUT_LIMITS, machineEndpointNeedsSecret, redactSensitiveValue } from "@/lib/requestSafety";
-import { createRequestContext } from "@/lib/observability";
+import { INPUT_LIMITS, machineEndpointNeedsSecret, readTextBody, redactSensitiveValue } from "@/lib/requestSafety";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
+import { bearerToken, secureTokenEqual } from "@/lib/serverAuth";
+import { createProviderDeadline, PROVIDER_TIMEOUT_MS } from "@/lib/providerDeadline";
+import { buildAnalysisRecord } from "@/lib/analysisRecord";
+import { buildIncidentRecord } from "@/lib/incidentRecord";
+import { resolveAppBaseUrl } from "@/lib/appUrl";
+import { classifyDatabaseDeadlineFailure, createDatabaseDeadline, DATABASE_QUERY_TIMEOUT_MS } from "@/lib/databaseDeadline";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,10 +49,10 @@ const RATE_LIMIT = 60;
 function checkAuth(req: Request): boolean {
   const required = process.env.WEBHOOK_SECRET;
   if (!required) return true;
-  const fromHeader = req.headers.get("x-webhook-secret");
-  if (fromHeader && fromHeader === required) return true;
-  const url = new URL(req.url);
-  return url.searchParams.get("secret") === required;
+  const fromHeader = bearerToken(req) ?? req.headers.get("x-webhook-secret");
+  if (secureTokenEqual(fromHeader, required)) return true;
+  if (process.env.ALLOW_LEGACY_QUERY_SECRET !== "true") return false;
+  return secureTokenEqual(new URL(req.url).searchParams.get("secret"), required);
 }
 
 export async function POST(req: Request) {
@@ -56,9 +63,9 @@ export async function POST(req: Request) {
   if (!checkAuth(req)) {
     return ctx.response(apiError(401, "UNAUTHORIZED", "Missing or wrong secret", { requestId: ctx.requestId }));
   }
-  const rl = rateLimit(clientKey(req), { max: RATE_LIMIT, namespace: "webhook" });
+  const rl = await rateLimit(clientKey(req), { max: RATE_LIMIT, namespace: "webhook", abortSignal: req.signal });
   if (!rl.allowed) {
-    return ctx.response(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`, { requestId: ctx.requestId }));
+    return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s`, { requestId: ctx.requestId }), rl));
   }
   if (!hasSupabase()) {
     return ctx.response(apiError(503, "DB_UNCONFIGURED", "Supabase env missing", { requestId: ctx.requestId }));
@@ -66,17 +73,13 @@ export async function POST(req: Request) {
   if (!process.env.DEEPSEEK_API_KEY) {
     return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY missing", { requestId: ctx.requestId }));
   }
-  if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 2)) {
+  const bodyResult = await readTextBody(req, INPUT_LIMITS.rawContext);
+  if (!bodyResult.ok) {
     return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Webhook payload is too large.", { requestId: ctx.requestId }));
   }
-
-  const bodyText = await req.text();
+  const bodyText = bodyResult.value;
   if (bodyText.length < 5) {
     return ctx.response(apiError(400, "EMPTY_BODY", "Webhook body empty", { requestId: ctx.requestId }));
-  }
-
-  if (bodyText.length > INPUT_LIMITS.rawContext) {
-    return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Webhook payload is too large.", { requestId: ctx.requestId }));
   }
 
   const parsed = redactSensitiveValue(tryParseAlert(bodyText) ?? {
@@ -90,27 +93,43 @@ export async function POST(req: Request) {
   const sb = supabaseAdmin();
 
   // 1. Insert the incident IMMEDIATELY so the webhook caller gets a fast ACK
+  const incidentDeadline = createDatabaseDeadline(req.signal);
   const { data: inc, error: e1 } = await sb
     .from("incidents")
-    .insert({
+    .insert(buildIncidentRecord({
       title: parsed.title ? `[${parsed.source}] ${parsed.title}` : `[${parsed.source}] webhook`,
-      service: parsed.service ?? null,
-      symptoms: parsed.symptoms ?? null,
-      raw_context: parsed.raw_context,
-    })
+      service: parsed.service,
+      symptoms: parsed.symptoms,
+      rawContext: parsed.raw_context,
+    }))
     .select("id")
+    .abortSignal(incidentDeadline.signal)
     .single();
-  if (e1) return ctx.response(apiError(500, "DB_ERROR", e1.message, { requestId: ctx.requestId }));
+  if (e1 || !inc) {
+    const failure = classifyDatabaseDeadlineFailure(req.signal, incidentDeadline);
+    if (failure === "request_aborted") {
+      ctx.log("warn", "webhook_incident_write_aborted");
+      return ctx.response(apiError(499, "REQUEST_ABORTED", "Webhook persistence was cancelled.", { requestId: ctx.requestId }));
+    }
+    ctx.log("error", "webhook_incident_insert_failed", {
+      error: safeErrorDetail(e1 ?? new Error("Incident insert returned no row.")),
+    });
+    if (failure === "timed_out") {
+      return ctx.response(apiError(504, "DB_TIMEOUT", `Webhook persistence timed out after ${DATABASE_QUERY_TIMEOUT_MS / 1000}s.`, { requestId: ctx.requestId }));
+    }
+    return ctx.response(apiError(500, "DB_ERROR", "Could not record the incident.", { requestId: ctx.requestId }));
+  }
 
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://ai-reliability-copilot.vercel.app";
+  const base = resolveAppBaseUrl(req.url);
   const url = `${base}/incidents/${inc.id}`;
 
   // 2. Schedule analysis to run AFTER the response is sent
   after(async () => {
+    const deadline = createProviderDeadline();
     try {
       const queryText = [parsed.title, parsed.service, parsed.symptoms, parsed.raw_context]
         .filter(Boolean).join(" ").slice(0, 4000);
-      const retrieved = await retrieveContext(queryText, { limit: 5 });
+      const retrieved = await retrieveContext(queryText, { limit: 5, abortSignal: deadline.signal });
       const internal_context = formatChunksForPrompt(retrieved.chunks);
 
       const started = Date.now();
@@ -126,6 +145,7 @@ export async function POST(req: Request) {
           internal_context,
         }),
         temperature: 0.2,
+        abortSignal: deadline.signal,
       });
       const latency_ms = Date.now() - started;
       const { tokens_in, tokens_out } = normalizeUsage(usage);
@@ -139,42 +159,52 @@ export async function POST(req: Request) {
         summary: object.summary,
         severity: object.severity,
       });
-      const embedding = await embed(signature);
-      await sb.from("incidents").update({
+      const embedding = await embed(signature, deadline.signal);
+      const signatureDeadline = createDatabaseDeadline();
+      const { error: signatureError } = await sb.from("incidents").update({
         signature,
-        embedding: embedding ? (embedding as unknown as string) : null,
-      }).eq("id", inc.id);
+        embedding: embeddingForDatabase(embedding),
+      }).eq("id", inc.id).abortSignal(signatureDeadline.signal);
+      if (signatureError) {
+        ctx.log("warn", "webhook_signature_update_failed", {
+          error: safeErrorDetail(signatureError),
+          incident_id: inc.id,
+        });
+      }
 
-      const { data: anaRow, error: e2 } = await sb.from("analyses").insert({
-        incident_id: inc.id,
-        model: ANALYSIS_MODEL,
-        prompt_version: DEFAULT_PROMPT_VERSION,
-        output_language: "en",
-        summary: object.summary,
-        severity: object.severity,
-        severity_reasoning: object.severity_reasoning,
-        root_causes: object.root_causes,
-        investigation_checklist: object.investigation_checklist,
-        mitigation_plan: object.mitigation_plan,
-        customer_impact: object.customer_impact,
-        postmortem_draft: object.postmortem_draft,
-        follow_ups: object.follow_ups,
-        latency_ms,
-        tokens_in,
-        tokens_out,
-        cost_usd,
-      }).select("id").single();
-      if (e2) {
+      const analysisDeadline = createDatabaseDeadline();
+      const { data: anaRow, error: e2 } = await sb.from("analyses").insert(
+        buildAnalysisRecord({
+          incidentId: inc.id,
+          analysis: object,
+          model: ANALYSIS_MODEL,
+          promptVersion: DEFAULT_PROMPT_VERSION,
+          outputLanguage: "en",
+          latencyMs: latency_ms,
+          usage: { tokens_in, tokens_out, cost_usd },
+        }),
+      ).select("id").abortSignal(analysisDeadline.signal).single();
+      if (e2 || !anaRow) {
+        const analysisError = e2 ?? new Error("Analysis insert returned no row.");
         ctx.log("error", "webhook_analysis_insert_failed", {
           incident_id: inc.id,
-          error: e2.message,
+          error: safeErrorDetail(analysisError),
         });
-        return;
+        throw analysisError;
       }
-      if (anaRow) await recordRetrievedChunks(anaRow.id, retrieved.chunks);
+      try {
+        const auditDeadline = createDatabaseDeadline();
+        await recordRetrievedChunks(anaRow.id, retrieved.chunks, { abortSignal: auditDeadline.signal });
+      } catch (auditError) {
+        ctx.log("warn", "webhook_kb_audit_write_failed", {
+          error: safeErrorDetail(auditError),
+          analysis_id: anaRow.id,
+          incident_id: inc.id,
+        });
+      }
       ctx.log("info", "webhook_analysis_completed", {
         incident_id: inc.id,
-        analysis_id: anaRow?.id,
+        analysis_id: anaRow.id,
         latency_ms,
         tokens_in,
         tokens_out,
@@ -182,16 +212,19 @@ export async function POST(req: Request) {
     } catch (err) {
       ctx.log("error", "webhook_background_failed", {
         incident_id: inc.id,
-        error: err instanceof Error ? err.message : String(err),
+        error: safeErrorDetail(err),
+        timed_out: deadline.timeoutSignal.aborted,
+        ...(deadline.timeoutSignal.aborted ? { timeout_ms: PROVIDER_TIMEOUT_MS } : {}),
       });
       // Don't lose the failure — log it on the incident itself so /incidents/[id] shows it
       try {
-        await sb.from("analyses").insert({
+        const failureWriteDeadline = createDatabaseDeadline();
+        const { error: failureWriteError } = await sb.from("analyses").insert({
           incident_id: inc.id,
           model: ANALYSIS_MODEL,
           prompt_version: DEFAULT_PROMPT_VERSION,
           output_language: "en",
-          summary: `Background analysis failed: ${err instanceof Error ? err.message : String(err)}`,
+          summary: `Background analysis failed. Request ID: ${ctx.requestId}`,
           severity: "SEV3",
           root_causes: [],
           investigation_checklist: [],
@@ -199,8 +232,14 @@ export async function POST(req: Request) {
           customer_impact: "n/a",
           postmortem_draft: "n/a",
           follow_ups: [],
+        }).abortSignal(failureWriteDeadline.signal);
+        if (failureWriteError) throw failureWriteError;
+      } catch (failureWriteError) {
+        ctx.log("error", "webhook_failure_record_failed", {
+          error: safeErrorDetail(failureWriteError),
+          incident_id: inc.id,
         });
-      } catch { /* swallow — we tried */ }
+      }
     }
   });
 

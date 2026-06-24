@@ -1,10 +1,11 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { investigate } from "@/lib/agent/investigate";
-import { rateLimit, clientKey } from "@/lib/rateLimit";
+import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { apiError } from "@/lib/http";
-import { contentLengthExceeds, INPUT_LIMITS, redactSensitiveValue } from "@/lib/requestSafety";
-import { createRequestContext } from "@/lib/observability";
+import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
+import { createRequestContext, safeErrorDetail } from "@/lib/observability";
+import { classifyProviderDeadlineFailure, createProviderDeadline } from "@/lib/providerDeadline";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -33,28 +34,24 @@ export async function POST(req: NextRequest) {
     return ctx.response(apiError(503, "MISSING_API_KEY", "DEEPSEEK_API_KEY is not configured on the server.", { requestId: ctx.requestId }));
   }
   // Agentic runs make several model calls — keep the demo limit tight.
-  const rl = rateLimit(clientKey(req), { max: 3, windowMs: 60_000, namespace: "investigate" });
+  const rl = await rateLimit(clientKey(req), { max: 3, windowMs: 60_000, namespace: "investigate", abortSignal: req.signal });
   if (!rl.allowed) {
-    return ctx.response(apiError(429, "RATE_LIMITED", `Demo limit: 3 investigations/min. Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }));
+    return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Demo limit: 3 investigations/min. Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
-  if (contentLengthExceeds(req, INPUT_LIMITS.rawContext * 2)) {
+  const bodyResult = await readJsonBody(req, INPUT_LIMITS.rawContext * 2);
+  if (!bodyResult.ok && bodyResult.error === "payload_too_large") {
     return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.", { requestId: ctx.requestId }));
   }
-
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
+  if (!bodyResult.ok) {
     return ctx.response(apiError(400, "INVALID_JSON", "Body must be JSON", { requestId: ctx.requestId }));
   }
-  const parsed = InputSchema.safeParse(body);
+  const parsed = InputSchema.safeParse(bodyResult.value);
   if (!parsed.success) {
     const message = parsed.error.issues.map((issue) => issue.message).join("; ");
     return ctx.response(apiError(400, "VALIDATION_ERROR", message, { requestId: ctx.requestId }));
   }
   const input = redactSensitiveValue(parsed.data);
-  const timeoutSignal = AbortSignal.timeout(INVESTIGATION_TIMEOUT_MS);
-  const signal = AbortSignal.any([req.signal, timeoutSignal]);
+  const deadline = createProviderDeadline(req.signal, INVESTIGATION_TIMEOUT_MS);
 
   try {
     const result = await investigate({
@@ -66,7 +63,7 @@ export async function POST(req: NextRequest) {
       },
       language: input.output_language ?? "en",
       maxSteps: input.max_steps,
-      abortSignal: signal,
+      abortSignal: deadline.signal,
     });
     return ctx.response(Response.json(result), {
       steps: result.steps,
@@ -74,12 +71,13 @@ export async function POST(req: NextRequest) {
       model_calls: result.usage.model_calls,
     });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    if (req.signal.aborted) {
+    const detail = safeErrorDetail(err);
+    const failure = classifyProviderDeadlineFailure(req.signal, deadline);
+    if (failure === "request_aborted") {
       ctx.log("warn", "investigation_request_aborted", { error: detail });
       return ctx.response(apiError(499, "REQUEST_ABORTED", "Investigation was cancelled.", { requestId: ctx.requestId }));
     }
-    if (timeoutSignal.aborted) {
+    if (failure === "timed_out") {
       ctx.log("error", "investigation_request_timed_out", {
         timeout_ms: INVESTIGATION_TIMEOUT_MS,
         error: detail,
