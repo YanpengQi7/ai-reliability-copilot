@@ -208,6 +208,3 @@ intentionally public deployment.
 
 MIT
 
----
-
-Built in 30 days as a side project to learn AI engineering and evaluation methodology.
