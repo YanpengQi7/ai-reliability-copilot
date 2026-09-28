@@ -46,16 +46,24 @@ export const ManifestSchema = z.object({
   budget: z.object({ max_usd: z.number().positive(), max_minutes: z.number().positive(), per_call_usd: z.number().positive(), max_calls: z.number().int().positive(), max_output_tokens: z.number().int().positive(), input_per_million: z.number().nonnegative(), output_per_million: z.number().nonnegative(), judge_input_per_million: z.number().nonnegative(), judge_output_per_million: z.number().nonnegative() }),
   calibration: CalibrationSchema.nullable().default(null),
   case_ids: z.array(z.string()).min(1), ablation: z.enum(["default", "no_kb", "no_state"]).default("default"),
-  protocol: z.object({ min_families: z.number().int().min(2), noninferiority_margin: z.number().min(0).max(1), max_cost_ratio: z.number().positive() }),
+  protocol: z.object({ min_success_rate: z.number().min(0).max(1).optional(), min_families: z.number().int().min(2), noninferiority_margin: z.number().min(0).max(1), max_cost_ratio: z.number().positive() }),
 });
 export type Manifest = z.infer<typeof ManifestSchema>;
+export const DecisionSchema = z.object({
+  hypotheses: z.array(z.object({ hypothesis: z.string(), supporting_ids: z.array(z.string()), refuting_ids: z.array(z.string()), missing: z.string() })).max(5),
+  done: z.boolean(),
+  tool: z.enum(["get_metrics", "get_logs", "get_deploy_history", "search_runbooks"]),
+  query: z.string().describe("Simple literal substring, not a query language. Empty string retrieves all available records for the service. Do not add service:, metric:, level: or time filters."),
+  reason: z.string(),
+});
 export const TrialSchema = z.object({
   id: z.string(), case_id: z.string(), family: z.string(), mode: ModeSchema, language: z.enum(["en", "zh"]), repeat: z.number().int(),
   status: z.enum(["pending", "running", "succeeded", "failed", "budget_skipped", "interrupted"]),
   input: CaseSchema.shape.alert, evidence: z.array(EvidenceSchema), diagnosis: DiagnosisSchema.nullable(),
+  decisions: z.array(DecisionSchema).optional(),
   trace: z.array(z.object({ tool: z.string(), input: z.record(z.string(), z.unknown()), evidence_ids: z.array(z.string()), observation: z.string() })),
   calls: z.array(UsageSchema), elapsed_ms: z.number().nonnegative(), failure: z.string().nullable(), stop_reason: z.string(),
-});
+}).refine(t => t.status !== "succeeded" || t.diagnosis !== null, "Successful trial requires a diagnosis");
 export type Trial = z.infer<typeof TrialSchema>;
 export const VerdictSchema = z.object({
   core: RubricScores,
@@ -65,5 +73,5 @@ export const VerdictSchema = z.object({
 export const JudgmentSchema = z.object({
   trial_id: z.string(), judge_run_id: z.string(), trial_hash: z.string(), judge_model: z.string(), prompt_hash: z.string(),
   status: z.enum(["succeeded", "failed"]), verdict: VerdictSchema.nullable(), calls: z.array(UsageSchema), failure: z.string().nullable(),
-});
+}).refine(j => j.status !== "succeeded" || j.verdict !== null, "Successful judgment requires a verdict");
 export type Judgment = z.infer<typeof JudgmentSchema>;

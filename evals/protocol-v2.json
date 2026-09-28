@@ -1,4 +1,5 @@
 {
+  "min_success_rate": 0.8,
   "min_families": 10,
   "noninferiority_margin": 0.05,
   "max_cost_ratio": 2

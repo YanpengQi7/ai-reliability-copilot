@@ -4,6 +4,10 @@ import { CaseSchema, type EvalCase } from "./contracts";
 import { evidenceItem, type EvidenceItem } from "../agent/evidence";
 import type { TelemetryAdapter } from "../agent/tools";
 
+export function isVisible(e: EvidenceItem, at: string): boolean {
+  return Date.parse(e.available_at) <= Date.parse(at) && Date.parse(e.observed_at) <= Date.parse(at);
+}
+
 export function validateDataset(raw: unknown): EvalCase[] {
   const cases = z.array(CaseSchema).min(1).parse(raw);
   const ids = new Set<string>();
@@ -14,19 +18,24 @@ export function validateDataset(raw: unknown): EvalCase[] {
     if (splits.has(c.family) && splits.get(c.family) !== c.split) throw new Error(`Family ${c.family} leaks across splits`);
     splits.set(c.family, c.split);
     if (new Set(c.evidence.map(e => e.id)).size !== c.evidence.length) throw new Error(`Duplicate evidence in ${c.id}`);
+    if (c.evidence.some(e => e.id === "alert-context")) throw new Error("Reserved alert evidence ID");
     for (const e of c.evidence) {
       const { content_hash, ...rest } = e;
       if (evidenceItem(rest).content_hash !== content_hash) throw new Error(`Evidence hash mismatch in ${c.id}`);
     }
-    if (c.gold.required_evidence_ids.some(id => !c.evidence.some(e => e.id === id && Date.parse(e.available_at) <= Date.parse(c.alert.at)))) throw new Error(`Gold references unavailable evidence in ${c.id}`);
-    if (c.gold.review_status === "gold" && new Set(c.gold.reviewers).size < 2) throw new Error(`Gold requires independent reviewers: ${c.id}`);
+    if (c.gold.required_evidence_ids.some(id => !c.evidence.some(e => e.id === id && isVisible(e, c.alert.at)))) throw new Error(`Gold references unavailable evidence in ${c.id}`);
+    if (c.gold.review_status === "gold" && new Set(c.gold.reviewers.map(r => r.trim().toLowerCase()).filter(Boolean)).size < 2) throw new Error(`Gold requires independent reviewers: ${c.id}`);
     if (!c.gold.sufficient && c.gold.acceptable_severities.length) throw new Error(`Insufficient-evidence case has a forced severity: ${c.id}`);
   }
   return cases;
 }
 export function loadDataset(path: string): EvalCase[] { return validateDataset(JSON.parse(readFileSync(path, "utf8"))); }
+/** Alert text is reported context, never independently verified telemetry. */
+export function alertEvidence(c: EvalCase): EvidenceItem {
+  return evidenceItem({ id: "alert-context", kind: "user_context", source: "unverified alert report", service: c.alert.service, observed_at: c.alert.at, available_at: c.alert.at, text: c.alert.symptoms });
+}
 export function visibleEvidence(c: EvalCase, noKb = false): EvidenceItem[] {
-  return c.evidence.filter(e => Date.parse(e.available_at) <= Date.parse(c.alert.at) && (!noKb || e.kind !== "runbook"));
+  return c.evidence.filter(e => isVisible(e, c.alert.at) && (!noKb || e.kind !== "runbook"));
 }
 export class FixtureAdapter implements TelemetryAdapter {
   constructor(private readonly evidence: EvidenceItem[], private readonly at: string) {}
@@ -37,6 +46,6 @@ export class FixtureAdapter implements TelemetryAdapter {
     const query = String(input.filter ?? input.query ?? "").toLowerCase();
     const words = query.split(/\s+/).filter(w => w.length > 2);
     const limit = typeof input.limit === "number" ? Math.max(1, Math.min(30, input.limit)) : 12;
-    return this.evidence.filter(e => Date.parse(e.available_at) <= Date.parse(this.at) && kinds[tool].includes(e.kind) && (!input.service || input.service === e.service) && (!query || (tool === "search_runbooks" ? words.some(w => e.text.toLowerCase().includes(w)) : e.text.toLowerCase().includes(query)))).slice(0, limit);
+    return this.evidence.filter(e => isVisible(e, this.at) && kinds[tool].includes(e.kind) && (!input.service || input.service === e.service) && (!query || (tool === "search_runbooks" ? words.some(w => e.text.toLowerCase().includes(w)) : e.text.toLowerCase().includes(query)))).slice(0, limit);
   }
 }

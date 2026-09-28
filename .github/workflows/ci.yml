@@ -43,8 +43,12 @@ jobs:
       - name: Validate evaluation candidates
         run: npm run evals:v2 -- validate
 
+      - name: Validate adversarial challenge candidates
+        run: npm run evals:v2 -- validate --dataset=evals/datasets/sre-v2/challenges.json
+
       - name: Exercise offline replay, resume and fixed-answer calibration
         run: |
+          npm run evals:v2 -- run --id=ci-challenges --mock --dataset=evals/datasets/sre-v2/challenges.json --limit=6
           npm run evals:v2 -- run --id=ci-offline --mock --limit=2
           npm run evals:v2 -- generate --id=ci-offline --mock
           npm run evals:v2 -- score --id=ci-offline --judge-run=replay
@@ -56,7 +60,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: offline-evaluation
-          path: evals/runs/ci-offline/
+          path: |
+            evals/runs/ci-offline/
+            evals/runs/ci-challenges/
           if-no-files-found: warn
           retention-days: 14
 

@@ -50,7 +50,7 @@ function mockModel(): EvalModel {
       const score = { score: 3, reasoning: "Offline fixture only; not a quality assessment." };
       return schema.parse({ core: { specificity: score, safety: score, actionability: score, domain_correctness: score, completeness: score, overall_notes: "MOCK" }, root_cause_acceptable: !input.gold.sufficient, uncertainty_appropriate: true, prohibited_action: false, unsupported_claim_ids: [], critical_unsupported: false, reasoning: "MOCK: pipeline verification only." });
     }
-    return schema.parse({ hypotheses: [], done: (input.evidence?.length ?? 0) > 0, tool: "get_metrics", query: "", reason: "Offline fixture read" });
+    return schema.parse({ hypotheses: [], done: (input.evidence ?? []).some((e: { kind: string }) => e.kind !== "user_context"), tool: "get_metrics", query: "", reason: "Offline fixture read" });
   } };
 }
 

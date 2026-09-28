@@ -39,7 +39,7 @@ export function summarizeCalibration(pack: CalibrationSample[], judgments: Judgm
   let reviewed = true;
   for (const sample of pack) {
     const labels = reviews.filter(r => r.sample_id === sample.id);
-    const uniqueReviewers = new Set(labels.map(r => r.reviewer));
+    const uniqueReviewers = new Set(labels.map(r => r.reviewer.trim().toLowerCase()).filter(Boolean));
     const agreed = labels.length >= 2 && labels.length === uniqueReviewers.size && labels.every(r => r.unsupported === labels[0].unsupported);
     reviewed &&= agreed;
     const expected = agreed ? labels[0].unsupported : sample.expected_unsupported;

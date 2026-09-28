@@ -106,3 +106,25 @@ The export hides model, mode, prompt version and machine scores, and shows compl
 ## Implementation pilot (2026-09-27)
 
 Three local live runs cost an estimated $0.0500655 in total (generation and judging, conservative listed prices). `live-smoke-v2-20260927` exposed thinking-budget exhaustion and unsupported retrieval query syntax. `live-smoke-v2-fixed-20260927` completed all calls but exposed claim-contract validation errors. Both remain preserved. `live-contract-v2-20260927` completed all three arms and checks for one pool-exhaustion case; its public aggregate is exported. This is an integration check on a development case, not an unbiased quality estimate. The gate remains **inconclusive**, labels remain draft, and judge calibration is unreviewed. No claim of improved diagnosis accuracy follows from this pilot.
+
+
+## Integrity and challenge improvements
+
+Reports reconstruct the predeclared trial matrix: missing artifacts stay in the denominator; duplicate records, changed arm assignments, mismatched datasets and duplicate judgments are rejected. Judge model/prompt mismatches and stale response hashes prevent assessment. Successful artifacts require non-null outputs. Observations must both occur and become available before the incident cutoff; report-time evidence must exactly match the snapshot.
+
+Reports now expose required-evidence recall, invalid-claim details, critical unsupported judgments, stop reasons, attempted-run p50/p95 (including failures), and explicit gate reasons. Existing p50/p95 fields retain successful-run latency for compatibility. Evidence recall measures retrieval of authored required IDs, not semantic correctness. A configurable `min_success_rate` (default 0.80) adds an absolute quality floor: two equally poor arms cannot qualify through relative noninferiority alone. This threshold is provisional, not an achieved production SLA.
+
+The web investigator stops after two rounds with no new observation content, even when queries differ. The experimental investigator stores structured hypothesis/check decisions separately from tool observations, and uses the final hypothesis state during synthesis except in the no-state ablation. These are operational decisions, not private reasoning traces. Human review exports bind annotations to the exact manifest, trial and displayed evidence/answer; stale or edited content is rejected at aggregation.
+
+Six additional **draft development challenges** cover service confusion, future recovery, malicious runbook instructions, contradictory observations, request/user denominator confusion, and stale deployment correlation:
+
+```sh
+npm run evals:v2 -- validate --dataset=evals/datasets/sre-v2/challenges.json
+npm run evals:v2 -- run --id=challenge-offline --mock \
+  --dataset=evals/datasets/sre-v2/challenges.json --limit=6
+```
+
+They are separate from the original 30-case dataset and are not a held-out test set. CI validates and exercises both datasets offline.
+
+
+All v2 arms now receive an explicitly unverified `alert-context` evidence item, so claims about the alert have a citeable source without treating the alert as verified telemetry. Missing observations belong in `missing_information`, not unsupported observed claims. The severity policy clarifies that confirmed customer impact does not become SEV3 merely because it affects a small subset; request share must not be compared to an affected-user threshold. This clarifies impact-v2 semantics rather than changing its thresholds.

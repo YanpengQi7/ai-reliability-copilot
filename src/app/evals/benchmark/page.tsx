@@ -13,14 +13,19 @@ export default function BenchmarkPage() {
         <Link href="/evals" className="text-indigo-300 underline">Evaluation history</Link>
       </header>
       <div role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-amber-200">
-        {mock ? "Offline pipeline demonstration — these are mock responses, not model quality results. 离线流程演示，不代表模型效果。" : "Exploratory results, not a release qualification. This pilot covers only one incident family; labels and judge calibration still need independent review."}
+        {mock ? "Offline pipeline demonstration — these are mock responses, not model quality results. 离线流程演示，不代表模型效果。" : "Exploratory results, not a release qualification. These synthetic pilot results have limited coverage; labels and judge calibration still need independent review."}
         <p className="mt-2 text-sm">Release decision: {report.gate}. {report.draft_labels ? "Labels still require independent human review." : "Labels reviewed."}</p>
       </div>
+      <section className="rounded-xl border border-neutral-800 p-5">
+        <h2 className="mb-3 text-lg font-semibold">Release criteria</h2>
+        <ul className="list-disc space-y-1 pl-5 text-sm text-neutral-300">{report.gate_reasons.map(reason => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul>
+        <p className="mt-3 text-sm text-neutral-400">Independent incident families: {report.comparison?.families ?? "No paired comparison"}. Judge calibrated: {report.calibrated ? "yes" : "no"}.</p>
+      </section>
       <section className="overflow-x-auto rounded-xl border border-neutral-800 p-5">
         <h2 className="mb-4 text-lg font-semibold">Every planned trial stays in the denominator</h2>
         <table className="w-full text-left text-sm">
-          <thead><tr className="text-neutral-400"><th className="p-2">Approach</th><th className="p-2">Planned</th><th className="p-2">Assessed</th><th className="p-2">Checks passed</th><th className="p-2">Cost / success</th></tr></thead>
-          <tbody>{Object.entries(report.modes).map(([mode, s]) => <tr key={mode} className="border-t border-neutral-800"><td className="p-2">{mode}</td><td className="p-2">{s.planned}</td><td className="p-2">{s.assessed}</td><td className="p-2">{mock ? "Not measured" : `${s.succeeded}/${s.planned}`}</td><td className="p-2">{s.cost_per_success === null ? "Not available" : `$${Number(s.cost_per_success).toFixed(5)}`}</td></tr>)}</tbody>
+          <thead><tr className="text-neutral-400"><th className="p-2">Approach</th><th className="p-2">Planned</th><th className="p-2">Assessed</th><th className="p-2">Checks passed</th><th className="p-2">Required evidence retrieved</th><th className="p-2">All attempts p95</th><th className="p-2">Cost / success</th></tr></thead>
+          <tbody>{Object.entries(report.modes).map(([mode, s]) => <tr key={mode} className="border-t border-neutral-800"><td className="p-2">{mode}</td><td className="p-2">{s.planned}</td><td className="p-2">{s.assessed}</td><td className="p-2">{mock ? "Not measured" : `${s.succeeded}/${s.planned}`}</td><td className="p-2">{s.evidence_coverage === null ? "Not applicable" : `${Math.round(s.evidence_coverage * 100)}%`}</td><td className="p-2">{s.attempted_p95_ms === null ? "Not available" : `${(s.attempted_p95_ms / 1000).toFixed(1)}s`}</td><td className="p-2">{s.cost_per_success === null ? "Not available" : `$${Number(s.cost_per_success).toFixed(5)}`}</td></tr>)}</tbody>
         </table>
       </section>
       <section className="rounded-xl border border-neutral-800 p-5">

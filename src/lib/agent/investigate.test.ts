@@ -13,6 +13,7 @@ vi.mock("@/lib/ai", () => ({
 
 import { generateObject, generateText } from "ai";
 import { investigate } from "./investigate";
+import { evidenceItem } from "./evidence";
 
 const mockedGenerateText = vi.mocked(generateText);
 const mockedGenerateObject = vi.mocked(generateObject);
@@ -42,6 +43,20 @@ describe("investigate cancellation", () => {
     })).rejects.toBe(cancellation);
 
     expect(mockedGenerateObject).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops when different queries repeatedly return identical evidence", async () => {
+    const at = "2026-09-01T00:00:00.000Z";
+    const e = evidenceItem({ id: "metric", kind: "metric", source: "fixture", service: "checkout", observed_at: at, available_at: at, text: "connections saturated" });
+    let count = 0;
+    mockedGenerateText.mockImplementation(async () => ({ text: "", toolCalls: [{ toolName: "get_metrics", toolCallId: String(++count), input: { service: "checkout", filter: `query-${count}` } }], response: { messages: [] }, usage: {} }) as never);
+    mockedGenerateObject.mockResolvedValueOnce({ object: {}, usage: {} } as never);
+    const read = vi.fn(async () => [e]);
+    const result = await investigate({ input: { service: "checkout", raw_context: "" }, adapter: { read }, maxSteps: 8 });
+    expect(result.steps).toBe(3);
+    expect(result.stop_reason).toBe("no_progress");
+    expect(result.completed).toBe(false);
+    expect(result.evidence).toHaveLength(1);
   });
 
   it("preserves user evidence in the final call when no tool evidence exists", async () => {

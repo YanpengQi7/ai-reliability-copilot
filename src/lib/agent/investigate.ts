@@ -108,6 +108,7 @@ export async function investigate(opts: InvestigateOptions): Promise<Investigati
   let stopReason: InvestigationResult["stop_reason"] = "step_cap";
   let completed = false;
   let roundsWithoutNewEvidence = 0;
+  const seenObservations = new Set<string>();
 
   // ── PHASE 1: the hand-written investigation loop ──────────────────────
   while (steps < maxSteps) {
@@ -180,7 +181,15 @@ export async function investigate(opts: InvestigateOptions): Promise<Investigati
 
       trace.push(step);
       scratch.record(step);
-      if (step.status === "ok") newEvidenceThisRound += 1;
+      if (step.status === "ok") {
+        const observations = step.evidence?.length
+          ? step.evidence.map(e => e.content_hash)
+          : [step.observation.trim()];
+        for (const key of observations) {
+          if (!seenObservations.has(key)) newEvidenceThisRound += 1;
+          seenObservations.add(key);
+        }
+      }
 
       toolResultParts.push({
         type: "tool-result",

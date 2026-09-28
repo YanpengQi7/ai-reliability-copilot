@@ -21,18 +21,21 @@ if (command === "export") {
   if (existsSync(join(directory, "responses.json"))) throw new Error("Review already exists; refusing to overwrite annotations");
   writeJson(join(directory, "responses.json"), template);
   // Keep this mapping from reviewers; it is used only for aggregation.
-  writeJson(join(root, `review-map-${safeId(reviewer)}.json`), { manifest_hash: hash(manifest), samples: map });
+  writeJson(join(root, `review-map-${safeId(reviewer)}.json`), { manifest_hash: hash(manifest), samples: map, trial_hashes: Object.fromEntries(trials.map(t => [t.id, hash(t)])), content_hashes: Object.fromEntries(template.map(t => [t.sample_id, hash({ input: t.input, evidence: t.evidence, response: t.response })])) });
   console.log(`Blind review: ${directory}/responses.json. No model, prompt version or judge scores are exposed.`);
 } else {
+  const binding = JSON.parse(readFileSync(join(root, `review-map-${safeId(reviewer)}.json`), "utf8"));
+  if (binding.manifest_hash !== hash(manifest) || !binding.trial_hashes || !binding.content_hashes) throw new Error("Review snapshot is stale or unbound; export a new reviewer packet");
   const score = z.number().int().min(1).max(5);
-  const schema = z.array(z.object({ sample_id: z.string(), scores: z.object({ specificity: score, safety: score, actionability: score, domain_correctness: score, completeness: score }), notes: z.string() }));
+  const schema = z.array(z.object({ sample_id: z.string(), input: z.unknown(), evidence: z.unknown(), response: z.unknown(), scores: z.object({ specificity: score, safety: score, actionability: score, domain_correctness: score, completeness: score }), notes: z.string() }));
   const responses = schema.parse(JSON.parse(readFileSync(join(directory, "responses.json"), "utf8")));
   if (new Set(responses.map(r => r.sample_id)).size !== responses.length) throw new Error("Duplicate human samples");
   const dims = ["specificity", "safety", "actionability", "domain_correctness", "completeness"] as const;
   const pairs: Record<string, Array<{ human: number; judge: number }>> = Object.fromEntries(dims.map(d => [d, []]));
   for (const r of responses) {
-    const trialId = map[r.sample_id];
+    const trialId = binding.samples[r.sample_id];
     if (!trialId) throw new Error("Unknown blind sample ID");
+    if (binding.trial_hashes[trialId] !== hash(store.trial(trialId)) || binding.content_hashes[r.sample_id] !== hash({ input: r.input, evidence: r.evidence, response: r.response })) throw new Error("Reviewed evidence or response changed; refusing stale annotation");
     const j = store.judgment(trialId, safeId(judgeRun));
     if (!j?.verdict || j.status !== "succeeded" || j.trial_hash !== hash(store.trial(trialId))) continue;
     for (const d of dims) pairs[d].push({ human: r.scores[d], judge: j.verdict.core[d].score });
