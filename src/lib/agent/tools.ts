@@ -19,7 +19,7 @@ import { getScenario, type Scenario, type LogLine } from "@/lib/scenarios";
 import { retrieveContext } from "@/lib/kb";
 import { safeErrorDetail } from "@/lib/observability";
 import type { InvestigationInput, TraceStep } from "./types";
-import { formatEvidence, type EvidenceItem } from "./evidence";
+import { EvidenceSchema, formatEvidence, type EvidenceItem } from "./evidence";
 
 // ── Budget constants ─────────────────────────────────────────────────
 export const LOG_BUDGET_LINES_DEFAULT = 12;
@@ -46,7 +46,7 @@ export const TOOL_SPECS = {
     description:
       "Read current metrics for a service in this incident (latency, error rate, CPU, connections, etc.). Returns a snapshot of observed values vs baseline. Pass the affected service name. Optional `filter` narrows to metric names containing a substring (e.g. 'latency', 'cpu', 'connection').",
     inputSchema: z.object({
-      service: z.string().describe("Service to read metrics for, e.g. 'payment-svc'"),
+      service: z.string().trim().min(1).describe("Service to read metrics for, e.g. 'payment-svc'"),
       filter: z.string().optional().describe("Optional substring to narrow which metrics are returned"),
     }),
   },
@@ -55,7 +55,7 @@ export const TOOL_SPECS = {
     description:
       "Read recent log lines for a service. Returns only the most recent N lines plus the total count (logs are truncated to protect context — narrow with `query` to find what you need). Pass an optional `query` substring (e.g. 'OOM', 'connection', 'timeout') and an optional `limit`.",
     inputSchema: z.object({
-      service: z.string().describe("Service to read logs for"),
+      service: z.string().trim().min(1).describe("Service to read logs for"),
       query: z.string().optional().describe("Case-insensitive substring filter over log text/level"),
       limit: z.number().int().min(1).max(LOG_BUDGET_LINES_MAX).optional().describe(`Max lines to return (default ${LOG_BUDGET_LINES_DEFAULT}, hard max ${LOG_BUDGET_LINES_MAX})`),
     }),
@@ -65,7 +65,7 @@ export const TOOL_SPECS = {
     description:
       "Read recent deploys, config changes, and infra changes for a service. Use this to correlate the incident start time with a change. Pass the affected service name.",
     inputSchema: z.object({
-      service: z.string().describe("Service to read deploy/change history for"),
+      service: z.string().trim().min(1).describe("Service to read deploy/change history for"),
     }),
   },
   search_runbooks: {
@@ -84,14 +84,14 @@ export const TOOL_SPECS = {
     description:
       "Roll back a service to its previous deploy. (Write action.)",
     inputSchema: z.object({
-      service: z.string(),
+      service: z.string().trim().min(1),
       to_version: z.string().optional(),
     }),
   },
   restart_service: {
     allowed: false,
     description: "Restart a service's pods. (Write action.)",
-    inputSchema: z.object({ service: z.string() }),
+    inputSchema: z.object({ service: z.string().trim().min(1) }),
   },
 } satisfies Record<string, ToolSpec>;
 
@@ -136,13 +136,7 @@ function fmtLog(l: LogLine): string {
 
 function serviceMismatch(scenario: Scenario, asked?: string): string | null {
   if (!asked) return null;
-  if (asked.toLowerCase() === scenario.service.toLowerCase()) return null;
-  // Be lenient on substring matches (model may pass 'payment' for 'payment-svc').
-  if (
-    scenario.service.toLowerCase().includes(asked.toLowerCase()) ||
-    asked.toLowerCase().includes(scenario.service.toLowerCase())
-  )
-    return null;
+  if (asked.trim().toLowerCase() === scenario.service.toLowerCase()) return null;
   return `No telemetry for service "${asked}" in this incident. The affected service is "${scenario.service}". Re-query with that name.`;
 }
 
@@ -286,17 +280,21 @@ export async function dispatchTool(
   // Recovery: a handler throwing must not crash the loop.
   try {
     if (dctx.adapter) {
-      const candidates = await dctx.adapter.read(toolName, parsed.data as Record<string, unknown>, dctx.abortSignal);
+      const candidates = z.array(EvidenceSchema).parse(await dctx.adapter.read(toolName, parsed.data as Record<string, unknown>, dctx.abortSignal));
       dctx.abortSignal?.throwIfAborted();
+      const requestedService = "service" in parsed.data ? parsed.data.service.trim().toLowerCase() : null;
+      if (toolName !== "search_runbooks" && requestedService !== null && candidates.some(e => e.service.trim().toLowerCase() !== requestedService)) throw new Error("Adapter returned telemetry for a different service");
       const evidence: EvidenceItem[] = [];
       for (const e of candidates) {
-        if (formatEvidence([...evidence, e]).length > MAX_OBSERVATION_CHARS) break;
+        if (formatEvidence([...evidence, e]).length > MAX_OBSERVATION_CHARS - 160) continue;
         evidence.push(e);
       }
-      return { ...base, status: evidence.length ? "ok" : "empty", observation: evidence.length ? formatEvidence(evidence) : "No visible evidence matched within the observation budget.", evidence, latency_ms: Date.now() - started };
+      const omitted = candidates.length - evidence.length;
+      const observation = evidence.length ? formatEvidence(evidence) : candidates.length ? "Matching evidence exists but exceeds the observation budget; narrow the query." : "No visible evidence matched.";
+      return { ...base, status: evidence.length ? "ok" : "empty", observation: observation + (omitted ? `\n[${omitted} record(s) omitted by observation budget; narrow the query for remaining evidence.]` : ""), ...(omitted ? { reason: "observation_budget" } : {}), evidence, latency_ms: Date.now() - started };
     }
     if (toolName === "search_runbooks" && dctx.allowInternalKb === false) return { ...base, status: "empty", observation: "Private knowledge retrieval is unavailable for this caller.", latency_ms: Date.now() - started };
-    const out = await runHandler(toolName as ToolName, input, dctx.ctx, dctx.abortSignal);
+    const out = await runHandler(toolName as ToolName, parsed.data as Record<string, unknown>, dctx.ctx, dctx.abortSignal);
     dctx.abortSignal?.throwIfAborted();
     return { ...base, status: out.status, observation: clampObservation(out.text), latency_ms: Date.now() - started };
   } catch (err) {

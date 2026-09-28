@@ -136,3 +136,11 @@ Finished trials (including failed, interrupted and budget-limited trials) and sa
 Resume commands use the saved manifest. New-run flags such as model, dataset, split and budget are rejected on resume rather than silently ignored. Re-scoring accepts explicit judge overrides, validated against the same schema as initial configuration. Boolean switches only accept `--live` or `--live=true` (similarly for mock/export); values such as `--live=false` fail rather than accidentally enabling live calls. Negative token prices and negative spending reservations are rejected before dispatch.
 
 `calibration-report --id=... --judge-run=...` uses that scoring run's saved judge model and prompt hash, allowing faithful historical replay after the current judge prompt changes. This does not make old calibration compatible with a new judge protocol.
+
+## Investigator read boundaries
+
+The web investigator keeps tool-derived state in untrusted user context instead of interpolating it into system instructions. State excerpts are bounded and repeated summaries are deduplicated. Query signatures are canonicalized across object-key order. Failed reads can be retried once with the same arguments; successful, empty and refused reads remain deduplicated, and existing per-tool/step caps still apply.
+
+Scenario telemetry requires an exact service name (case-insensitive, surrounding whitespace ignored); substring guesses no longer return another service's data. Adapter results are schema-validated, and telemetry for a service other than the requested service is rejected. Runbook search remains cross-service guidance. Oversized records no longer hide later records that fit; omitted records are counted with a narrowing hint. The final web analysis receives failed/empty/truncated read limitations separately from factual evidence, so missing observations do not imply normal operation.
+
+These changes are covered by deterministic tool and investigator tests, plus offline challenge replay. They do not establish live-provider robustness against every prompt-injection technique.
