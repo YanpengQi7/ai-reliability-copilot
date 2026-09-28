@@ -128,3 +128,11 @@ They are separate from the original 30-case dataset and are not a held-out test 
 
 
 All v2 arms now receive an explicitly unverified `alert-context` evidence item, so claims about the alert have a citeable source without treating the alert as verified telemetry. Missing observations belong in `missing_information`, not unsupported observed claims. The severity policy clarifies that confirmed customer impact does not become SEV3 merely because it affects a small subset; request share must not be compared to an affected-user threshold. This clarifies impact-v2 semantics rather than changing its thresholds.
+
+## Recovery and configuration safeguards
+
+Finished trials (including failed, interrupted and budget-limited trials) and saved judgments are immutable through the artifact store. Identical saves are idempotent; changed outputs require a new run or judge-run. Initializing an existing experiment never recreates deleted trial files. Reports account for a missing artifact as incomplete without modifying raw trial records; generation refuses to silently replace it. Restore the original artifact or start a new run after interrupted initialization or file loss.
+
+Resume commands use the saved manifest. New-run flags such as model, dataset, split and budget are rejected on resume rather than silently ignored. Re-scoring accepts explicit judge overrides, validated against the same schema as initial configuration. Boolean switches only accept `--live` or `--live=true` (similarly for mock/export); values such as `--live=false` fail rather than accidentally enabling live calls. Negative token prices and negative spending reservations are rejected before dispatch.
+
+`calibration-report --id=... --judge-run=...` uses that scoring run's saved judge model and prompt hash, allowing faithful historical replay after the current judge prompt changes. This does not make old calibration compatible with a new judge protocol.

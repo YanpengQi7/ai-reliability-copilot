@@ -12,19 +12,12 @@ import { DiagnosisSchema, VerdictSchema } from "../src/lib/eval/contracts";
 import { Budget, BudgetExceeded, liveModel, type LedgerEntry } from "../src/lib/eval/provider";
 import { buildReport, reportMarkdown } from "../src/lib/eval/report";
 import { calibrationPack, ReviewsSchema, summarizeCalibration } from "../src/lib/eval/calibration";
+import { parseEvalFlags, validateEvalFlags } from "../src/lib/eval/cliConfig";
 import { safeErrorDetail } from "../src/lib/observability";
 
 const argv = process.argv.slice(2);
 const command = argv.shift() ?? "validate";
-const flags = new Map<string, string>();
-for (const flag of argv) {
-  if (!flag.startsWith("--")) throw new Error("Use --name=value flags");
-  const [key, ...rest] = flag.slice(2).split("=");
-  if (flags.has(key)) throw new Error(`Duplicate flag ${key}`);
-  flags.set(key, rest.join("=") || "true");
-}
-const allowed = new Set(["id", "mock", "live", "dataset", "split", "limit", "modes", "languages", "repeats", "seed", "max-usd", "max-minutes", "per-call-usd", "max-calls", "max-output-tokens", "input-price", "output-price", "judge-input-price", "judge-output-price", "model", "judge-model", "judge-run", "ablation", "export-public", "calibration"]);
-for (const key of flags.keys()) if (!allowed.has(key)) throw new Error(`Unknown flag ${key}`);
+const flags = parseEvalFlags(argv);
 const numeric = (name: string, fallback: number) => flags.has(name) ? Number(flags.get(name)) : fallback;
 const datasetPath = flags.get("dataset") ?? "evals/datasets/sre-v2/cases.json";
 
@@ -55,6 +48,7 @@ function mockModel(): EvalModel {
 }
 
 async function main() {
+  validateEvalFlags(command, flags, false);
   if (command === "validate") {
     const cases = loadDataset(datasetPath);
     console.log(JSON.stringify({ cases: cases.length, families: new Set(cases.map(c => c.family)).size, draft: cases.filter(c => c.gold.review_status === "draft").length, splits: Object.fromEntries(["dev", "validation", "test"].map(s => [s, cases.filter(c => c.split === s).length])) }, null, 2));
@@ -70,7 +64,10 @@ async function main() {
   try {
     const store = new ArtifactStore(root);
     let manifest: Manifest;
-    if (existsSync(join(root, "manifest.json"))) manifest = store.manifest();
+    if (existsSync(join(root, "manifest.json"))) {
+      validateEvalFlags(command, flags, true);
+      manifest = store.manifest();
+    }
     else {
       if (!["generate", "run"].includes(command)) throw new Error("Generate a run first");
       const mock = flags.has("mock");
@@ -93,13 +90,12 @@ async function main() {
     if (["run", "generate"].includes(command) && manifest.source_hash !== sourceHash()) throw new Error("Source changed. Create a new run; report/check can still replay the saved artifacts.");
     if (flags.has("mock") && manifest.model !== "mock" || flags.has("live") && manifest.model === "mock") throw new Error("Execution mode differs from manifest");
     const plans = plannedTrials(manifest, cases);
-    // Recover initialization interrupted after the manifest write.
-    store.initialize(manifest, plans);
+    // Readers must not recreate missing trial artifacts.
     const ledgerPath = join(root, "ledger.json");
     const ledger: LedgerEntry[] = existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, "utf8")) : [];
     const budget = new Budget(manifest.budget, ledger, () => writeJson(ledgerPath, ledger));
     const judgeRun = safeId(flags.get("judge-run") ?? "primary");
-    const scoringManifest = { ...manifest, judge_model: flags.get("judge-model") ?? manifest.judge_model, budget: { ...manifest.budget, judge_input_per_million: numeric("judge-input-price", manifest.budget.judge_input_per_million), judge_output_per_million: numeric("judge-output-price", manifest.budget.judge_output_per_million) } };
+    const scoringManifest = ManifestSchema.parse({ ...manifest, judge_model: flags.get("judge-model") ?? manifest.judge_model, budget: { ...manifest.budget, judge_input_per_million: numeric("judge-input-price", manifest.budget.judge_input_per_million), judge_output_per_million: numeric("judge-output-price", manifest.budget.judge_output_per_million) } });
     if (scoringManifest.judge_model !== manifest.judge_model && (!flags.has("judge-input-price") || !flags.has("judge-output-price"))) throw new Error("Changing judge requires explicit judge token prices");
     const judgeConfigPath = join(root, "judgments", judgeRun, "config.json");
     const judgeConfig = { model: scoringManifest.judge_model, prompt_hash: hash(EVAL_JUDGE_PROMPT), thinking: scoringManifest.thinking, input_price: scoringManifest.budget.judge_input_per_million, output_price: scoringManifest.budget.judge_output_per_million };
@@ -131,12 +127,15 @@ async function main() {
       const reviewPath = join(root, "calibration", "reviews.json");
       const reviews = existsSync(reviewPath) ? ReviewsSchema.parse(JSON.parse(readFileSync(reviewPath, "utf8"))) : [];
       const judgments = pack.map(s => store.judgment(s.id, judgeRun)).filter((j): j is Judgment => j !== null);
-      const summary = summarizeCalibration(pack, judgments, reviews, judgeConfig.model, judgeConfig.model === "mock" ? "mock" : "live");
+      if (!existsSync(judgeConfigPath)) throw new Error("No saved calibration judge configuration; run calibrate first");
+      const calibrationConfig = JSON.parse(readFileSync(judgeConfigPath, "utf8"));
+      const summary = summarizeCalibration(pack, judgments, reviews, calibrationConfig.model, calibrationConfig.model === "mock" ? "mock" : "live", calibrationConfig.prompt_hash);
       writeJson(join(root, "calibration", `summary-${judgeRun}.json`), summary);
       console.log(JSON.stringify(summary, null, 2));
       return;
     }
     if (["generate", "run"].includes(command)) for (const plan of plans) {
+      if (!existsSync(store.trialPath(plan.id))) throw new Error(`Missing trial artifact ${plan.id}; restore the original or create a new run. Reports retain it in the denominator.`);
       const trial = store.trial(plan.id);
       if (trial.status === "running") {
         trial.status = "interrupted";
@@ -158,12 +157,12 @@ async function main() {
       console.log(`${trial.id}: ${trial.status}`);
     }
     if (["score", "run"].includes(command)) for (const plan of plans) {
-      const trial = store.trial(plan.id);
+      const trial = store.trialOrMissing(plan);
       if (trial.status !== "succeeded" || store.judgment(trial.id, judgeRun)) continue;
       await scoreOne(trial, cases.find(c => c.id === trial.case_id)!);
     }
     if (["report", "run", "check"].includes(command)) {
-      const trials: Trial[] = plans.map(p => store.trial(p.id));
+      const trials: Trial[] = plans.map(p => store.trialOrMissing(p));
       const judgments = trials.map(t => store.judgment(t.id, judgeRun)).filter((j): j is Judgment => j !== null);
       const savedJudgeConfig = existsSync(judgeConfigPath) ? JSON.parse(readFileSync(judgeConfigPath, "utf8")) : judgeConfig;
       const reportingManifest = { ...manifest, judge_model: savedJudgeConfig.model, rubric_hash: savedJudgeConfig.prompt_hash };

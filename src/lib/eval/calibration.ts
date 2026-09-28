@@ -34,7 +34,7 @@ export function wilson(successes: number, n: number) {
   return { lower: center - spread, upper: center + spread };
 }
 
-export function summarizeCalibration(pack: CalibrationSample[], judgments: Judgment[], reviews: HumanReview[], judgeModel: string, execution: "mock" | "live") {
+export function summarizeCalibration(pack: CalibrationSample[], judgments: Judgment[], reviews: HumanReview[], judgeModel: string, execution: "mock" | "live", promptHash = hash(EVAL_JUDGE_PROMPT)) {
   let tp = 0, fp = 0, fn = 0, tn = 0;
   let reviewed = true;
   for (const sample of pack) {
@@ -43,11 +43,11 @@ export function summarizeCalibration(pack: CalibrationSample[], judgments: Judgm
     const agreed = labels.length >= 2 && labels.length === uniqueReviewers.size && labels.every(r => r.unsupported === labels[0].unsupported);
     reviewed &&= agreed;
     const expected = agreed ? labels[0].unsupported : sample.expected_unsupported;
-    const j = judgments.find(j => j.trial_id === sample.id && j.status === "succeeded" && j.trial_hash === hash(sample.trial) && j.prompt_hash === hash(EVAL_JUDGE_PROMPT) && j.judge_model === judgeModel);
+    const j = judgments.find(j => j.trial_id === sample.id && j.status === "succeeded" && j.trial_hash === hash(sample.trial) && j.prompt_hash === promptHash && j.judge_model === judgeModel);
     if (!j?.verdict) continue;
     const predicted = j.verdict.unsupported_claim_ids.includes("c1");
     if (predicted && expected) tp++; else if (predicted) fp++; else if (expected) fn++; else tn++;
   }
   const n = tp + fp + fn + tn;
-  return { judge_model: judgeModel, prompt_hash: hash(EVAL_JUDGE_PROMPT), pack_hash: hash(pack), labels_hash: hash(reviews), n, planned: pack.length, precision: tp + fp ? tp / (tp + fp) : null, recall: tp + fn ? tp / (tp + fn) : null, precision_interval: wilson(tp, tp + fp), recall_interval: wilson(tp, tp + fn), confusion: { tp, fp, fn, tn }, reviewed: reviewed && n === pack.length, execution, note: "Intervals are descriptive binomial intervals; mutations share six source cases. Without two agreeing independent human labels per item these are draft calibration results." };
+  return { judge_model: judgeModel, prompt_hash: promptHash, pack_hash: hash(pack), labels_hash: hash(reviews), n, planned: pack.length, precision: tp + fp ? tp / (tp + fp) : null, recall: tp + fn ? tp / (tp + fn) : null, precision_interval: wilson(tp, tp + fp), recall_interval: wilson(tp, tp + fn), confusion: { tp, fp, fn, tn }, reviewed: reviewed && n === pack.length, execution, note: "Intervals are descriptive binomial intervals; mutations share six source cases. Without two agreeing independent human labels per item these are draft calibration results." };
 }

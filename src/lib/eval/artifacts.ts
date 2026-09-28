@@ -28,14 +28,35 @@ export class ArtifactStore {
     const path = join(this.root, "manifest.json");
     if (existsSync(path)) {
       if (hash(this.manifest()) !== hash(manifest)) throw new Error("Manifest mismatch; create a new run");
+      return; // Never recreate missing artifacts in an existing experiment.
     } else writeJson(path, ManifestSchema.parse(manifest));
     for (const trial of trials) if (!existsSync(this.trialPath(trial.id))) this.saveTrial(trial);
   }
   trialPath(id: string) { return join(this.root, "trials", `${safeId(id)}.json`); }
   trial(id: string) { return readJson(this.trialPath(id), TrialSchema); }
-  saveTrial(trial: Trial) { writeJson(this.trialPath(trial.id), TrialSchema.parse(trial)); }
+  trialOrMissing(plan: Trial): Trial {
+    return existsSync(this.trialPath(plan.id)) ? this.trial(plan.id) : { ...plan, stop_reason: "missing_artifact", failure: "Trial artifact is missing; no generation was attempted by this reader." };
+  }
+  saveTrial(trial: Trial) {
+    const value = TrialSchema.parse(trial), path = this.trialPath(trial.id);
+    if (existsSync(path)) {
+      const previous = this.trial(trial.id);
+      if (!["pending", "running"].includes(previous.status)) {
+        if (hash(previous) !== hash(value)) throw new Error("Finished trial is immutable; create a new run");
+        return;
+      }
+    }
+    writeJson(path, value);
+  }
   judgmentPath(id: string, judgeRun: string) { return join(this.root, "judgments", safeId(judgeRun), `${safeId(id)}.json`); }
-  saveJudgment(j: Judgment) { writeJson(this.judgmentPath(j.trial_id, j.judge_run_id), JudgmentSchema.parse(j)); }
+  saveJudgment(j: Judgment) {
+    const value = JudgmentSchema.parse(j), previous = this.judgment(j.trial_id, j.judge_run_id);
+    if (previous) {
+      if (hash(previous) !== hash(value)) throw new Error("Judgment is immutable; choose a new judge-run");
+      return;
+    }
+    writeJson(this.judgmentPath(j.trial_id, j.judge_run_id), value);
+  }
   judgment(id: string, judgeRun: string): Judgment | null {
     const p = this.judgmentPath(id, judgeRun);
     return existsSync(p) ? readJson(p, JudgmentSchema) : null;

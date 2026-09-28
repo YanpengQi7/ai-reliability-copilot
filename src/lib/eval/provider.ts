@@ -16,7 +16,7 @@ export class Budget {
   }
   reserve(owner: string, purpose: LedgerEntry["purpose"], amount: number) {
     const spent = this.ledger.reduce((s, e) => s + (e.usage?.cost_usd ?? e.reservation_usd), 0);
-    if (!Number.isFinite(amount) || amount > this.config.per_call_usd || spent + amount > this.config.max_usd || this.ledger.length >= this.config.max_calls || this.remainingTime() <= 0) throw new BudgetExceeded("Run budget exhausted or call exceeds reservation cap");
+    if (!Number.isFinite(amount) || amount < 0 || amount > this.config.per_call_usd || spent + amount > this.config.max_usd || this.ledger.length >= this.config.max_calls || this.remainingTime() <= 0) throw new BudgetExceeded("Run budget exhausted or call exceeds reservation cap");
     const entry: LedgerEntry = { id: String(this.ledger.length + 1), owner, purpose, state: "reserved", reservation_usd: amount, usage: null, at: new Date().toISOString() };
     this.ledger.push(entry); this.save(); return entry;
   }

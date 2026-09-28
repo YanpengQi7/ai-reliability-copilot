@@ -105,6 +105,9 @@ describe("evaluation artifact integrity", () => {
     expect(summarizeCalibration(pack, [judgment], reviews, "judge", "live").reviewed).toBe(false);
     reviews[1].reviewer = "Bob";
     expect(summarizeCalibration(pack, [judgment], reviews, "judge", "live").reviewed).toBe(true);
+    const historical = summarizeCalibration(pack, [{ ...judgment, prompt_hash: "historical-rubric" }], reviews, "judge", "live", "historical-rubric");
+    expect(historical.n).toBe(1);
+    expect(historical.prompt_hash).toBe("historical-rubric");
   });
   it("rejects disguised duplicate reviewers", () => {
     expect(() => validateDataset([{ ...cases[0], gold: { ...cases[0].gold, review_status: "gold", reviewers: ["Alice", " alice "] } }])).toThrow(/independent/);
