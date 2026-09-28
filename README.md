@@ -12,6 +12,8 @@ But the real story isn't the prompt. It's the **eval pipeline** — a 5-dimensio
 **📖 Usage guide (中文):** [USAGE.md](./USAGE.md) — how to actually use it, end-to-end
 **Methodology deep-dive:** [EVALUATION.md](./EVALUATION.md)
 
+**Evidence-first evaluation v2:** [EVAL-V2.md](./EVAL-V2.md) — frozen trial artifacts, blinded same-judge comparisons, fixed-answer calibration, failure accounting, and paired incident-family intervals. Includes 30 synthetic candidate cases awaiting independent review. Public pipeline demo: `/evals/benchmark`. Historical results below are legacy findings, not v2 quality claims.
+
 ---
 
 ## Architecture

@@ -5,6 +5,7 @@
 
 import type { Analysis } from "@/lib/schema";
 import type { OutputLanguage } from "@/lib/prompts";
+import type { EvidenceItem } from "./evidence";
 
 // What the agent investigates. Either a curated scenario (tools read its typed
 // signals) or a free-form incident (tools fall back to the raw_context only —
@@ -31,6 +32,7 @@ export type TraceStep = {
   observation: string; // the text the model saw (already budget-trimmed)
   reason?: string; // for refused/error: why
   latency_ms: number;
+  evidence?: EvidenceItem[];
 };
 
 export type UsageTotals = {
@@ -48,4 +50,5 @@ export type InvestigationResult = {
   completed: boolean; // false = hit step cap / budget cap before the model was done
   stop_reason: "model_done" | "step_cap" | "no_progress" | "budget_cap";
   language: OutputLanguage;
+  evidence?: EvidenceItem[];
 };

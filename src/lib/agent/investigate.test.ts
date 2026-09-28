@@ -43,4 +43,13 @@ describe("investigate cancellation", () => {
 
     expect(mockedGenerateObject).toHaveBeenCalledTimes(1);
   });
+
+  it("preserves user evidence in the final call when no tool evidence exists", async () => {
+    mockedGenerateObject.mockResolvedValueOnce({ object: {}, usage: {} } as never);
+    const result = await investigate({ input: { service: "checkout", symptoms: "errors", raw_context: "Only tenant A fails; tenant B succeeds, database CPU is 20%." } });
+    const prompt = mockedGenerateObject.mock.calls[0][0].prompt;
+    expect(prompt).toContain("Only tenant A fails");
+    expect(prompt).toContain("user-context");
+    expect(result.evidence?.[0].source).toContain("not independently verified");
+  });
 });

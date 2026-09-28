@@ -66,6 +66,21 @@ describe("judge cancellation", () => {
     mocks.deepseek.mockClear();
   });
 
+  it("keeps core scores and core prompts identical when the grounding judge changes", async () => {
+    mockedGenerateObject.mockResolvedValueOnce({ object: scores } as never);
+    await judge({ analysis: analysis() });
+    const baselineCall = mockedGenerateObject.mock.calls[0][0];
+    mockedGenerateObject.mockResolvedValueOnce({ object: scores } as never)
+      .mockResolvedValueOnce({ object: { evidence_grounding: { score: 1, reasoning: "unsupported" } } } as never);
+    const result = await judgeWithGrounding({ analysis: analysis(), trace: "trace" }, "different-grounding-model");
+    const candidateCore = mockedGenerateObject.mock.calls[1][0];
+    expect(candidateCore.model).toEqual(baselineCall.model);
+    expect(candidateCore.prompt).toEqual(baselineCall.prompt);
+    expect(candidateCore.system).toEqual(baselineCall.system);
+    expect(result.specificity.score).toBe(4);
+    expect(result.evidence_grounding.score).toBe(1);
+  });
+
   it("does not call the judge model when already cancelled", async () => {
     const controller = new AbortController();
     const cancellation = new Error("request cancelled");

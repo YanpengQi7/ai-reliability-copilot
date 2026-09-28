@@ -1,5 +1,9 @@
 # Evaluation Methodology
 
+## Current implementation: evidence-first v2
+
+See [EVAL-V2.md](./EVAL-V2.md) for the runnable protocol, explicit cost budgets, replay and re-scoring commands, dataset review requirements, and release gates. The historical sections below describe v1 evidence. V2 scores all arms with the same blinded judge protocol; grounding checks explicit evidence references and valid derivations rather than literal numeric overlap. No v2 superiority claim has been established.
+
 This project treats prompt engineering as an engineering discipline: every change to the system prompt is scored against a fixed rubric across a fixed scenario suite. "It feels better" doesn't ship; "average rubric overall went from 2.8 → 4.3" does.
 
 ## Why this matters
@@ -83,7 +87,7 @@ Overall Pearson r = **0.59**; 70% of items agree within ±0.5 on overall.
 - **The bias is consistent across languages** (en −0.22, zh −0.26), so it's a judge property, not a language artifact.
 - **Takeaway for the pipeline:** absolute scores should be read with a ~0.2–0.4 same-family discount on the soft dimensions; *relative* comparisons (prompt v1 vs v3) are safer because the bias is roughly constant across versions. Cross-judging the soft dimensions, or anchoring them to human review, is the next step.
 - **5 scenarios is narrow.** Will expand to 15–20 as the project matures. Real production has long tails.
-- **`temperature: 0.2` on the analyzer** means some run-to-run variance; we don't yet repeat each scenario and average. Roadmap item.
+- **Repeated generations remain noisy.** Legacy runners already support repeats; v2 retains case/language/repeat identities and clusters uncertainty by incident family.
 - **Rate-limit backend depends on deployment configuration.** Upstash provides shared counters across instances; deployments without its REST credentials use the documented in-memory fallback.
 - **The 9-section schema is opinionated.** Real incidents don't always fit; this is a tradeoff for structured, comparable output.
 

@@ -8,6 +8,7 @@ import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { retrieveContext, formatChunksForPrompt } from "@/lib/kb";
 import { normalizeUsage, calcCost } from "@/lib/cost";
 import { usageTrailer } from "@/lib/streamUsage";
+import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 import { apiError } from "@/lib/http";
 import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
@@ -56,7 +57,9 @@ export async function POST(req: NextRequest) {
   const queryText = [input.title, input.service, input.symptoms, input.raw_context].filter(Boolean).join(" ").slice(0, 4000);
   let internal_context = "";
   try {
-    const retrieved = await retrieveContext(queryText, { limit: 5, abortSignal: deadline.signal });
+    const retrieved = requestHasIncidentDataAccess(req)
+      ? await retrieveContext(queryText, { limit: 5, abortSignal: deadline.signal })
+      : { chunks: [] };
     internal_context = formatChunksForPrompt(retrieved.chunks);
   } catch (err) {
     const failure = classifyProviderDeadlineFailure(req.signal, deadline);

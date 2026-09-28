@@ -1,0 +1,115 @@
+{
+  "run_id": "live-contract-v2-20260927",
+  "gate": "inconclusive",
+  "draft_labels": true,
+  "calibrated": false,
+  "modes": {
+    "full": {
+      "planned": 1,
+      "assessed": 1,
+      "succeeded": 1,
+      "success_rate": 1,
+      "coverage": 1,
+      "known_cost_usd": 0.0015800999999999999,
+      "cost_complete": true,
+      "cost_per_success": 0.0015800999999999999,
+      "p50_ms": 4198,
+      "p95_ms": 4198,
+      "failures": []
+    },
+    "workflow": {
+      "planned": 1,
+      "assessed": 1,
+      "succeeded": 1,
+      "success_rate": 1,
+      "coverage": 1,
+      "known_cost_usd": 0.0015092999999999999,
+      "cost_complete": true,
+      "cost_per_success": 0.0015092999999999999,
+      "p50_ms": 3935,
+      "p95_ms": 3935,
+      "failures": []
+    },
+    "agentic": {
+      "planned": 1,
+      "assessed": 1,
+      "succeeded": 1,
+      "success_rate": 1,
+      "coverage": 1,
+      "known_cost_usd": 0.005508899999999999,
+      "cost_complete": true,
+      "cost_per_success": 0.005508899999999999,
+      "p50_ms": 13799,
+      "p95_ms": 13799,
+      "failures": []
+    }
+  },
+  "slices": {
+    "database": {
+      "full": {
+        "planned": 1,
+        "assessed": 1,
+        "succeeded": 1,
+        "success_rate": 1,
+        "coverage": 1,
+        "known_cost_usd": 0.0015800999999999999,
+        "cost_complete": true,
+        "cost_per_success": 0.0015800999999999999,
+        "p50_ms": 4198,
+        "p95_ms": 4198,
+        "failures": []
+      },
+      "workflow": {
+        "planned": 1,
+        "assessed": 1,
+        "succeeded": 1,
+        "success_rate": 1,
+        "coverage": 1,
+        "known_cost_usd": 0.0015092999999999999,
+        "cost_complete": true,
+        "cost_per_success": 0.0015092999999999999,
+        "p50_ms": 3935,
+        "p95_ms": 3935,
+        "failures": []
+      },
+      "agentic": {
+        "planned": 1,
+        "assessed": 1,
+        "succeeded": 1,
+        "success_rate": 1,
+        "coverage": 1,
+        "known_cost_usd": 0.005508899999999999,
+        "cost_complete": true,
+        "cost_per_success": 0.005508899999999999,
+        "p50_ms": 13799,
+        "p95_ms": 13799,
+        "failures": []
+      }
+    }
+  },
+  "comparison": {
+    "baseline": "workflow",
+    "candidate": "agentic",
+    "paired_trials": 1,
+    "families": 1,
+    "delta": 0,
+    "lower": null,
+    "upper": null
+  },
+  "cost_ratio": 3.6499701848539052,
+  "judge_cost_usd": 0.0036920999999999994,
+  "judge_cost_complete": true,
+  "note": "Synthetic/draft labels cannot pass a release gate. Success rate uses all planned trials; incomplete coverage is not evidence of regression. Intervals cluster by incident family.",
+  "execution": "live",
+  "judge_run": "primary",
+  "versions": {
+    "evaluator": "b1f46d79f91cff0aadb97e7346dce7eff339c5b16f432487eaa6b7e0e760422a",
+    "dataset": "0c8219ec1efa9df5c2533bbac4c5a9b7ed0e85314fe098e6fb74db8633b293ef",
+    "source": "6b086871478efb0c19e23b8d592ceca1c604b1347d0ff9c70eba9f863fa6d45f",
+    "prompt": "d0e5cf59cc3bafdc7040289a44e311a37b1f1a735cfa50c4025b8192705d54aa",
+    "rubric": "cbdf836831cd73076ba2dcd194ae3d60ce69c3fd63fabb5aa1ea7476c8cd786e",
+    "model": "deepseek:deepseek-flash",
+    "judge": "deepseek:deepseek-flash",
+    "policy": "impact-v2"
+  }
+}

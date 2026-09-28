@@ -1,3 +1,4 @@
+import { defaultSettingsMiddleware, wrapLanguageModel } from "ai";
 import { createDeepSeek, type DeepSeekProvider } from "@ai-sdk/deepseek";
 import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
 import { createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic";
@@ -17,7 +18,10 @@ function getProvider(): DeepSeekProvider {
 // Plain function wrapper. ES-module callers do `deepseek(modelId)` — this
 // resolves the provider on first call.
 export function deepseek(modelId: string) {
-  return getProvider()(modelId);
+  const model = getProvider()(modelId);
+  // Flash defaults to thinking at the provider. Keep bounded chat/structured
+  // responses non-thinking unless a caller explicitly overrides this setting.
+  return modelId === "deepseek-flash" ? wrapLanguageModel({ model, middleware: defaultSettingsMiddleware({ settings: { providerOptions: { deepseek: { thinking: { type: "disabled" } } } } }) }) : model;
 }
 
 // Second provider, used for the cross-model judge (see scripts/run-evals-crossjudge.ts).
@@ -74,15 +78,12 @@ export function resolveModel(spec: string) {
   }
 }
 
-export const ANALYSIS_MODEL = "deepseek-chat";
-export const JUDGE_MODEL = "deepseek-chat";
-// Grounding is graded by a stronger (reasoning) judge. Calibration showed
-// deepseek-chat returns a flat 5.00 with zero variance on evidence_grounding —
-// it can't discriminate verbatim-grounded from derived claims even with tightened
-// anchors. deepseek-reasoner produces real variance that tracks the deterministic
-// grounded-ratio check. See notes/reports/calib-grounding-findings.md. The core-5 eval
-// keeps JUDGE_MODEL for comparability with the historical single-shot evals.
-export const JUDGE_MODEL_GROUNDING = "deepseek-reasoner";
+export const ANALYSIS_MODEL = "deepseek-flash";
+export const JUDGE_MODEL = "deepseek-flash";
+// Current model IDs verified against /models on 2026-09-27. Grounding is
+// scored separately so changing this model cannot replace core rubric scores.
+// Historical deepseek-chat/reasoner results remain legacy, not a new baseline.
+export const JUDGE_MODEL_GROUNDING = "deepseek-v4-pro";
 
 // Independent cross-model judge. The core eval has DeepSeek judging DeepSeek,
 // so its absolute scores carry a same-family optimistic bias (EVALUATION.md).

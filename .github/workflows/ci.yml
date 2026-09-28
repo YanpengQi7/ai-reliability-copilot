@@ -40,6 +40,26 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Validate evaluation candidates
+        run: npm run evals:v2 -- validate
+
+      - name: Exercise offline replay, resume and fixed-answer calibration
+        run: |
+          npm run evals:v2 -- run --id=ci-offline --mock --limit=2
+          npm run evals:v2 -- generate --id=ci-offline --mock
+          npm run evals:v2 -- score --id=ci-offline --judge-run=replay
+          npm run evals:v2 -- calibrate --id=ci-offline --judge-run=calibration
+          npm run evals:v2 -- report --id=ci-offline --judge-run=replay
+
+      - name: Upload offline evaluation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-evaluation
+          path: evals/runs/ci-offline/
+          if-no-files-found: warn
+          retention-days: 14
+
       # Build does not require real env vars — Next.js builds with empty values
       # and our app gracefully degrades when DEEPSEEK_API_KEY / Supabase vars
       # are missing at runtime.

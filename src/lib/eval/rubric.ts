@@ -87,18 +87,15 @@ export function overallScore(s: RubricScores): number {
 // This dimension requires the judge to see the TOOL TRACE (what was actually
 // queried and returned), not just the final analysis — a claim is only
 // "grounded" if the evidence cited was really retrieved during investigation.
-// Anchors deliberately force the judge to DISCRIMINATE — calibration (see
-// notes/generated/calib-grounding.md) found it returning a flat 5.00 with zero variance,
-// which means the dimension wasn't grading anything. A derived/rounded number
-// (e.g. reporting "~3.2% failures" when the trace shows 99.7%→96.8%) must cost a
-// point; only verbatim-traceable claims earn a 5. Numbers from the severity
-// RUBRIC (">1%", ">5 min") are not trace claims — do not penalize those.
+// Grounding v2 permits explicit, valid derivations with cited operands.
+// Service/metric/unit/time agreement matters; numeric substring overlap does not.
+export const GROUNDING_RUBRIC_VERSION = "grounding-v2";
 export const EVIDENCE_GROUNDING_DEF = {
   title: "Evidence grounding",
   anchors: {
     1: "A root-cause claim or key number is NOT supported anywhere in the tool trace (fabricated or contradicted by the observations).",
-    3: "Direction is supported by the trace, but ≥2 numbers are derived/approximated/over-stated beyond what the tools returned, OR a key metric cited was never actually queried.",
-    5: "EVERY root-cause claim and every cited number is VERBATIM traceable to a specific tool observation. Reserve 5 for verbatim grounding only — if even one figure is rounded or derived (not literally in a tool output), the ceiling is 4. (Thresholds quoted from the severity rubric like '>1%' or '>5 min' are rubric references, not trace claims — do not penalize them.)",
+    3: "Most claims are supported, but one or more omit a clear source or derivation; a service, unit, or time window is ambiguous.",
+    5: "Every consequential claim is supported by a specific observation matching service, metric, units and time. Correct derivations with explicit operands and references are fully supported. Clearly labeled hypotheses and policy thresholds are not fabricated observations.",
   } as Record<1 | 3 | 5, string>,
 };
 

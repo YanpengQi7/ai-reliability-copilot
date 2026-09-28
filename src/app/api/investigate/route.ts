@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { investigate } from "@/lib/agent/investigate";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
+import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 import { apiError } from "@/lib/http";
 import { INPUT_LIMITS, readJsonBody, redactSensitiveValue } from "@/lib/requestSafety";
 import { createRequestContext, safeErrorDetail } from "@/lib/observability";
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
       language: input.output_language ?? "en",
       maxSteps: input.max_steps,
       abortSignal: deadline.signal,
+      allowInternalKb: requestHasIncidentDataAccess(req),
     });
     return ctx.response(Response.json(result), {
       steps: result.steps,

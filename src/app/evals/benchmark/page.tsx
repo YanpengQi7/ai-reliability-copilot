@@ -1,0 +1,37 @@
+import Link from "next/link";
+import type { buildReport } from "@/lib/eval/report";
+import exportedReport from "../../../../evals/public/latest.json";
+
+const report = exportedReport as ReturnType<typeof buildReport> & { execution: string; versions: Record<string, string> };
+
+export default function BenchmarkPage() {
+  const mock = report.execution === "mock";
+  return (
+    <main className="mx-auto max-w-5xl space-y-7 px-6 py-10 text-neutral-100">
+      <header className="flex items-center justify-between gap-4">
+        <div><h1 className="text-3xl font-bold">Evidence benchmark · 证据评测</h1><p className="mt-2 text-neutral-400">Compare diagnosis outcomes, evidence, and cost under a recorded experiment.</p></div>
+        <Link href="/evals" className="text-indigo-300 underline">Evaluation history</Link>
+      </header>
+      <div role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-amber-200">
+        {mock ? "Offline pipeline demonstration — these are mock responses, not model quality results. 离线流程演示，不代表模型效果。" : "Exploratory results, not a release qualification. This pilot covers only one incident family; labels and judge calibration still need independent review."}
+        <p className="mt-2 text-sm">Release decision: {report.gate}. {report.draft_labels ? "Labels still require independent human review." : "Labels reviewed."}</p>
+      </div>
+      <section className="overflow-x-auto rounded-xl border border-neutral-800 p-5">
+        <h2 className="mb-4 text-lg font-semibold">Every planned trial stays in the denominator</h2>
+        <table className="w-full text-left text-sm">
+          <thead><tr className="text-neutral-400"><th className="p-2">Approach</th><th className="p-2">Planned</th><th className="p-2">Assessed</th><th className="p-2">Checks passed</th><th className="p-2">Cost / success</th></tr></thead>
+          <tbody>{Object.entries(report.modes).map(([mode, s]) => <tr key={mode} className="border-t border-neutral-800"><td className="p-2">{mode}</td><td className="p-2">{s.planned}</td><td className="p-2">{s.assessed}</td><td className="p-2">{mock ? "Not measured" : `${s.succeeded}/${s.planned}`}</td><td className="p-2">{s.cost_per_success === null ? "Not available" : `$${Number(s.cost_per_success).toFixed(5)}`}</td></tr>)}</tbody>
+        </table>
+      </section>
+      <section className="rounded-xl border border-neutral-800 p-5">
+        <h2 className="mb-3 text-lg font-semibold">Experiment identity</h2>
+        <dl className="grid gap-2 text-sm"><div>Run: {report.run_id}</div><div>Generator: {report.versions.model}</div><div>Judge: {report.versions.judge}</div><div>Severity policy: {report.versions.policy}</div><div className="break-all text-neutral-400">Dataset: {report.versions.dataset}</div></dl>
+        <p className="mt-4 text-sm text-neutral-400">Comparisons use paired incident families. Repeated runs and translations are not counted as independent incidents. Private run artifacts are never served here; this page uses an explicitly exported synthetic aggregate.</p>
+      </section>
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Cases requiring review</h2>
+        {Object.entries(report.modes).map(([mode, s]) => <details key={mode} className="rounded-lg border border-neutral-800 p-4"><summary className="cursor-pointer">{mode} · {s.failures.length} unresolved outcomes</summary><ul className="mt-3 space-y-2 text-sm text-neutral-400">{s.failures.map(f => <li key={f.id}><span className="font-mono">{f.id}</span>: {f.reasons.join(", ")}</li>)}</ul></details>)}
+      </section>
+    </main>
+  );
+}

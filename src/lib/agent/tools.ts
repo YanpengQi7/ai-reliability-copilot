@@ -19,6 +19,7 @@ import { getScenario, type Scenario, type LogLine } from "@/lib/scenarios";
 import { retrieveContext } from "@/lib/kb";
 import { safeErrorDetail } from "@/lib/observability";
 import type { InvestigationInput, TraceStep } from "./types";
+import { formatEvidence, type EvidenceItem } from "./evidence";
 
 // ── Budget constants ─────────────────────────────────────────────────
 export const LOG_BUDGET_LINES_DEFAULT = 12;
@@ -231,7 +232,14 @@ export type DispatchContext = {
   ctx: InvestigationInput;
   callCounts: Record<string, number>;
   abortSignal?: AbortSignal;
+  allowInternalKb?: boolean;
+  adapter?: TelemetryAdapter;
 };
+
+/** The same read-only boundary serves immutable eval snapshots and future authorized connectors. */
+export interface TelemetryAdapter {
+  read(tool: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<EvidenceItem[]>;
+}
 
 export async function dispatchTool(
   index: number,
@@ -244,9 +252,14 @@ export async function dispatchTool(
   dctx.abortSignal?.throwIfAborted();
 
   // Gate 1: unknown tool.
-  if (!(toolName in TOOL_SPECS)) {
+  if (!Object.hasOwn(TOOL_SPECS, toolName)) {
     return { ...base, status: "refused", observation: `Tool "${toolName}" does not exist.`, reason: "unknown_tool", latency_ms: Date.now() - started };
   }
+
+  const normalizedInput = toolName === "get_logs" && typeof input.limit === "number" && Number.isFinite(input.limit)
+    ? { ...input, limit: Math.max(1, Math.min(LOG_BUDGET_LINES_MAX, Math.floor(input.limit))) } : input;
+  const parsed = TOOL_SPECS[toolName as ToolName].inputSchema.safeParse(normalizedInput);
+  if (!parsed.success) return { ...base, status: "refused", observation: "Invalid tool arguments.", reason: "invalid_input", latency_ms: Date.now() - started };
   // Gate 2: read-only whitelist. This is the line that makes the agent safe.
   if (!TOOL_SPECS[toolName as ToolName].allowed) {
     return {
@@ -272,6 +285,17 @@ export async function dispatchTool(
 
   // Recovery: a handler throwing must not crash the loop.
   try {
+    if (dctx.adapter) {
+      const candidates = await dctx.adapter.read(toolName, parsed.data as Record<string, unknown>, dctx.abortSignal);
+      dctx.abortSignal?.throwIfAborted();
+      const evidence: EvidenceItem[] = [];
+      for (const e of candidates) {
+        if (formatEvidence([...evidence, e]).length > MAX_OBSERVATION_CHARS) break;
+        evidence.push(e);
+      }
+      return { ...base, status: evidence.length ? "ok" : "empty", observation: evidence.length ? formatEvidence(evidence) : "No visible evidence matched within the observation budget.", evidence, latency_ms: Date.now() - started };
+    }
+    if (toolName === "search_runbooks" && dctx.allowInternalKb === false) return { ...base, status: "empty", observation: "Private knowledge retrieval is unavailable for this caller.", latency_ms: Date.now() - started };
     const out = await runHandler(toolName as ToolName, input, dctx.ctx, dctx.abortSignal);
     dctx.abortSignal?.throwIfAborted();
     return { ...base, status: out.status, observation: clampObservation(out.text), latency_ms: Date.now() - started };
