@@ -19,6 +19,22 @@ export function evidenceItem(input: Omit<EvidenceItem, "content_hash">): Evidenc
   return EvidenceSchema.parse({ ...input, content_hash: createHash("sha256").update(JSON.stringify(input)).digest("hex") });
 }
 
+export function isReservedEvidenceId(id: string): boolean {
+  return id === "user-context" || id === "alert-context" || /^tool-\d+$/.test(id);
+}
+
+/** Evidence IDs identify immutable observations, not mutable slots. */
+export function mergeEvidence(...groups: EvidenceItem[][]): EvidenceItem[] {
+  const byId = new Map<string, EvidenceItem>();
+  for (const item of groups.flat()) {
+    const normalized = EvidenceSchema.parse(item);
+    const existing = byId.get(normalized.id);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(normalized)) throw new Error(`Conflicting evidence ID: ${normalized.id}. Use a new ID for a new observation.`);
+    if (!existing) byId.set(normalized.id, normalized);
+  }
+  return [...byId.values()];
+}
+
 export function formatEvidence(items: EvidenceItem[]): string {
   return items.map(e => `[${e.id}] ${JSON.stringify({ ...e, content_hash: undefined })}`).join("\n");
 }
@@ -33,7 +49,7 @@ export function conclusionEvidence(input: InvestigationInput, trace: TraceStep[]
     if (step.evidence) items.push(...step.evidence);
     else items.push(evidenceItem({ id: `tool-${step.index}`, kind: "tool_observation", source: `${step.tool}(${JSON.stringify(step.input)})`, service: input.service || "unknown", observed_at: now, available_at: now, text: step.observation.slice(0, 24000) }));
   }
-  return [...new Map(items.map(e => [e.id, e])).values()];
+  return mergeEvidence(items);
 }
 
 export const ClaimSchema = z.object({
@@ -47,10 +63,17 @@ export type Claim = z.infer<typeof ClaimSchema>;
 /** Checks references and explicit arithmetic; does NOT claim to prove semantic support. */
 export function checkClaims(claims: Claim[], evidence: EvidenceItem[]) {
   const byId = new Map(evidence.map(e => [e.id, e]));
+  const identities = new Map<string, string>(), conflicts = new Set<string>();
+  for (const e of evidence) {
+    const identity = JSON.stringify(EvidenceSchema.parse(e));
+    if (identities.has(e.id) && identities.get(e.id) !== identity) conflicts.add(e.id);
+    identities.set(e.id, identity);
+  }
   return claims.map(claim => {
     const errors: string[] = [];
     if (claim.kind !== "hypothesis" && !claim.evidence_ids.length) errors.push("missing_reference");
     if (claim.evidence_ids.some(id => !byId.has(id))) errors.push("unknown_reference");
+    if (claim.evidence_ids.some(id => conflicts.has(id))) errors.push("ambiguous_reference");
     const measurement = claim.measurement;
     if (measurement && claim.kind === "observed") {
       const cited = claim.evidence_ids.map(id => byId.get(id)).filter((e): e is EvidenceItem => Boolean(e));
@@ -61,7 +84,8 @@ export function checkClaims(claims: Claim[], evidence: EvidenceItem[]) {
         e.service === measurement.service && e.measurement!.metric === measurement.metric && e.measurement!.unit === measurement.unit && e.measurement!.window === measurement.window && e.measurement!.value === measurement.value
       ))) errors.push("measurement_mismatch");
     }
-    if (claim.kind === "derived") {
+    if (claim.derivation && claim.kind !== "derived") errors.push("derivation_kind_mismatch");
+    if (claim.kind === "derived" || claim.derivation) {
       const d = claim.derivation;
       const operands = d?.operands.map(id => byId.get(id));
       if (!d || !operands || operands.some(e => !e?.measurement) || d.operands.some(id => !claim.evidence_ids.includes(id))) errors.push("invalid_derivation");
@@ -69,11 +93,11 @@ export function checkClaims(claims: Claim[], evidence: EvidenceItem[]) {
         const a = operands[0]!;
         const b = operands[1];
         const valid = d.operation === "complement_percent"
-          ? operands.length === 1 && a.measurement!.unit === "%" && d.unit === "%"
-          : operands.length === 2 && a.service === b!.service && a.measurement!.metric === b!.measurement!.metric && a.measurement!.unit === b!.measurement!.unit && d.unit === (a.measurement!.unit === "%" ? "percentage_points" : a.measurement!.unit);
+          ? operands.length === 1 && a.measurement!.unit === "%" && a.measurement!.value >= 0 && a.measurement!.value <= 100 && d.unit === "%"
+          : operands.length === 2 && a.service === b!.service && a.measurement!.metric === b!.measurement!.metric && a.measurement!.window === b!.measurement!.window && a.measurement!.unit === b!.measurement!.unit && d.unit === (a.measurement!.unit === "%" ? "percentage_points" : a.measurement!.unit);
         const expected = d.operation === "complement_percent" ? 100 - a.measurement!.value : a.measurement!.value - (b?.measurement?.value ?? NaN);
         if (!valid || Math.abs(expected - d.value) > 1e-6) errors.push("invalid_arithmetic");
-        if (measurement && (measurement.service !== a.service || measurement.unit !== d.unit || measurement.value !== d.value)) errors.push("derived_measurement_mismatch");
+        if (measurement && (measurement.service !== a.service || measurement.unit !== d.unit || measurement.value !== d.value || measurement.window !== a.measurement!.window)) errors.push("derived_measurement_mismatch");
       }
     }
     return { claim_id: claim.id, errors, semantic_review_required: true };

@@ -144,3 +144,9 @@ The web investigator keeps tool-derived state in untrusted user context instead 
 Scenario telemetry requires an exact service name (case-insensitive, surrounding whitespace ignored); substring guesses no longer return another service's data. Adapter results are schema-validated, and telemetry for a service other than the requested service is rejected. Runbook search remains cross-service guidance. Oversized records no longer hide later records that fit; omitted records are counted with a narrowing hint. The final web analysis receives failed/empty/truncated read limitations separately from factual evidence, so missing observations do not imply normal operation.
 
 These changes are covered by deterministic tool and investigator tests, plus offline challenge replay. They do not establish live-provider robustness against every prompt-injection technique.
+
+## Stable evidence identities and arithmetic
+
+Evidence merging preserves the first observation and deduplicates identical records. Reusing an ID for different content, provenance, service or measurement is an error, not an update: connectors must issue a new ID for a new observation. The dispatch boundary maintains an investigation-local registry so conflicting later reads fail without replacing earlier evidence. Adapter and dataset IDs cannot occupy the reserved `user-context`, `alert-context` or `tool-<number>` namespaces. Final synthesis and experimental evaluation use the same conflict-detecting merge. Claim checking reports ambiguous references regardless of duplicate-record order.
+
+Explicit arithmetic is checked even when a claim incorrectly labels itself as observed. Percentage complements require inputs within 0–100%; differences require matching service, metric, unit and measurement window; a derived measurement cannot silently change its source window. Semantic review is still required for whether a valid calculation actually supports the diagnosis.

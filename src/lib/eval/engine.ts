@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DecisionSchema, DiagnosisSchema, VerdictSchema, type EvalCase, type Manifest, type Trial, type Judgment } from "./contracts";
-import { formatEvidence } from "../agent/evidence";
+import { formatEvidence, mergeEvidence } from "../agent/evidence";
 import { dispatchTool, type DispatchContext } from "../agent/tools";
 import { FixtureAdapter, visibleEvidence, alertEvidence } from "./dataset";
 import { hash } from "./artifacts";
@@ -42,7 +42,7 @@ export async function generateTrial(trial: Trial, c: EvalCase, m: Manifest, mode
     seen.add(key);
     const step = await dispatchTool(trial.trace.length + 1, tool, input, context);
     const before = trial.evidence.length;
-    trial.evidence = [...new Map([...trial.evidence, ...(step.evidence ?? [])].map(e => [e.id, e])).values()];
+    trial.evidence = mergeEvidence(trial.evidence, step.evidence ?? []);
     trial.trace.push({ tool, input, evidence_ids: step.evidence?.map(e => e.id) ?? [], observation: step.observation });
     checkpoint();
     return trial.evidence.length - before;

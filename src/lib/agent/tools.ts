@@ -19,7 +19,7 @@ import { getScenario, type Scenario, type LogLine } from "@/lib/scenarios";
 import { retrieveContext } from "@/lib/kb";
 import { safeErrorDetail } from "@/lib/observability";
 import type { InvestigationInput, TraceStep } from "./types";
-import { EvidenceSchema, formatEvidence, type EvidenceItem } from "./evidence";
+import { EvidenceSchema, formatEvidence, mergeEvidence, isReservedEvidenceId, type EvidenceItem } from "./evidence";
 
 // ── Budget constants ─────────────────────────────────────────────────
 export const LOG_BUDGET_LINES_DEFAULT = 12;
@@ -228,6 +228,7 @@ export type DispatchContext = {
   abortSignal?: AbortSignal;
   allowInternalKb?: boolean;
   adapter?: TelemetryAdapter;
+  evidenceRegistry?: EvidenceItem[];
 };
 
 /** The same read-only boundary serves immutable eval snapshots and future authorized connectors. */
@@ -280,7 +281,8 @@ export async function dispatchTool(
   // Recovery: a handler throwing must not crash the loop.
   try {
     if (dctx.adapter) {
-      const candidates = z.array(EvidenceSchema).parse(await dctx.adapter.read(toolName, parsed.data as Record<string, unknown>, dctx.abortSignal));
+      const candidates = mergeEvidence(z.array(EvidenceSchema).parse(await dctx.adapter.read(toolName, parsed.data as Record<string, unknown>, dctx.abortSignal)));
+      if (candidates.some(e => isReservedEvidenceId(e.id))) throw new Error("Adapter used a reserved evidence ID");
       dctx.abortSignal?.throwIfAborted();
       const requestedService = "service" in parsed.data ? parsed.data.service.trim().toLowerCase() : null;
       if (toolName !== "search_runbooks" && requestedService !== null && candidates.some(e => e.service.trim().toLowerCase() !== requestedService)) throw new Error("Adapter returned telemetry for a different service");
@@ -289,6 +291,8 @@ export async function dispatchTool(
         if (formatEvidence([...evidence, e]).length > MAX_OBSERVATION_CHARS - 160) continue;
         evidence.push(e);
       }
+      const registry = mergeEvidence(dctx.evidenceRegistry ?? [], evidence);
+      dctx.evidenceRegistry = registry;
       const omitted = candidates.length - evidence.length;
       const observation = evidence.length ? formatEvidence(evidence) : candidates.length ? "Matching evidence exists but exceeds the observation budget; narrow the query." : "No visible evidence matched.";
       return { ...base, status: evidence.length ? "ok" : "empty", observation: observation + (omitted ? `\n[${omitted} record(s) omitted by observation budget; narrow the query for remaining evidence.]` : ""), ...(omitted ? { reason: "observation_budget" } : {}), evidence, latency_ms: Date.now() - started };

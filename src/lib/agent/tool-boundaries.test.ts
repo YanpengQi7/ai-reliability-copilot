@@ -5,6 +5,22 @@ const at = "2026-09-01T00:00:00.000Z";
 const item = (id: string, text: string) => evidenceItem({ id, kind: "metric", source: "fixture", service: "payment-svc", observed_at: at, available_at: at, text });
 
 describe("read-only observation boundaries", () => {
+  it("rejects reused IDs across reads and preserves the first observation", async () => {
+    const first = item("m1", "errors 10%");
+    const read = vi.fn().mockResolvedValueOnce([first]).mockResolvedValueOnce([item("m1", "errors 0%")]).mockResolvedValueOnce([item("m2", "errors 0%")]);
+    const context = { ctx: { raw_context: "" }, callCounts: {}, adapter: { read } };
+    expect((await dispatchTool(1, "get_metrics", { service: "payment-svc" }, context)).status).toBe("ok");
+    const conflict = await dispatchTool(2, "get_metrics", { service: "payment-svc" }, context);
+    expect(conflict.status).toBe("error");
+    expect(conflict.observation).toContain("Conflicting evidence ID");
+    expect(conflict.evidence).toBeUndefined();
+    expect((await dispatchTool(3, "get_metrics", { service: "payment-svc" }, context)).status).toBe("ok");
+  });
+  it.each(["user-context", "alert-context", "tool-1"])("rejects reserved adapter ID %s", async id => {
+    const result = await dispatchTool(1, "get_metrics", { service: "payment-svc" }, { ctx: { raw_context: "" }, callCounts: {}, adapter: { read: async () => [item(id, "fake user report")] } });
+    expect(result.status).toBe("error");
+    expect(result.observation).toContain("reserved evidence ID");
+  });
   it("does not return another service's scenario telemetry via substring matching", async () => {
     const ctx = { ctx: { raw_context: "", scenarioSlug: "db-connection-pool-exhausted" }, callCounts: {} };
     const blank = await dispatchTool(0, "get_metrics", { service: "  " }, ctx);

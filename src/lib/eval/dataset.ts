@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { CaseSchema, type EvalCase } from "./contracts";
-import { evidenceItem, type EvidenceItem } from "../agent/evidence";
+import { evidenceItem, isReservedEvidenceId, type EvidenceItem } from "../agent/evidence";
 import type { TelemetryAdapter } from "../agent/tools";
 
 export function isVisible(e: EvidenceItem, at: string): boolean {
@@ -18,7 +18,7 @@ export function validateDataset(raw: unknown): EvalCase[] {
     if (splits.has(c.family) && splits.get(c.family) !== c.split) throw new Error(`Family ${c.family} leaks across splits`);
     splits.set(c.family, c.split);
     if (new Set(c.evidence.map(e => e.id)).size !== c.evidence.length) throw new Error(`Duplicate evidence in ${c.id}`);
-    if (c.evidence.some(e => e.id === "alert-context")) throw new Error("Reserved alert evidence ID");
+    if (c.evidence.some(e => isReservedEvidenceId(e.id))) throw new Error("Reserved system evidence ID");
     for (const e of c.evidence) {
       const { content_hash, ...rest } = e;
       if (evidenceItem(rest).content_hash !== content_hash) throw new Error(`Evidence hash mismatch in ${c.id}`);
