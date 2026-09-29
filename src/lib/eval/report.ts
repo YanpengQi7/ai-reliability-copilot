@@ -1,3 +1,4 @@
+import { summarizeLedger, type LedgerEntry } from "./accounting";
 import { checkClaims } from "../agent/evidence";
 import type { EvalCase, Judgment, Manifest, Trial, Mode } from "./contracts";
 import { hash } from "./artifacts";
@@ -26,7 +27,7 @@ export function trialOutcome(t: Trial, c: EvalCase, j: Judgment | null): { succe
   return { success: reasons.length === 0, reasons };
 }
 
-export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], judgments: Judgment[]) {
+export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], judgments: Judgment[], ledger?: LedgerEntry[]) {
   if (hash(cases) !== m.dataset_hash || hash(cases.map(c => c.id)) !== hash(m.case_ids)) throw new Error("Report dataset differs from manifest");
   const expected = plannedTrials(m, cases);
   const expectedById = new Map(expected.map(t => [t.id, t]));
@@ -38,6 +39,7 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
   }
   // A missing artifact remains in the denominator and prevents release.
   const matrix = expected.map(t => byTrial.get(t.id) ?? t);
+  const accounting = ledger ? summarizeLedger(ledger) : null;
   const byCase = new Map(cases.map(c => [c.id, c]));
   const byJudge = new Map<string, Judgment>();
   for (const j of judgments) {
@@ -96,11 +98,12 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
   const agentCost = modes.agentic?.cost_per_success;
   const costRatio = baseCost && agentCost !== null && agentCost !== undefined ? agentCost / baseCost : null;
   const meetsAbsoluteQuality = (modes.agentic?.success_rate ?? 0) >= (m.protocol.min_success_rate ?? 0.8);
-  if (complete && !unsafe && !draft && calibrated && m.model !== "mock" && comparison && comparison.families >= m.protocol.min_families && comparison.lower !== null && costRatio !== null) {
+  if (complete && accounting?.complete !== false && !unsafe && !draft && calibrated && m.model !== "mock" && comparison && comparison.families >= m.protocol.min_families && comparison.lower !== null && costRatio !== null) {
     if (meetsAbsoluteQuality && comparison.lower >= -m.protocol.noninferiority_margin && costRatio <= m.protocol.max_cost_ratio) gate = "passed";
     else if (!meetsAbsoluteQuality || comparison.upper! < -m.protocol.noninferiority_margin || costRatio > m.protocol.max_cost_ratio) gate = "regression";
   }
   const gateReasons: string[] = [];
+  if (accounting?.complete === false) gateReasons.push("unresolved_call_costs");
   if (!complete) gateReasons.push("incomplete_trial_or_judgment_coverage");
   if (unsafe) gateReasons.push("critical_safety_or_grounding_failure");
   if (complete && !meetsAbsoluteQuality) gateReasons.push("candidate_below_absolute_success_floor");
@@ -111,9 +114,9 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
   if (costRatio === null) gateReasons.push("cost_comparison_unavailable");
   else if (costRatio > m.protocol.max_cost_ratio) gateReasons.push("candidate_cost_exceeds_limit");
   if (comparison?.lower !== null && comparison?.lower !== undefined && comparison.lower < -m.protocol.noninferiority_margin) gateReasons.push("noninferiority_not_established");
-  return { run_id: m.id, gate, gate_reasons: gateReasons, draft_labels: draft, calibrated, modes, slices, comparison, cost_ratio: costRatio, judge_cost_usd: judgments.reduce((s, j) => s + j.calls.reduce((x, c) => x + (c.cost_usd ?? 0), 0), 0), judge_cost_complete: judgments.every(j => j.calls.every(c => c.cost_usd !== null)), note: "Draft labels cannot pass a release gate. Synthetic benchmark results do not establish production readiness. Success rate uses all planned trials; incomplete coverage is not evidence of regression. Intervals cluster by incident family." };
+  return { run_id: m.id, accounting, gate, gate_reasons: gateReasons, draft_labels: draft, calibrated, modes, slices, comparison, cost_ratio: costRatio, judge_cost_usd: judgments.reduce((s, j) => s + j.calls.reduce((x, c) => x + (c.cost_usd ?? 0), 0), 0), judge_cost_complete: judgments.every(j => j.calls.every(c => c.cost_usd !== null)), note: "Draft labels cannot pass a release gate. Synthetic benchmark results do not establish production readiness. Success rate uses all planned trials; incomplete coverage is not evidence of regression. Intervals cluster by incident family." };
 }
 
 export function reportMarkdown(report: ReturnType<typeof buildReport>): string {
-  return [`# Evaluation ${report.run_id}`, `\nGate: **${report.gate}**. Draft labels: ${report.draft_labels}.`, `\n${report.note}`, `\nGate reasons: ${report.gate_reasons.join(", ") || "all checks passed"}.`, "\n| Mode | Planned | Assessed | Success | Cost/success |", "|---|---:|---:|---:|---:|", ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.planned} | ${s.assessed} | ${s.succeeded} | ${s.cost_per_success === null ? "unknown / no successes" : s.cost_per_success.toFixed(5)} |`), `\nComparison (paired family bootstrap):\n\n\`\`\`json\n${JSON.stringify(report.comparison, null, 2)}\n\`\`\``, "\nDetailed slices, costs, and failures: report.json.\n"].join("\n");
+  return [`# Evaluation ${report.run_id}`, `\nGate: **${report.gate}**. Draft labels: ${report.draft_labels}.`, `\n${report.note}`, `\nGate reasons: ${report.gate_reasons.join(", ") || "all checks passed"}.`, ...(report.accounting ? [`\nRun accounting: $${report.accounting.accounted_cost_usd.toFixed(6)} (known usage plus unresolved reservations). ${report.accounting.scope}`] : []), "\n| Mode | Planned | Assessed | Success | Cost/success |", "|---|---:|---:|---:|---:|", ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.planned} | ${s.assessed} | ${s.succeeded} | ${s.cost_per_success === null ? "unknown / no successes" : s.cost_per_success.toFixed(5)} |`), `\nComparison (paired family bootstrap):\n\n\`\`\`json\n${JSON.stringify(report.comparison, null, 2)}\n\`\`\``, "\nDetailed slices, costs, and failures: report.json.\n"].join("\n");
 }

@@ -1,5 +1,24 @@
 {
   "run_id": "challenge-scoped-20260927",
+  "accounting": {
+    "generation": {
+      "calls": 34,
+      "known_cost_usd": 0.0377619,
+      "unresolved_calls": 0,
+      "unresolved_reservations_usd": 0,
+      "accounted_cost_usd": 0.0377619
+    },
+    "judge": {
+      "calls": 12,
+      "known_cost_usd": 0.015491099999999999,
+      "unresolved_calls": 0,
+      "unresolved_reservations_usd": 0,
+      "accounted_cost_usd": 0.015491099999999999
+    },
+    "complete": true,
+    "accounted_cost_usd": 0.053253,
+    "scope": "All calls in this run, including calibration and every judge-run. Unknown usage retains reservations; amounts are estimates, not provider invoices."
+  },
   "gate": "inconclusive",
   "gate_reasons": [
     "unreviewed_dataset_labels",
@@ -378,7 +397,7 @@
   "execution": "live",
   "judge_run": "primary",
   "versions": {
-    "evaluator": "61560d71b3514f572df9ae1884e08ee58d9ff6e3509f8e51b710e551931f6835",
+    "evaluator": "5f8d1d38dea34c9a0e241e99bfe1eac2e2b0686777233c5625864c1ddc7ad752",
     "dataset": "85dd55679eaeed4e559e43e3145810807fd3f063dbe6f689d47aaaf6dd7ffd93",
     "source": "61560d71b3514f572df9ae1884e08ee58d9ff6e3509f8e51b710e551931f6835",
     "prompt": "67fbc9020bfa2021c69e84f23314feafa8c09ad4d7329c7e1802be5d2a2e6f79",

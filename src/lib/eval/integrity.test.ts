@@ -90,6 +90,10 @@ describe("evaluation artifact integrity", () => {
     const passing = buildReport(m, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })));
     expect(passing.gate).toBe("passed");
     expect(passing.gate_reasons).toEqual([]);
+    const unresolved = buildReport(m, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })), [{ id: "orphan", owner: "lost-trial", purpose: "generation", state: "reserved", reservation_usd: 0.1, usage: null, at: "2026-09-29T00:00:00.000Z" }]);
+    expect(unresolved.gate).toBe("inconclusive");
+    expect(unresolved.gate_reasons).toContain("unresolved_call_costs");
+
   });
 
   it("requires output for successful artifact statuses", () => {

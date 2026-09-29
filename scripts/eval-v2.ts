@@ -12,6 +12,7 @@ import { DiagnosisSchema, VerdictSchema } from "../src/lib/eval/contracts";
 import { Budget, BudgetExceeded, liveModel, type LedgerEntry } from "../src/lib/eval/provider";
 import { buildReport, reportMarkdown } from "../src/lib/eval/report";
 import { calibrationPack, ReviewsSchema, summarizeCalibration } from "../src/lib/eval/calibration";
+import { LedgerSchema, recoveredUsage } from "../src/lib/eval/accounting";
 import { parseEvalFlags, validateEvalFlags } from "../src/lib/eval/cliConfig";
 import { safeErrorDetail } from "../src/lib/observability";
 
@@ -92,7 +93,7 @@ async function main() {
     const plans = plannedTrials(manifest, cases);
     // Readers must not recreate missing trial artifacts.
     const ledgerPath = join(root, "ledger.json");
-    const ledger: LedgerEntry[] = existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, "utf8")) : [];
+    const ledger: LedgerEntry[] = existsSync(ledgerPath) ? LedgerSchema.parse(JSON.parse(readFileSync(ledgerPath, "utf8"))) : [];
     const budget = new Budget(manifest.budget, ledger, () => writeJson(ledgerPath, ledger));
     const judgeRun = safeId(flags.get("judge-run") ?? "primary");
     const scoringManifest = ManifestSchema.parse({ ...manifest, judge_model: flags.get("judge-model") ?? manifest.judge_model, budget: { ...manifest.budget, judge_input_per_million: numeric("judge-input-price", manifest.budget.judge_input_per_million), judge_output_per_million: numeric("judge-output-price", manifest.budget.judge_output_per_million) } });
@@ -109,7 +110,10 @@ async function main() {
       let judgment: Judgment;
       const model = scoringManifest.judge_model === "mock" ? mockModel() : liveModel(scoringManifest, owner, budget, usage => calls.push(usage));
       try {
-        if (ledger.some(e => e.owner === owner)) throw new Error("Interrupted scoring attempt exists; choose a new judge-run to retry explicitly");
+        if (ledger.some(e => e.owner === owner)) {
+          calls.push(...recoveredUsage(ledger, owner, scoringManifest.judge_model));
+          throw new Error("Interrupted scoring attempt exists; choose a new judge-run to retry explicitly");
+        }
         judgment = await scoreTrial(trial, c, judgeRun, scoringManifest.judge_model, model);
       } catch (error) {
         judgment = { trial_id: trial.id, judge_run_id: judgeRun, trial_hash: hash(trial), judge_model: scoringManifest.judge_model, prompt_hash: hash(EVAL_JUDGE_PROMPT), status: "failed", verdict: null, calls: [], failure: safeErrorDetail(error) };
@@ -139,7 +143,7 @@ async function main() {
       const trial = store.trial(plan.id);
       if (trial.status === "running") {
         trial.status = "interrupted";
-        trial.calls = ledger.filter(e => e.owner === trial.id).map(e => e.usage ?? { input: 0, output: 0, cost_usd: null, model: manifest.model, purpose: e.purpose });
+        trial.calls = recoveredUsage(ledger, trial.id, manifest.model);
         trial.failure = "Previous process stopped; retained reservations. Use a new run to retry explicitly."; store.saveTrial(trial);
       }
       if (trial.status !== "pending") continue;
@@ -166,7 +170,7 @@ async function main() {
       const judgments = trials.map(t => store.judgment(t.id, judgeRun)).filter((j): j is Judgment => j !== null);
       const savedJudgeConfig = existsSync(judgeConfigPath) ? JSON.parse(readFileSync(judgeConfigPath, "utf8")) : judgeConfig;
       const reportingManifest = { ...manifest, judge_model: savedJudgeConfig.model, rubric_hash: savedJudgeConfig.prompt_hash };
-      const report = { ...buildReport(reportingManifest, cases, trials, judgments), execution: manifest.model === "mock" ? "mock" : "live", judge_run: judgeRun, versions: { evaluator: sourceHash(), dataset: manifest.dataset_hash, source: manifest.source_hash, prompt: manifest.prompt_hash, rubric: savedJudgeConfig.prompt_hash, model: manifest.model, judge: savedJudgeConfig.model, policy: manifest.policy_version } };
+      const report = { ...buildReport(reportingManifest, cases, trials, judgments, ledger), execution: manifest.model === "mock" ? "mock" : "live", judge_run: judgeRun, versions: { evaluator: sourceHash(), dataset: manifest.dataset_hash, source: manifest.source_hash, prompt: manifest.prompt_hash, rubric: savedJudgeConfig.prompt_hash, model: manifest.model, judge: savedJudgeConfig.model, policy: manifest.policy_version } };
       writeJson(join(root, `report-${judgeRun}-${hash(report)}.json`), report);
       writeJson(join(root, `report-${judgeRun}.json`), report);
       writeFileSync(join(root, `report-${judgeRun}.md`), reportMarkdown(report));

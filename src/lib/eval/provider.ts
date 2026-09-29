@@ -1,10 +1,11 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
 import { resolveModel } from "../ai";
-import type { Manifest, CallUsage } from "./contracts";
+import { ManifestSchema, type Manifest, type CallUsage } from "./contracts";
 import type { EvalModel } from "./engine";
 
-export type LedgerEntry = { id: string; owner: string; purpose: "generation" | "judge"; state: "reserved" | "complete" | "unknown"; reservation_usd: number; usage: CallUsage | null; at: string; elapsed_ms?: number };
+import { LedgerSchema, type LedgerEntry } from "./accounting";
+export type { LedgerEntry } from "./accounting";
 export class BudgetExceeded extends Error {}
 
 /** Persist reservations BEFORE calling a provider, so interruption cannot erase spending. */
@@ -12,6 +13,8 @@ export class Budget {
   private started = Date.now();
   private priorElapsed: number;
   constructor(readonly config: Manifest["budget"], readonly ledger: LedgerEntry[], private readonly save: () => void) {
+    ManifestSchema.shape.budget.parse(config);
+    LedgerSchema.parse(ledger);
     this.priorElapsed = ledger.reduce((s, e) => s + (e.elapsed_ms ?? 120_000), 0);
   }
   reserve(owner: string, purpose: LedgerEntry["purpose"], amount: number) {

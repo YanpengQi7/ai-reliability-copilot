@@ -150,3 +150,9 @@ These changes are covered by deterministic tool and investigator tests, plus off
 Evidence merging preserves the first observation and deduplicates identical records. Reusing an ID for different content, provenance, service or measurement is an error, not an update: connectors must issue a new ID for a new observation. The dispatch boundary maintains an investigation-local registry so conflicting later reads fail without replacing earlier evidence. Adapter and dataset IDs cannot occupy the reserved `user-context`, `alert-context` or `tool-<number>` namespaces. Final synthesis and experimental evaluation use the same conflict-detecting merge. Claim checking reports ambiguous references regardless of duplicate-record order.
 
 Explicit arithmetic is checked even when a claim incorrectly labels itself as observed. Percentage complements require inputs within 0–100%; differences require matching service, metric, unit and measurement window; a derived measurement cannot silently change its source window. Semantic review is still required for whether a valid calculation actually supports the diagnosis.
+
+## Run spending reconciliation
+
+Reports include a separate `accounting` summary from the persisted call ledger, covering generation, calibration and all judge-runs. Settled usage replaces its reservation; calls with unknown usage retain their reservation and are never counted as free. This run-wide amount has a different scope from the selected comparison's per-mode costs. All amounts are estimates, not provider invoices. Unresolved call costs prevent a passing release gate, even when quality metrics pass.
+
+Resume validates ledger identities, nonnegative costs, state and usage purpose before dispatch. Recovering an interrupted judgment retains recorded usage in its failed artifact; an explicit new judge-run is required for retry. Missing result files therefore do not erase run-wide spending.
