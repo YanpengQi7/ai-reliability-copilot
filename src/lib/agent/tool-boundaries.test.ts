@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { dispatchTool, MAX_OBSERVATION_CHARS } from "./tools";
-import { evidenceItem } from "./evidence";
+import { evidenceItem, type EvidenceItem } from "./evidence";
 const at = "2026-09-01T00:00:00.000Z";
 const item = (id: string, text: string) => evidenceItem({ id, kind: "metric", source: "fixture", service: "payment-svc", observed_at: at, available_at: at, text });
 
@@ -35,6 +35,35 @@ describe("read-only observation boundaries", () => {
     expect(result.status).toBe("error");
     expect(result.observation).toContain("different service");
     expect(result.evidence).toBeUndefined();
+  });
+  it.each([
+    ["get_metrics", "metric", "runbook"],
+    ["get_logs", "log", "metric"],
+    ["get_deploy_history", "deploy", "log"],
+    ["search_runbooks", "runbook", "deploy"],
+  ] as const)("rejects mixed-kind adapter output for %s atomically", async (tool, validKind, wrongKind) => {
+    const make = (id: string, kind: EvidenceItem["kind"]) => evidenceItem({ id, kind, source: "fixture", service: "payment-svc", observed_at: at, available_at: at, text: "Observation" });
+    const original = make("existing", validKind);
+    const context = { ctx: { raw_context: "" }, callCounts: {}, evidenceRegistry: [original], adapter: { read: vi.fn(async () => [make("valid", validKind), make("wrong", wrongKind)]) } };
+    const args = tool === "search_runbooks" ? { query: "payment" } : { service: "payment-svc" };
+    const result = await dispatchTool(1, tool, args, context);
+    expect(result.status).toBe("error");
+    expect(result.observation).toContain("evidence kind incompatible");
+    expect(result.evidence).toBeUndefined();
+    expect(context.evidenceRegistry).toEqual([original]);
+    context.adapter.read.mockResolvedValue([make("valid", validKind)]);
+    const retry = await dispatchTool(2, tool, args, context);
+    expect(retry.status).toBe("ok");
+    expect(retry.evidence).toHaveLength(1);
+  });
+  it("preserves reported context in log reads and cross-service runbook guidance", async () => {
+    for (const [tool, kind, service] of [["get_logs", "user_context", "payment-svc"], ["search_runbooks", "runbook", "shared-platform"]] as const) {
+      const record = evidenceItem({ id: "guidance", kind, service, source: "fixture", observed_at: at, available_at: at, text: "Reported context or guidance" });
+      const args = tool === "search_runbooks" ? { query: "payment" } : { service: "payment-svc" };
+      const result = await dispatchTool(1, tool, args, { ctx: { raw_context: "" }, callCounts: {}, adapter: { read: async () => [record] } });
+      expect(result.status).toBe("ok");
+      expect(result.evidence).toEqual([record]);
+    }
   });
   it("does not lose smaller evidence behind an oversized first result", async () => {
     const short = item("short", "connections 500/500");

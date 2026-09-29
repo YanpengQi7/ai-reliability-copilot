@@ -174,3 +174,7 @@ Use `--split=test` when creating a release evaluation, with enough independent, 
 New runs persist an empty `ledger.json` before writing their manifest, including mock runs. Commands refuse to proceed if an existing run's ledger is missing or malformed; they never reconstruct an empty ledger from missing data. Restore the original ledger from backup or start a new run. This also applies to older runs that lack a ledger. A new run has its own budget; it does not erase spending incurred by previous runs.
 
 If initialization leaves a ledger without a manifest, retrying with that run ID fails rather than overwriting the ledger. Restore the original run or choose a new ID. Report commands read accounting without recreating missing files.
+
+## Connector evidence types
+
+The shared investigator dispatch boundary checks adapter output against the requested tool: metrics reads accept metrics, log reads accept logs and reported user context, deployment reads accept deploy records, and runbook searches accept runbooks. Any incompatible record rejects the entire returned batch before the evidence registry changes. The investigator receives a tool error and can retry within its existing limits. Runbook search can still return cross-service guidance. Type checks prevent connector routing mistakes; they do not independently verify a record's factual content.

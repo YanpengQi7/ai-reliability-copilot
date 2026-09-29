@@ -30,6 +30,15 @@ export const MAX_OBSERVATION_CHARS = 2400;
 // How many times the agent may call any single tool before the gate refuses.
 export const PER_TOOL_CALL_CAP = 4;
 
+/** Adapter output must match the read requested by the investigator. */
+export const READ_TOOL_EVIDENCE_KINDS: Readonly<Record<string, readonly EvidenceItem["kind"][]>> = {
+  get_metrics: ["metric"],
+  get_logs: ["log", "user_context"],
+  get_deploy_history: ["deploy"],
+  search_runbooks: ["runbook"],
+};
+
+
 // ── Tool specs ───────────────────────────────────────────────────────
 // `allowed: false` tools are still shown to the model (tempting), but the
 // control gate refuses to dispatch them. This is how we make "read-only" a
@@ -283,6 +292,9 @@ export async function dispatchTool(
     if (dctx.adapter) {
       const candidates = mergeEvidence(z.array(EvidenceSchema).parse(await dctx.adapter.read(toolName, parsed.data as Record<string, unknown>, dctx.abortSignal)));
       if (candidates.some(e => isReservedEvidenceId(e.id))) throw new Error("Adapter used a reserved evidence ID");
+      const allowedKinds = READ_TOOL_EVIDENCE_KINDS[toolName];
+      if (!allowedKinds || candidates.some(e => !allowedKinds.includes(e.kind))) throw new Error(`Adapter returned an evidence kind incompatible with ${toolName}`);
+
       dctx.abortSignal?.throwIfAborted();
       const requestedService = "service" in parsed.data ? parsed.data.service.trim().toLowerCase() : null;
       if (toolName !== "search_runbooks" && requestedService !== null && candidates.some(e => e.service.trim().toLowerCase() !== requestedService)) throw new Error("Adapter returned telemetry for a different service");
