@@ -1,5 +1,6 @@
 {
   "run_id": "challenge-scoped-20260927",
+  "engine_version": "experimental-eval-v2",
   "dataset_splits": {
     "dev": 6,
     "validation": 0,
@@ -26,6 +27,7 @@
   },
   "gate": "inconclusive",
   "gate_reasons": [
+    "legacy_experimental_engine",
     "unreviewed_dataset_labels",
     "non_test_dataset",
     "judge_calibration_missing_or_incompatible",
@@ -431,7 +433,7 @@
   "execution": "live",
   "judge_run": "primary",
   "versions": {
-    "evaluator": "32858f4f1e1397f48bf3d80ad64b352bf96160a99424dbdfac500abd9211e2cd",
+    "evaluator": "4a919bdd67cfcc30b44aecc46f5a8a1310c5154171034e65b0a42bd5fc958196",
     "dataset": "85dd55679eaeed4e559e43e3145810807fd3f063dbe6f689d47aaaf6dd7ffd93",
     "source": "61560d71b3514f572df9ae1884e08ee58d9ff6e3509f8e51b710e551931f6835",
     "prompt": "67fbc9020bfa2021c69e84f23314feafa8c09ad4d7329c7e1802be5d2a2e6f79",

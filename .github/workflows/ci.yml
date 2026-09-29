@@ -54,6 +54,10 @@ jobs:
           npm run evals:v2 -- score --id=ci-offline --judge-run=replay
           npm run evals:v2 -- calibrate --id=ci-offline --judge-run=calibration
           npm run evals:v2 -- report --id=ci-offline --judge-run=replay
+          for recorded_trial in evals/runs/ci-offline/trials/*_agentic.json; do
+            recorded_trial_id=$(basename "$recorded_trial" .json)
+            npm run agent:replay -- --id=ci-offline --trial="$recorded_trial_id"
+          done
 
       - name: Upload offline evaluation evidence
         if: always()

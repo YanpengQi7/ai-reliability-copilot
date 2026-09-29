@@ -8,7 +8,7 @@ import { EVAL_JUDGE_PROMPT, generateTrial, plannedTrials, type EvalModel } from 
 import { buildReport } from "./report";
 
 const cases = loadDataset("evals/datasets/sre-v2/cases.json").slice(0, 1);
-const manifest = ManifestSchema.parse({ version: "eval-v2", id: "integrity", created_at: "now", git_sha: "sha", dirty: false, source_hash: "source", dataset_hash: hash(cases), prompt_hash: "prompt", schema_hash: "schema", rubric_hash: "rubric", policy_version: "impact-v2", model: "live", judge_model: "judge", modes: ["workflow", "agentic"], languages: ["en"], repeats: 1, seed: 1, budget: { max_usd: 1, per_call_usd: 1, max_calls: 10, max_minutes: 10, max_output_tokens: 100, input_per_million: 1, output_per_million: 1, judge_input_per_million: 1, judge_output_per_million: 1 }, case_ids: cases.map(c => c.id), protocol: { min_families: 2, noninferiority_margin: 0.05, max_cost_ratio: 2 } });
+const manifest = ManifestSchema.parse({ version: "eval-v2", engine_version: "shared-investigator-v1", id: "integrity", created_at: "now", git_sha: "sha", dirty: false, source_hash: "source", dataset_hash: hash(cases), prompt_hash: "prompt", schema_hash: "schema", rubric_hash: "rubric", policy_version: "impact-v2", model: "live", judge_model: "judge", modes: ["workflow", "agentic"], languages: ["en"], repeats: 1, seed: 1, budget: { max_usd: 1, per_call_usd: 1, max_calls: 10, max_minutes: 10, max_output_tokens: 100, input_per_million: 1, output_per_million: 1, judge_input_per_million: 1, judge_output_per_million: 1 }, case_ids: cases.map(c => c.id), protocol: { min_families: 2, noninferiority_margin: 0.05, max_cost_ratio: 2 } });
 function success() {
   const t = plannedTrials(manifest, cases)[0];
   t.status = "succeeded";
@@ -119,6 +119,9 @@ describe("evaluation artifact integrity", () => {
     const passing = buildReport(m, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })));
     expect(passing.gate).toBe("passed");
     expect(passing.gate_reasons).toEqual([]);
+    const legacy = buildReport({ ...m, engine_version: "experimental-eval-v2" }, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })));
+    expect(legacy.gate).toBe("inconclusive");
+    expect(legacy.gate_reasons).toContain("legacy_experimental_engine");
     expect(passing.dataset_splits).toEqual({ dev: 0, validation: 0, test: 2 });
     for (const splits of [["dev", "dev"], ["validation", "validation"], ["test", "dev"]] as const) {
       const exploratory = reviewed.map((c, i) => ({ ...c, split: splits[i] }));

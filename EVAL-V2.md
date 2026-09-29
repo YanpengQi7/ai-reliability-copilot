@@ -2,7 +2,7 @@
 
 The v2 harness measures supported diagnoses, appropriate uncertainty, severity, and prohibited actions. Its full-context, fixed-workflow and adaptive-investigator arms use the same generation model, frozen evidence pool, diagnosis schema and blinded judge protocol. The full-context arm sees all time-visible evidence; it is a reference baseline, not a claim of equal retrieval cost. Optional `alert` mode sees the alert alone.
 
-This is a new protocol. Do not mix its results with legacy five-scenario reports. The new investigator is an experimental evaluation candidate; the web investigator retains its existing nine-section response contract while receiving the raw-context preservation and retrieval-access fixes.
+This is a separate protocol from the legacy five-scenario reports. New runs use `shared-investigator-v1`: the same planner, diagnosis schema, prompts, read dispatcher and stopping policy as the web investigator. Older `experimental-eval-v2` runs remain historical experiments and cannot qualify the current product for release.
 
 ## Offline verification
 
@@ -178,3 +178,22 @@ If initialization leaves a ledger without a manifest, retrying with that run ID 
 ## Connector evidence types
 
 The shared investigator dispatch boundary checks adapter output against the requested tool: metrics reads accept metrics, log reads accept logs and reported user context, deployment reads accept deploy records, and runbook searches accept runbooks. Any incompatible record rejects the entire returned batch before the evidence registry changes. The investigator receives a tool error and can retry within its existing limits. Runbook search can still return cross-service guidance. Type checks prevent connector routing mistakes; they do not independently verify a record's factual content.
+
+
+## Shared production engine and offline replay
+
+`src/lib/agent/runtime.ts` owns the agentic loop. Both the web `investigate()` entry point and eval `generateTrial()` call it. Models, evidence adapters, cancellation signals, step limits and checkpoint callbacks are injected. The eval model wrapper retains durable spending reservations; the web path retains its request deadline and at most eight planning calls by default. Planner failures now propagate as failed investigations instead of silently starting a different best-effort model path. Neither path uses hidden model retries.
+
+The canonical output is `DiagnosisSchema`. The web response includes `diagnosis`, `decisions`, `evidence`, `trace` and `engine_version`, plus a deterministic `analysis` presentation retaining the existing section names. Severity can be null; the UI renders “Unknown severity” and shows diagnosis status plus claim citations. Causes and mitigation lists may be empty. The presentation does not fabricate commands, rank probabilities, or pad lists to old minimum counts. Consumers requiring the older non-null `AnalysisSchema` must use the canonical diagnosis or adapt to `InvestigationAnalysis`. The separate single-pass `/api/analyze` product is unchanged and is not covered by this shared-engine claim.
+
+The shared final prompt receives failed and truncated reads as limitations. Stable model context excludes wall-clock tool durations. Checkpoints are detached snapshots. New manifests identify the engine and hash both planner and diagnosis prompts and schemas. Historical exports keep their original engine identity.
+
+To replay a completed default agentic trial through the production entry point without calling any provider:
+
+```sh
+npm run evals:v2 -- run --id=shared-smoke --mock --limit=1
+# Choose an agentic trial filename from evals/runs/shared-smoke/trials/ (omit .json).
+npm run agent:replay -- --id=shared-smoke --trial=TRIAL_ID
+```
+
+Replay uses frozen evidence and recorded planner/diagnosis responses, validates prompt/schema identity and trial assignment, and compares evidence, tool observations, call sequence, stopping reason and diagnosis. It rejects changed snapshots and incompatible legacy/ablation runs. It verifies control-flow reproduction, not new model quality or actual live-connector behavior. Production/eval parity tests additionally compare every model request schema, system prompt and input using a recorded response tape. No private evidence or model tape is automatically published.

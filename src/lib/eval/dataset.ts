@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { CaseSchema, type EvalCase } from "./contracts";
-import { evidenceItem, isReservedEvidenceId, type EvidenceItem } from "../agent/evidence";
+import { evidenceItem, alertEvidence as sharedAlertEvidence, isReservedEvidenceId, type EvidenceItem } from "../agent/evidence";
 import type { TelemetryAdapter } from "../agent/tools";
 
 export function isVisible(e: EvidenceItem, at: string): boolean {
@@ -32,7 +32,7 @@ export function validateDataset(raw: unknown): EvalCase[] {
 export function loadDataset(path: string): EvalCase[] { return validateDataset(JSON.parse(readFileSync(path, "utf8"))); }
 /** Alert text is reported context, never independently verified telemetry. */
 export function alertEvidence(c: EvalCase): EvidenceItem {
-  return evidenceItem({ id: "alert-context", kind: "user_context", source: "unverified alert report", service: c.alert.service, observed_at: c.alert.at, available_at: c.alert.at, text: c.alert.symptoms });
+  return sharedAlertEvidence(c.alert);
 }
 export function visibleEvidence(c: EvalCase, noKb = false): EvidenceItem[] {
   return c.evidence.filter(e => isVisible(e, c.alert.at) && (!noKb || e.kind !== "runbook"));

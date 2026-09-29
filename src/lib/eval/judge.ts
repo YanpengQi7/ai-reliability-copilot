@@ -2,6 +2,7 @@ import { generateObject } from "ai";
 import { deepseek, JUDGE_MODEL, JUDGE_MODEL_GROUNDING } from "@/lib/ai";
 import { RubricScores, RUBRIC_DEFINITIONS, EVIDENCE_GROUNDING_DEF, type RubricDim } from "./rubric";
 import type { Analysis } from "@/lib/schema";
+import type { InvestigationAnalysis } from "../agent/presentation";
 import { z } from "zod";
 import { DimensionScore } from "./rubric";
 
@@ -31,7 +32,7 @@ ${rubricDescription()}
 Output strictly conforms to the provided JSON schema.`;
 
 export type JudgeInput = {
-  analysis: Analysis;
+  analysis: Analysis | InvestigationAnalysis;
   scenario?: {
     title: string;
     context: string;

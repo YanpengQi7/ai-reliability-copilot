@@ -13,6 +13,7 @@
     "evals:run": "tsx scripts/run-evals.ts",
     "evals:crossjudge": "tsx scripts/run-evals-crossjudge.ts",
     "agent": "tsx scripts/run-agent.ts",
+    "agent:replay": "tsx scripts/replay-investigation.ts",
     "evals:agentic": "tsx scripts/run-evals-agentic.ts",
     "calib:grounding": "tsx scripts/calib-grounding.ts",
     "evals:calibrate": "tsx scripts/human-vs-judge.ts",

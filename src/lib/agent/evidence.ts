@@ -19,6 +19,11 @@ export function evidenceItem(input: Omit<EvidenceItem, "content_hash">): Evidenc
   return EvidenceSchema.parse({ ...input, content_hash: createHash("sha256").update(JSON.stringify(input)).digest("hex") });
 }
 
+/** Alert text is reported context, never independently verified telemetry. */
+export function alertEvidence(alert: { service: string; symptoms: string; at: string }): EvidenceItem {
+  return evidenceItem({ id: "alert-context", kind: "user_context", source: "unverified alert report", service: alert.service, observed_at: alert.at, available_at: alert.at, text: alert.symptoms });
+}
+
 export function isReservedEvidenceId(id: string): boolean {
   return id === "user-context" || id === "alert-context" || /^tool-\d+$/.test(id);
 }

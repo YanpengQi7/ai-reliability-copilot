@@ -1,9 +1,10 @@
 // Shared types for the agentic investigator.
 //
-// The investigator is a hand-written tool-use loop (see investigate.ts). These
+// The investigator is a hand-written tool-use loop (see runtime.ts). These
 // types describe the inputs it takes, the trace it emits, and the final result.
 
-import type { Analysis } from "@/lib/schema";
+import type { InvestigationAnalysis } from "./presentation";
+import type { Diagnosis, Decision } from "./diagnosis";
 import type { OutputLanguage } from "@/lib/prompts";
 import type { EvidenceItem } from "./evidence";
 
@@ -43,12 +44,15 @@ export type UsageTotals = {
 };
 
 export type InvestigationResult = {
-  analysis: Analysis;
+  analysis: InvestigationAnalysis;
+  diagnosis: Diagnosis;
+  decisions: Decision[];
+  engine_version: string;
   trace: TraceStep[];
   usage: UsageTotals;
   steps: number; // model-loop iterations actually run
   completed: boolean; // false = hit step cap / budget cap before the model was done
-  stop_reason: "model_done" | "step_cap" | "no_progress" | "budget_cap";
+  stop_reason: "single_pass" | "model_done" | "step_cap" | "no_progress" | "budget_cap";
   language: OutputLanguage;
   evidence?: EvidenceItem[];
 };

@@ -30,7 +30,7 @@ export default function BenchmarkPage() {
       </section>
       <section className="rounded-xl border border-neutral-800 p-5">
         <h2 className="mb-3 text-lg font-semibold">Experiment identity</h2>
-        <dl className="grid gap-2 text-sm"><div>Run: {report.run_id}</div><div>Generator: {report.versions.model}</div><div>Judge: {report.versions.judge}</div><div>Severity policy: {report.versions.policy}</div><div className="break-all text-neutral-400">Dataset: {report.versions.dataset}</div></dl>
+        <dl className="grid gap-2 text-sm"><div>Run: {report.run_id}</div><div>Investigation engine: {report.engine_version}</div><div>Generator: {report.versions.model}</div><div>Judge: {report.versions.judge}</div><div>Severity policy: {report.versions.policy}</div><div className="break-all text-neutral-400">Dataset: {report.versions.dataset}</div></dl>
         <p className="mt-4 text-sm text-neutral-400">Comparisons use paired incident families. Repeated runs and translations are not counted as independent incidents. Private run artifacts are never served here; this page uses an explicitly exported synthetic aggregate.</p>
       </section>
       <section className="space-y-3">

@@ -14,6 +14,8 @@ But the real story isn't the prompt. It's the **eval pipeline** — a 5-dimensio
 
 **Evidence-first evaluation v2:** [EVAL-V2.md](./EVAL-V2.md) — frozen trial artifacts, blinded same-judge comparisons, fixed-answer calibration, failure accounting, and paired incident-family intervals. Includes 30 synthetic candidate cases awaiting independent review. Public pipeline demo: `/evals/benchmark`. Historical results below are legacy findings, not v2 quality claims.
 
+The `/investigate` product and new v2 agentic runs share one planning and diagnosis engine. The UI exposes diagnosis status and claim citations, including unknown severity when evidence is insufficient. Saved default agentic trials can be replayed through the production entry point with `npm run agent:replay`; CI verifies this agreement. Historical experimental results retain their original engine identity. See [the shared-engine and replay guide](./EVAL-V2.md#shared-production-engine-and-offline-replay).
+
 ---
 
 ## Architecture

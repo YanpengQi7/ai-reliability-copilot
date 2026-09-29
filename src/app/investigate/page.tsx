@@ -3,28 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Nav } from "@/components/Nav";
-import type { Analysis } from "@/lib/schema";
+import type { Diagnosis } from "@/lib/agent/diagnosis";
+import type { InvestigationAnalysis } from "@/lib/agent/presentation";
+import type { InvestigationResult, TraceStep } from "@/lib/agent/types";
 import { readApiError } from "@/lib/http";
-
-// ── Types mirrored from src/lib/agent/types.ts (client-safe, no server imports) ──
-type TraceStep = {
-  index: number;
-  tool: string;
-  input: Record<string, unknown>;
-  status: "ok" | "refused" | "error" | "empty";
-  observation: string;
-  reason?: string;
-  latency_ms: number;
-};
-type InvestigationResult = {
-  analysis: Analysis;
-  trace: TraceStep[];
-  usage: { model_calls: number; tokens_in: number; tokens_out: number; cost_usd: number };
-  steps: number;
-  completed: boolean;
-  stop_reason: string;
-  language: "en" | "zh";
-};
 
 const SCENARIO_OPTIONS = [
   { slug: "db-connection-pool-exhausted", label: "DB connection pool exhaustion (payment-svc)" },
@@ -82,22 +64,35 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function AnalysisView({ a }: { a: Analysis }) {
+function AnalysisView({ a, diagnosis }: { a: InvestigationAnalysis; diagnosis: Diagnosis }) {
   return (
     <div className="flex flex-col gap-4">
       <Section title="Summary">
         <div className="mb-3 flex items-center gap-3">
-          <span className={`rounded border px-2 py-0.5 text-sm font-bold ${SEV_STYLE[a.severity] ?? "border-neutral-600"}`}>{a.severity}</span>
+          <span className={`rounded border px-2 py-0.5 text-sm font-bold ${SEV_STYLE[a.severity ?? "unknown"] ?? "border-neutral-600"}`}>{a.severity ?? "Unknown severity"}</span>
           <span className="text-xs text-neutral-400">{a.severity_reasoning}</span>
         </div>
+        <p className="mb-2 text-xs text-neutral-400">Diagnosis status: {diagnosis.conclusion_status.replaceAll("_", " ")}</p>
         <p className="text-sm text-neutral-200">{a.summary}</p>
       </Section>
 
+      <Section title={`Claims and citations (${diagnosis.claims.length})`}>
+        {diagnosis.claims.length === 0 && <p className="text-sm text-neutral-400">No factual claims recorded.</p>}
+        <ul className="space-y-2">
+          {diagnosis.claims.map(claim => <li key={claim.id} className="text-sm text-neutral-200">
+            <span className="mr-2 text-xs text-neutral-500">{claim.kind}</span>{claim.text}
+            <div className="mt-1 font-mono text-xs text-neutral-500">{claim.evidence_ids.join(", ") || "No cited evidence"}</div>
+          </li>)}
+        </ul>
+      </Section>
+
       <Section title={`Root causes (${a.root_causes.length})`}>
+        <p className="text-xs text-neutral-500">Hypotheses are not probability estimates. Supporting and contradicting evidence are shown below.</p>
+        {a.root_causes.length === 0 && <p className="text-sm text-neutral-400">No evidence-backed cause established.</p>}
         <ul className="flex flex-col gap-2">
           {a.root_causes.map((rc, i) => (
             <li key={i} className="text-sm">
-              <span className={`mr-2 rounded px-1.5 py-0.5 text-xs font-semibold ${rc.likelihood === "high" ? "bg-red-500/15 text-red-300" : rc.likelihood === "medium" ? "bg-amber-500/15 text-amber-300" : "bg-neutral-500/15 text-neutral-300"}`}>{rc.likelihood}</span>
+              <span className="mr-2 rounded px-1.5 py-0.5 text-xs font-semibold bg-neutral-500/15 text-neutral-300">Hypothesis</span>
               <span className="text-neutral-200">{rc.hypothesis}</span>
               <div className="mt-0.5 pl-1 text-xs text-neutral-500">evidence: {rc.evidence}</div>
             </li>
@@ -110,7 +105,7 @@ function AnalysisView({ a }: { a: Analysis }) {
           {a.investigation_checklist.map((step, i) => (
             <li key={i} className="text-sm">
               <div className="text-neutral-200">{i + 1}. {step.step}</div>
-              <pre className="my-1 overflow-x-auto rounded bg-black/50 px-2 py-1 font-mono text-xs text-emerald-300">{step.command}</pre>
+              {step.command && <pre className="my-1 overflow-x-auto rounded bg-black/50 px-2 py-1 font-mono text-xs text-emerald-300">{step.command}</pre>}
               <div className="text-xs text-neutral-500">expect: {step.expected}</div>
             </li>
           ))}
@@ -259,7 +254,7 @@ export default function InvestigatePage() {
 
           <div>
             <h2 className="mb-3 text-lg font-semibold text-white">Structured response</h2>
-            <AnalysisView a={result.analysis} />
+            <AnalysisView a={result.analysis} diagnosis={result.diagnosis} />
           </div>
         </div>
       )}
