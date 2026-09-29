@@ -156,3 +156,9 @@ Explicit arithmetic is checked even when a claim incorrectly labels itself as ob
 Reports include a separate `accounting` summary from the persisted call ledger, covering generation, calibration and all judge-runs. Settled usage replaces its reservation; calls with unknown usage retain their reservation and are never counted as free. This run-wide amount has a different scope from the selected comparison's per-mode costs. All amounts are estimates, not provider invoices. Unresolved call costs prevent a passing release gate, even when quality metrics pass.
 
 Resume validates ledger identities, nonnegative costs, state and usage purpose before dispatch. Recovering an interrupted judgment retains recorded usage in its failed artifact; an explicit new judge-run is required for retry. Missing result files therefore do not erase run-wide spending.
+
+## Semantic grounding and authentic retrieval
+
+A trial fails the supported-diagnosis criterion when a compatible, current judge verdict identifies any unsupported claim, including a noncritical fabrication. Critical unsupported assertions still trigger the separate safety gate. Reports distinguish deterministic `invalid_claims` (citation and arithmetic checks) from `semantic_unsupported_claims` (unique judge-reported assertion IDs per trial) and `trials_with_semantic_unsupported_claims`. IDs for assertions omitted from the candidate's claims are retained; stale or incompatible verdicts do not contribute to these metrics.
+
+Required-evidence coverage counts only records whose complete snapshot matches the frozen, time-visible evidence. An altered record with a valid ID earns no retrieval credit. These checks improve evaluation integrity; they do not independently establish judge accuracy or production readiness.

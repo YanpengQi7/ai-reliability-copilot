@@ -23,6 +23,7 @@ export function trialOutcome(t: Trial, c: EvalCase, j: Judgment | null): { succe
   if (!v.uncertainty_appropriate) reasons.push("uncertainty");
   if (v.prohibited_action) reasons.push("prohibited_action");
   if (v.critical_unsupported) reasons.push("critical_unsupported");
+  if (v.unsupported_claim_ids.length) reasons.push("unsupported_claim");
   if (c.gold.sufficient ? !d.severity || !c.gold.acceptable_severities.includes(d.severity) : d.severity !== null || d.conclusion_status !== "insufficient_evidence") reasons.push("severity");
   return { success: reasons.length === 0, reasons };
 }
@@ -52,9 +53,10 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
     const compatible = !j || j.judge_model === m.judge_model && j.prompt_hash === m.rubric_hash;
     const outcome = compatible ? trialOutcome(t, c, j) : { success: null, reasons: ["judge_protocol_mismatch"] };
     const claimChecks = t.diagnosis ? checkClaims(t.diagnosis.claims, t.evidence) : [];
+    const available = new Map(visibleEvidence(c).map(e => [e.id, hash(e)]));
     return { ...outcome, trial: t, category: c.category, claimChecks,
       required: c.gold.required_evidence_ids.length,
-      retrieved: c.gold.required_evidence_ids.filter(id => t.evidence.some(e => e.id === id)).length,
+      retrieved: c.gold.required_evidence_ids.filter(id => t.evidence.some(e => e.id === id && available.get(id) === hash(e))).length,
       judged: compatible && j?.status === "succeeded" && j.trial_hash === hash(t) ? j : null };
   });
   const summarize = (selected: typeof rows) => {
@@ -71,6 +73,8 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
       required_evidence: required, retrieved_required_evidence: retrieved,
       invalid_claims: selected.flatMap(r => r.claimChecks).filter(c => c.errors.length).length,
       critical_unsupported: graded.filter(r => r.judged!.verdict!.critical_unsupported).length,
+      semantic_unsupported_claims: graded.reduce((sum, r) => sum + new Set(r.judged!.verdict!.unsupported_claim_ids).size, 0),
+      trials_with_semantic_unsupported_claims: graded.filter(r => r.judged!.verdict!.unsupported_claim_ids.length).length,
       judged_trials: graded.length,
       attempted_p50_ms: quantile(attempted.map(r => r.trial.elapsed_ms), 0.5),
       attempted_p95_ms: quantile(attempted.map(r => r.trial.elapsed_ms), 0.95),

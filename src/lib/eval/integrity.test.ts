@@ -66,6 +66,35 @@ describe("evaluation artifact integrity", () => {
     const r = buildReport(manifest, cases, [t], [j]);
     expect(r.modes[t.mode].failures[0].reasons).toContain("invalid_evidence_snapshot");
   });
+  it("does not count altered records as retrieved evidence", () => {
+    const { t, j } = success();
+    t.evidence = t.evidence.map(e => ({ ...e, text: "Altered observation" }));
+    j.trial_hash = hash(t);
+    const r = buildReport(manifest, cases, [t], [j]);
+    expect(r.modes[t.mode].required_evidence).toBeGreaterThan(0);
+    expect(r.modes[t.mode].retrieved_required_evidence).toBe(0);
+    expect(r.modes[t.mode].evidence_coverage).toBe(0);
+  });
+  it("fails semantic fabrication even when citations and overall judge answers look valid", () => {
+    const { t, j } = success();
+    j.verdict!.unsupported_claim_ids = ["c1", "c1", "unlisted-summary-assertion"];
+    const r = buildReport(manifest, cases, [t], [j]);
+    expect(r.modes[t.mode].succeeded).toBe(0);
+    expect(r.modes[t.mode].failures[0].reasons).toContain("unsupported_claim");
+    expect(r.modes[t.mode].invalid_claims).toBe(0);
+    expect(r.modes[t.mode].semantic_unsupported_claims).toBe(2);
+    expect(r.modes[t.mode].trials_with_semantic_unsupported_claims).toBe(1);
+    expect(r.modes[t.mode].critical_unsupported).toBe(0);
+  });
+  it("excludes stale semantic verdicts from grounding metrics", () => {
+    const { t, j } = success();
+    j.verdict!.unsupported_claim_ids = ["c1"];
+    j.trial_hash = "stale";
+    const r = buildReport(manifest, cases, [t], [j]);
+    expect(r.modes[t.mode].semantic_unsupported_claims).toBe(0);
+    expect(r.modes[t.mode].judged_trials).toBe(0);
+    expect(r.modes[t.mode].assessed).toBe(0);
+  });
   it("counts missing required evidence and slow failures", () => {
     const { t, j } = success();
     t.evidence = []; j.trial_hash = hash(t);
