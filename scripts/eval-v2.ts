@@ -12,7 +12,7 @@ import { DiagnosisSchema, VerdictSchema } from "../src/lib/eval/contracts";
 import { Budget, BudgetExceeded, liveModel, type LedgerEntry } from "../src/lib/eval/provider";
 import { buildReport, reportMarkdown } from "../src/lib/eval/report";
 import { calibrationPack, ReviewsSchema, summarizeCalibration } from "../src/lib/eval/calibration";
-import { LedgerSchema, recoveredUsage } from "../src/lib/eval/accounting";
+import { recoveredUsage } from "../src/lib/eval/accounting";
 import { parseEvalFlags, validateEvalFlags } from "../src/lib/eval/cliConfig";
 import { safeErrorDetail } from "../src/lib/observability";
 
@@ -93,7 +93,7 @@ async function main() {
     const plans = plannedTrials(manifest, cases);
     // Readers must not recreate missing trial artifacts.
     const ledgerPath = join(root, "ledger.json");
-    const ledger: LedgerEntry[] = existsSync(ledgerPath) ? LedgerSchema.parse(JSON.parse(readFileSync(ledgerPath, "utf8"))) : [];
+    const ledger: LedgerEntry[] = store.ledger();
     const budget = new Budget(manifest.budget, ledger, () => writeJson(ledgerPath, ledger));
     const judgeRun = safeId(flags.get("judge-run") ?? "primary");
     const scoringManifest = ManifestSchema.parse({ ...manifest, judge_model: flags.get("judge-model") ?? manifest.judge_model, budget: { ...manifest.budget, judge_input_per_million: numeric("judge-input-price", manifest.budget.judge_input_per_million), judge_output_per_million: numeric("judge-output-price", manifest.budget.judge_output_per_million) } });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, unlinkSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ArtifactStore } from "./artifacts";
+import { ArtifactStore, writeJson } from "./artifacts";
 import { parseEvalFlags, validateEvalFlags } from "./cliConfig";
 import { Budget } from "./provider";
 import { ManifestSchema, type Trial, type Judgment } from "./contracts";
@@ -24,6 +24,27 @@ describe("durable evaluation recovery", () => {
     store.initialize(manifest, [pending]);
     expect(store.trialOrMissing(pending).stop_reason).toBe("missing_artifact");
     expect(existsSync(store.trialPath(pending.id))).toBe(false);
+  }));
+  it("initializes empty accounting and never recreates a lost ledger", () => withStore(store => {
+    store.initialize(manifest, [pending]);
+    expect(store.ledger()).toEqual([]);
+    unlinkSync(join(store.root, "ledger.json"));
+    store.initialize(manifest, [pending]);
+    expect(() => store.ledger()).toThrow(/Prior spending cannot be assumed to be zero/);
+    expect(existsSync(join(store.root, "ledger.json"))).toBe(false);
+  }));
+  it("preserves an orphan ledger instead of resetting spending during initialization", () => withStore(store => {
+    const path = join(store.root, "ledger.json");
+    const entries = [{ id: "1", owner: "trial", purpose: "generation", state: "reserved", reservation_usd: 0.25, usage: null, at: "2026-09-29T00:00:00.000Z" }];
+    writeJson(path, entries);
+    expect(() => store.initialize(manifest, [pending])).toThrow(/initialization is incomplete/);
+    expect(store.ledger()).toEqual(entries);
+    expect(existsSync(join(store.root, "manifest.json"))).toBe(false);
+  }));
+  it("rejects a malformed persisted ledger on read", () => withStore(store => {
+    store.initialize(manifest, [pending]);
+    writeJson(join(store.root, "ledger.json"), [{ reservation_usd: -1 }]);
+    expect(() => store.ledger()).toThrow();
   }));
   it.each(["failed", "interrupted", "budget_skipped"] as const)("refuses to silently retry a %s trial", status => withStore(store => {
     store.initialize(manifest, [pending]);

@@ -168,3 +168,9 @@ Required-evidence coverage counts only records whose complete snapshot matches t
 Only a run containing exclusively `test` cases can pass the release gate. Development, validation and mixed-split runs remain exploratory: even otherwise passing results are `inconclusive` with reason `non_test_dataset`. Quality and safety regressions remain detectable on every split. Reports include case counts in `dataset_splits`; these counts are independent of arm, language and repeat counts.
 
 Use `--split=test` when creating a release evaluation, with enough independent, reviewed incident families and compatible judge calibration. Do not relabel development cases to obtain approval. Split metadata is a necessary boundary, not proof of an unseen holdout: the published synthetic cases remain public, and controlled holdout collection and access must be managed separately. This change does not promote any existing benchmark to release-ready status.
+
+## Missing spending ledger
+
+New runs persist an empty `ledger.json` before writing their manifest, including mock runs. Commands refuse to proceed if an existing run's ledger is missing or malformed; they never reconstruct an empty ledger from missing data. Restore the original ledger from backup or start a new run. This also applies to older runs that lack a ledger. A new run has its own budget; it does not erase spending incurred by previous runs.
+
+If initialization leaves a ledger without a manifest, retrying with that run ID fails rather than overwriting the ledger. Restore the original run or choose a new ID. Report commands read accounting without recreating missing files.
