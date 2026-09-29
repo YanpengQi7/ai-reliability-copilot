@@ -14,6 +14,13 @@ function success() {
   t.status = "succeeded";
   t.evidence = cases[0].evidence;
   t.diagnosis = { summary: "Supported", conclusion_status: "supported", severity: cases[0].gold.acceptable_severities[0], severity_reasoning: "Partial impact", root_causes: [{ hypothesis: "Pool exhaustion", supporting_ids: [t.evidence[0].id], refuting_ids: [], missing_evidence: [], next_check: "Verify recovery" }], claims: [{ id: "c1", text: "Pool exhausted", kind: "observed", evidence_ids: [t.evidence[0].id] }], mitigation_plan: [], missing_information: [] };
+  if (t.mode === "agentic") {
+    t.decisions = [
+      { hypotheses: [], done: false, tool: "get_metrics", query: "", reason: "Inspect evidence" },
+      { hypotheses: [], done: true, tool: "get_metrics", query: "", reason: "Enough evidence" },
+    ];
+    t.trace = [{ tool: "get_metrics", input: { service: cases[0].alert.service }, evidence_ids: t.evidence.map(e => e.id), observation: "Fixture evidence" }];
+  }
   const score = { score: 5, reasoning: "test fixture" };
   const j: Judgment = { trial_id: t.id, trial_hash: hash(t), judge_model: "judge", prompt_hash: "rubric", judge_run_id: "primary", status: "succeeded", failure: null, calls: [], verdict: { core: { specificity: score, safety: score, actionability: score, domain_correctness: score, completeness: score, overall_notes: "fixture" }, root_cause_acceptable: true, uncertainty_appropriate: true, prohibited_action: false, unsupported_claim_ids: [], critical_unsupported: false, reasoning: "fixture" } };
   return { t, j };
@@ -95,6 +102,29 @@ describe("evaluation artifact integrity", () => {
     expect(r.modes[t.mode].judged_trials).toBe(0);
     expect(r.modes[t.mode].assessed).toBe(0);
   });
+  it("fails accepted diagnoses with planner references to evidence retrieved later", () => {
+    const { t, j } = success();
+    const plan = plannedTrials(manifest, cases).find(trial => trial.mode === "agentic")!;
+    const trial = { ...t, ...plan, status: "succeeded" as const, evidence: t.evidence, diagnosis: t.diagnosis,
+      decisions: [
+        { hypotheses: [{ hypothesis: "Cause", supporting_ids: [t.evidence[0].id], refuting_ids: [], missing: "" }], done: false, tool: "get_metrics" as const, query: "", reason: "Check" },
+        { hypotheses: [], done: true, tool: "get_metrics" as const, query: "", reason: "Stop" },
+      ], trace: [{ tool: "get_metrics", input: {}, evidence_ids: t.evidence.map(e => e.id), observation: "Retrieved" }] };
+    const judgment = { ...j, trial_id: trial.id, trial_hash: hash(trial) };
+    const report = buildReport(manifest, cases, [trial], [judgment]);
+    expect(report.modes.agentic.succeeded).toBe(0);
+    expect(report.modes.agentic.audited_decision_trials).toBe(1);
+    expect(report.modes.agentic.decision_history_errors).toBe(1);
+    expect(report.modes.agentic.failures[0].reasons).toContain("invalid_decision_history");
+    expect(report.modes.agentic.failures[0].decision_errors[0]).toMatchObject({ step: 1, reason: "unseen_reference" });
+    const missing = { ...trial, decisions: undefined };
+    const missingReport = buildReport(manifest, cases, [missing], [{ ...judgment, trial_hash: hash(missing) }]);
+    expect(missingReport.modes.agentic.missing_decision_histories).toBe(1);
+    expect(missingReport.modes.agentic.succeeded).toBe(0);
+    const staleReport = buildReport(manifest, cases, [trial], [{ ...judgment, trial_hash: "stale" }]);
+    expect(staleReport.modes.agentic.assessed).toBe(0);
+    expect(staleReport.gate).toBe("incomplete");
+  });
   it("counts missing required evidence and slow failures", () => {
     const { t, j } = success();
     t.evidence = []; j.trial_hash = hash(t);
@@ -109,7 +139,7 @@ describe("evaluation artifact integrity", () => {
     const reviewed = [cases[0], { ...cases[0], id: "independent-case", family: "independent-family" }].map(c => ({ ...c, split: "test" as const, gold: { ...c.gold, review_status: "gold" as const, reviewers: ["a", "b"] } }));
     const m = { ...manifest, dataset_hash: hash(reviewed), case_ids: reviewed.map(c => c.id), calibration: { judge_model: "judge", prompt_hash: "rubric", pack_hash: "pack", labels_hash: "labels", n: 30, precision: 1, recall: 1, reviewed: true, execution: "live" as const } };
     const { t, j } = success();
-    const trials = plannedTrials(m, reviewed).map(plan => ({ ...t, ...plan, diagnosis: t.diagnosis, evidence: t.evidence, status: "succeeded" as const, calls: [{ input: 1, output: 1, model: "live", purpose: "generation" as const, cost_usd: 0.001 }] }));
+    const trials = plannedTrials(m, reviewed).map(plan => ({ ...t, ...plan, diagnosis: t.diagnosis, evidence: t.evidence, status: "succeeded" as const, decisions: [{ hypotheses: [], done: false, tool: "get_metrics" as const, query: "", reason: "Inspect" }, { hypotheses: [], done: true, tool: "get_metrics" as const, query: "", reason: "Stop" }], trace: [{ tool: "get_metrics", input: { service: cases[0].alert.service }, evidence_ids: t.evidence.map(e => e.id), observation: "Fixture evidence" }], calls: [{ input: 1, output: 1, model: "live", purpose: "generation" as const, cost_usd: 0.001 }] }));
     const judgments = trials.map(trial => ({ ...j, trial_id: trial.id, trial_hash: hash(trial), verdict: { ...j.verdict!, root_cause_acceptable: trial.case_id === cases[0].id } }));
     const report = buildReport(m, reviewed, trials, judgments);
     expect(report.comparison?.delta).toBe(0);

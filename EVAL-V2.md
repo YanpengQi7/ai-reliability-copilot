@@ -197,3 +197,11 @@ npm run agent:replay -- --id=shared-smoke --trial=TRIAL_ID
 ```
 
 Replay uses frozen evidence and recorded planner/diagnosis responses, validates prompt/schema identity and trial assignment, and compares evidence, tool observations, call sequence, stopping reason and diagnosis. It rejects changed snapshots and incompatible legacy/ablation runs. It verifies control-flow reproduction, not new model quality or actual live-connector behavior. Production/eval parity tests additionally compare every model request schema, system prompt and input using a recorded response tape. No private evidence or model tape is automatically published.
+
+## Reviewing investigation decisions
+
+The investigation page displays each planner decision, its reason, read outcome, competing hypotheses, supporting and contradicting citations, and missing observations. Citation links open the matching frozen evidence record with source, service, observation/availability times and structured measurements. A separate unresolved-evidence panel keeps outstanding checks visible alongside the final diagnosis. These displays preserve the planner's stated reasoning; they do not assign probabilities or independently verify source content.
+
+Reports audit completed agentic decision histories against retrieval order. A decision may cite the alert or evidence returned by earlier reads, but cannot cite a record first returned by its own or a later read. The audit also checks tool order, missing/extra reads, decisions after stopping and returned IDs absent from the final evidence snapshot. Shared-engine trials with missing or invalid decision histories cannot count as successful even if the final judge accepts their diagnosis. Failed/interrupted trials retain their existing failure accounting.
+
+Metrics distinguish `audited_decision_trials`, `decision_history_errors` and `missing_decision_histories`. Historical runs without decision artifacts are reported as unavailable; the report does not manufacture a history. This is a structural audit of recorded reference timing and control flow, not a semantic assessment of whether a check was useful or an independent authentication of telemetry.

@@ -1,4 +1,5 @@
 import { summarizeLedger, type LedgerEntry } from "./accounting";
+import { auditDecisionHistory } from "../agent/decisionAudit";
 import { checkClaims } from "../agent/evidence";
 import type { EvalCase, Judgment, Manifest, Trial, Mode } from "./contracts";
 import { hash } from "./artifacts";
@@ -51,10 +52,15 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
     const c = byCase.get(t.case_id)!;
     const j = byJudge.get(t.id) ?? null;
     const compatible = !j || j.judge_model === m.judge_model && j.prompt_hash === m.rubric_hash;
-    const outcome = compatible ? trialOutcome(t, c, j) : { success: null, reasons: ["judge_protocol_mismatch"] };
+    let outcome = compatible ? trialOutcome(t, c, j) : { success: null, reasons: ["judge_protocol_mismatch"] };
+    const decisionAudit = t.mode === "agentic" && t.status === "succeeded"
+      ? auditDecisionHistory(t.decisions, t.trace, ["alert-context"], t.evidence.map(e => e.id)) : null;
+    if (m.engine_version === "shared-investigator-v1" && decisionAudit && (!decisionAudit.available || decisionAudit.errors.length)) {
+      outcome = { success: outcome.success === null ? null : false, reasons: [...outcome.reasons, "invalid_decision_history"] };
+    }
     const claimChecks = t.diagnosis ? checkClaims(t.diagnosis.claims, t.evidence) : [];
     const available = new Map(visibleEvidence(c).map(e => [e.id, hash(e)]));
-    return { ...outcome, trial: t, category: c.category, claimChecks,
+    return { ...outcome, trial: t, category: c.category, claimChecks, decisionAudit,
       required: c.gold.required_evidence_ids.length,
       retrieved: c.gold.required_evidence_ids.filter(id => t.evidence.some(e => e.id === id && available.get(id) === hash(e))).length,
       judged: compatible && j?.status === "succeeded" && j.trial_hash === hash(t) ? j : null };
@@ -75,11 +81,14 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
       critical_unsupported: graded.filter(r => r.judged!.verdict!.critical_unsupported).length,
       semantic_unsupported_claims: graded.reduce((sum, r) => sum + new Set(r.judged!.verdict!.unsupported_claim_ids).size, 0),
       trials_with_semantic_unsupported_claims: graded.filter(r => r.judged!.verdict!.unsupported_claim_ids.length).length,
+      audited_decision_trials: selected.filter(r => r.decisionAudit?.available).length,
+      decision_history_errors: selected.reduce((sum, r) => sum + (r.decisionAudit?.errors.length ?? 0), 0),
+      missing_decision_histories: selected.filter(r => r.decisionAudit && !r.decisionAudit.available).length,
       judged_trials: graded.length,
       attempted_p50_ms: quantile(attempted.map(r => r.trial.elapsed_ms), 0.5),
       attempted_p95_ms: quantile(attempted.map(r => r.trial.elapsed_ms), 0.95),
       stop_reasons: Object.fromEntries([...new Set(selected.map(r => r.trial.stop_reason))].map(reason => [reason, selected.filter(r => r.trial.stop_reason === reason).length])),
-      planned: selected.length, assessed: scored, succeeded: success, success_rate: selected.length ? success / selected.length : null, coverage: selected.length ? scored / selected.length : 0, known_cost_usd: cost, cost_complete: !unknownCost, cost_per_success: success && !unknownCost ? cost / success : null, p50_ms: quantile(selected.filter(r => r.success).map(r => r.trial.elapsed_ms), 0.5), p95_ms: quantile(selected.filter(r => r.success).map(r => r.trial.elapsed_ms), 0.95), failures: selected.filter(r => r.success !== true).map(r => ({ id: r.trial.id, reasons: r.reasons, claim_errors: r.claimChecks.filter(c => c.errors.length) })) };
+      planned: selected.length, assessed: scored, succeeded: success, success_rate: selected.length ? success / selected.length : null, coverage: selected.length ? scored / selected.length : 0, known_cost_usd: cost, cost_complete: !unknownCost, cost_per_success: success && !unknownCost ? cost / success : null, p50_ms: quantile(selected.filter(r => r.success).map(r => r.trial.elapsed_ms), 0.5), p95_ms: quantile(selected.filter(r => r.success).map(r => r.trial.elapsed_ms), 0.95), failures: selected.filter(r => r.success !== true).map(r => ({ id: r.trial.id, reasons: r.reasons, claim_errors: r.claimChecks.filter(c => c.errors.length), decision_errors: r.decisionAudit?.errors ?? [] })) };
   };
   const modes = Object.fromEntries(m.modes.map(mode => [mode, summarize(rows.filter(r => r.trial.mode === mode))]));
   const slices = Object.fromEntries([...new Set(rows.map(r => r.category))].map(category => [category, Object.fromEntries(m.modes.map(mode => [mode, summarize(rows.filter(r => r.category === category && r.trial.mode === mode))]))]));
@@ -126,5 +135,11 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
 }
 
 export function reportMarkdown(report: ReturnType<typeof buildReport>): string {
-  return [`# Evaluation ${report.run_id}`, `\nGate: **${report.gate}**. Draft labels: ${report.draft_labels}.`, `\nInvestigation engine: ${report.engine_version}.`, `\n${report.note}`, `\nDataset cases by split: dev=${report.dataset_splits.dev}, validation=${report.dataset_splits.validation}, test=${report.dataset_splits.test}. Only test-only runs can pass the release gate; split labels do not establish an unseen holdout.`, `\nGate reasons: ${report.gate_reasons.join(", ") || "all checks passed"}.`, ...(report.accounting ? [`\nRun accounting: $${report.accounting.accounted_cost_usd.toFixed(6)} (known usage plus unresolved reservations). ${report.accounting.scope}`] : []), "\n| Mode | Planned | Assessed | Success | Cost/success |", "|---|---:|---:|---:|---:|", ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.planned} | ${s.assessed} | ${s.succeeded} | ${s.cost_per_success === null ? "unknown / no successes" : s.cost_per_success.toFixed(5)} |`), `\nComparison (paired family bootstrap):\n\n\`\`\`json\n${JSON.stringify(report.comparison, null, 2)}\n\`\`\``, "\nDetailed slices, costs, and failures: report.json.\n"].join("\n");
+  const decisionHistory = [
+    "\n| Mode | Audited decision histories | History errors | Missing histories |",
+    "|---|---:|---:|---:|",
+    ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.audited_decision_trials} | ${s.decision_history_errors} | ${s.missing_decision_histories} |`),
+    "\nDecision audits check recorded citation timing and control flow, not semantic correctness. Shared-engine agentic trials require valid histories to count as successful.",
+  ].join("\n");
+  return [`# Evaluation ${report.run_id}`, `\nGate: **${report.gate}**. Draft labels: ${report.draft_labels}.`, `\nInvestigation engine: ${report.engine_version}.`, `\n${report.note}`, `\nDataset cases by split: dev=${report.dataset_splits.dev}, validation=${report.dataset_splits.validation}, test=${report.dataset_splits.test}. Only test-only runs can pass the release gate; split labels do not establish an unseen holdout.`, `\nGate reasons: ${report.gate_reasons.join(", ") || "all checks passed"}.`, ...(report.accounting ? [`\nRun accounting: $${report.accounting.accounted_cost_usd.toFixed(6)} (known usage plus unresolved reservations). ${report.accounting.scope}`] : []), "\n| Mode | Planned | Assessed | Success | Cost/success |", "|---|---:|---:|---:|---:|", ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.planned} | ${s.assessed} | ${s.succeeded} | ${s.cost_per_success === null ? "unknown / no successes" : s.cost_per_success.toFixed(5)} |`), `\nComparison (paired family bootstrap):\n\n\`\`\`json\n${JSON.stringify(report.comparison, null, 2)}\n\`\`\``, decisionHistory, "\nDetailed slices, costs, and failures: report.json.\n"].join("\n");
 }

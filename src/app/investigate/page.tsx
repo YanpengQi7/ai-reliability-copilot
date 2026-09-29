@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { InvestigationReview } from "@/components/InvestigationReview";
 import { Nav } from "@/components/Nav";
 import type { Diagnosis } from "@/lib/agent/diagnosis";
 import type { InvestigationAnalysis } from "@/lib/agent/presentation";
@@ -196,68 +197,72 @@ export default function InvestigatePage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-8">
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Agentic investigator</h1>
-          <p className="mt-1 max-w-2xl text-sm text-neutral-400">
-            The agent gets only the <em>alert</em> — not the full incident dump. It calls read-only tools
-            (<code className="text-neutral-300">get_metrics</code>, <code className="text-neutral-300">get_logs</code>,
-            <code className="text-neutral-300"> get_deploy_history</code>, <code className="text-neutral-300">search_runbooks</code>)
-            in a hand-written loop to <em>discover</em> the evidence, then writes the structured response. Every step is shown below.
-          </p>
-        </div>
-        <Nav />
-      </div>
-
-      <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
-        <select value={slug} onChange={(e) => setSlug(e.target.value)} className="rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200">
-          {SCENARIO_OPTIONS.map((o) => <option key={o.slug} value={o.slug}>{o.label}</option>)}
-        </select>
-        <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "zh")} className="rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200">
-          <option value="en">Output: English</option>
-          <option value="zh">输出：中文</option>
-        </select>
-        <button
-          onClick={loading ? stop : run}
-          className={`rounded px-4 py-2 text-sm font-semibold text-white ${
-            loading ? "bg-red-700 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-500"
-          }`}
-        >
-          {loading ? "Stop investigation" : "Run investigation"}
-        </button>
-      </div>
-
-      {loading && (
-        <div className="mb-6 animate-pulse rounded-xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-400">
-          The agent is calling tools and reasoning across steps. This makes several model calls (~30s on DeepSeek)…
-        </div>
-      )}
-      {error && <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>}
-
-      {result && (
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
-            <span>stop: <b className="text-neutral-200">{result.stop_reason}</b></span>
-            <span>loop steps: <b className="text-neutral-200">{result.steps}</b></span>
-            <span>model calls: <b className="text-neutral-200">{result.usage.model_calls}</b></span>
-            <span>tool calls: <b className="text-neutral-200">{result.trace.filter((s) => s.status === "ok").length}</b></span>
-            <span>tokens: <b className="text-neutral-200">{result.usage.tokens_in}/{result.usage.tokens_out}</b></span>
-            <span>cost: <b className="text-neutral-200">${result.usage.cost_usd.toFixed(5)}</b></span>
-            <span>{result.completed ? "✓ completed" : "⚠ incomplete"}</span>
-          </div>
-
+    <main className="min-h-screen bg-neutral-950 px-6 py-8 text-neutral-100">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-6 flex items-start justify-between">
           <div>
-            <h2 className="mb-3 text-lg font-semibold text-white">Investigation trace</h2>
-            <TraceTimeline trace={result.trace} />
+            <h1 className="text-2xl font-bold text-white">Agentic investigator</h1>
+            <p className="mt-1 max-w-2xl text-sm text-neutral-400">
+              The agent gets only the <em>alert</em> — not the full incident dump. It calls read-only tools
+              (<code className="text-neutral-300">get_metrics</code>, <code className="text-neutral-300">get_logs</code>,
+              <code className="text-neutral-300"> get_deploy_history</code>, <code className="text-neutral-300">search_runbooks</code>)
+              in a hand-written loop to <em>discover</em> the evidence, then writes the structured response. Every step is shown below.
+            </p>
           </div>
-
-          <div>
-            <h2 className="mb-3 text-lg font-semibold text-white">Structured response</h2>
-            <AnalysisView a={result.analysis} diagnosis={result.diagnosis} />
-          </div>
+          <Nav />
         </div>
-      )}
+
+        <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
+          <select value={slug} onChange={(e) => setSlug(e.target.value)} className="rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200">
+            {SCENARIO_OPTIONS.map((o) => <option key={o.slug} value={o.slug}>{o.label}</option>)}
+          </select>
+          <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "zh")} className="rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200">
+            <option value="en">Output: English</option>
+            <option value="zh">输出：中文</option>
+          </select>
+          <button
+            onClick={loading ? stop : run}
+            className={`rounded px-4 py-2 text-sm font-semibold text-white ${
+              loading ? "bg-red-700 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-500"
+            }`}
+          >
+            {loading ? "Stop investigation" : "Run investigation"}
+          </button>
+        </div>
+
+        {loading && (
+          <div className="mb-6 animate-pulse rounded-xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-400">
+            The agent is calling tools and reasoning across steps. This makes several model calls (~30s on DeepSeek)…
+          </div>
+        )}
+        {error && <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>}
+
+        {result && (
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
+              <span>stop: <b className="text-neutral-200">{result.stop_reason}</b></span>
+              <span>loop steps: <b className="text-neutral-200">{result.steps}</b></span>
+              <span>model calls: <b className="text-neutral-200">{result.usage.model_calls}</b></span>
+              <span>tool calls: <b className="text-neutral-200">{result.trace.filter((s) => s.status === "ok").length}</b></span>
+              <span>tokens: <b className="text-neutral-200">{result.usage.tokens_in}/{result.usage.tokens_out}</b></span>
+              <span>cost: <b className="text-neutral-200">${result.usage.cost_usd.toFixed(5)}</b></span>
+              <span>{result.completed ? "✓ completed" : "⚠ incomplete"}</span>
+            </div>
+
+            <div>
+              <h2 className="mb-3 text-lg font-semibold text-white">Investigation trace</h2>
+              <TraceTimeline trace={result.trace} />
+            </div>
+
+            <InvestigationReview decisions={result.decisions} evidence={result.evidence ?? []} trace={result.trace} diagnosis={result.diagnosis} />
+
+            <div>
+              <h2 className="mb-3 text-lg font-semibold text-white">Structured response</h2>
+              <AnalysisView a={result.analysis} diagnosis={result.diagnosis} />
+            </div>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
