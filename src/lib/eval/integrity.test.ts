@@ -106,7 +106,7 @@ describe("evaluation artifact integrity", () => {
     expect(r.modes[failed.mode].p95_ms).toBeNull();
   });
   it("cannot release equally poor arms just because their relative difference is zero", () => {
-    const reviewed = [cases[0], { ...cases[0], id: "independent-case", family: "independent-family" }].map(c => ({ ...c, gold: { ...c.gold, review_status: "gold" as const, reviewers: ["a", "b"] } }));
+    const reviewed = [cases[0], { ...cases[0], id: "independent-case", family: "independent-family" }].map(c => ({ ...c, split: "test" as const, gold: { ...c.gold, review_status: "gold" as const, reviewers: ["a", "b"] } }));
     const m = { ...manifest, dataset_hash: hash(reviewed), case_ids: reviewed.map(c => c.id), calibration: { judge_model: "judge", prompt_hash: "rubric", pack_hash: "pack", labels_hash: "labels", n: 30, precision: 1, recall: 1, reviewed: true, execution: "live" as const } };
     const { t, j } = success();
     const trials = plannedTrials(m, reviewed).map(plan => ({ ...t, ...plan, diagnosis: t.diagnosis, evidence: t.evidence, status: "succeeded" as const, calls: [{ input: 1, output: 1, model: "live", purpose: "generation" as const, cost_usd: 0.001 }] }));
@@ -119,6 +119,19 @@ describe("evaluation artifact integrity", () => {
     const passing = buildReport(m, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })));
     expect(passing.gate).toBe("passed");
     expect(passing.gate_reasons).toEqual([]);
+    expect(passing.dataset_splits).toEqual({ dev: 0, validation: 0, test: 2 });
+    for (const splits of [["dev", "dev"], ["validation", "validation"], ["test", "dev"]] as const) {
+      const exploratory = reviewed.map((c, i) => ({ ...c, split: splits[i] }));
+      const exploratoryManifest = { ...m, dataset_hash: hash(exploratory) };
+      const result = buildReport(exploratoryManifest, exploratory, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })));
+      expect(result.gate).toBe("inconclusive");
+      expect(result.gate_reasons).toEqual(["non_test_dataset"]);
+      expect(Object.values(result.dataset_splits).reduce((a, b) => a + b, 0)).toBe(2);
+      const regression = buildReport(exploratoryManifest, exploratory, trials, judgments);
+      expect(regression.gate).toBe("regression");
+      expect(regression.gate_reasons).toContain("candidate_below_absolute_success_floor");
+    }
+
     const unresolved = buildReport(m, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })), [{ id: "orphan", owner: "lost-trial", purpose: "generation", state: "reserved", reservation_usd: 0.1, usage: null, at: "2026-09-29T00:00:00.000Z" }]);
     expect(unresolved.gate).toBe("inconclusive");
     expect(unresolved.gate_reasons).toContain("unresolved_call_costs");

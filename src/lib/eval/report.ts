@@ -93,6 +93,8 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
     return { baseline, candidate: "agentic", paired_trials: pairs.length, ...pairedClusterInterval(pairs, m.seed) };
   })() : null;
   const draft = cases.some(c => c.gold.review_status !== "gold");
+  const datasetSplits = Object.fromEntries((["dev", "validation", "test"] as const).map(split => [split, cases.filter(c => c.split === split).length]));
+  const testOnly = cases.length > 0 && cases.every(c => c.split === "test");
   const calibration = m.calibration;
   const calibrated = Boolean(calibration && calibration.execution === "live" && calibration.reviewed && calibration.n >= 30 && calibration.judge_model === m.judge_model && calibration.prompt_hash === m.rubric_hash && (calibration.precision ?? 0) >= 0.85 && (calibration.recall ?? 0) >= 0.9);
   const complete = rows.every(r => r.success !== null);
@@ -103,7 +105,7 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
   const costRatio = baseCost && agentCost !== null && agentCost !== undefined ? agentCost / baseCost : null;
   const meetsAbsoluteQuality = (modes.agentic?.success_rate ?? 0) >= (m.protocol.min_success_rate ?? 0.8);
   if (complete && accounting?.complete !== false && !unsafe && !draft && calibrated && m.model !== "mock" && comparison && comparison.families >= m.protocol.min_families && comparison.lower !== null && costRatio !== null) {
-    if (meetsAbsoluteQuality && comparison.lower >= -m.protocol.noninferiority_margin && costRatio <= m.protocol.max_cost_ratio) gate = "passed";
+    if (meetsAbsoluteQuality && comparison.lower >= -m.protocol.noninferiority_margin && costRatio <= m.protocol.max_cost_ratio && testOnly) gate = "passed";
     else if (!meetsAbsoluteQuality || comparison.upper! < -m.protocol.noninferiority_margin || costRatio > m.protocol.max_cost_ratio) gate = "regression";
   }
   const gateReasons: string[] = [];
@@ -112,15 +114,16 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
   if (unsafe) gateReasons.push("critical_safety_or_grounding_failure");
   if (complete && !meetsAbsoluteQuality) gateReasons.push("candidate_below_absolute_success_floor");
   if (draft) gateReasons.push("unreviewed_dataset_labels");
+  if (!testOnly) gateReasons.push("non_test_dataset");
   if (!calibrated) gateReasons.push("judge_calibration_missing_or_incompatible");
   if (m.model === "mock") gateReasons.push("mock_execution");
   if (!comparison || comparison.families < m.protocol.min_families) gateReasons.push("insufficient_independent_families");
   if (costRatio === null) gateReasons.push("cost_comparison_unavailable");
   else if (costRatio > m.protocol.max_cost_ratio) gateReasons.push("candidate_cost_exceeds_limit");
   if (comparison?.lower !== null && comparison?.lower !== undefined && comparison.lower < -m.protocol.noninferiority_margin) gateReasons.push("noninferiority_not_established");
-  return { run_id: m.id, accounting, gate, gate_reasons: gateReasons, draft_labels: draft, calibrated, modes, slices, comparison, cost_ratio: costRatio, judge_cost_usd: judgments.reduce((s, j) => s + j.calls.reduce((x, c) => x + (c.cost_usd ?? 0), 0), 0), judge_cost_complete: judgments.every(j => j.calls.every(c => c.cost_usd !== null)), note: "Draft labels cannot pass a release gate. Synthetic benchmark results do not establish production readiness. Success rate uses all planned trials; incomplete coverage is not evidence of regression. Intervals cluster by incident family." };
+  return { run_id: m.id, dataset_splits: datasetSplits, accounting, gate, gate_reasons: gateReasons, draft_labels: draft, calibrated, modes, slices, comparison, cost_ratio: costRatio, judge_cost_usd: judgments.reduce((s, j) => s + j.calls.reduce((x, c) => x + (c.cost_usd ?? 0), 0), 0), judge_cost_complete: judgments.every(j => j.calls.every(c => c.cost_usd !== null)), note: "Draft labels cannot pass a release gate. Synthetic benchmark results do not establish production readiness. Success rate uses all planned trials; incomplete coverage is not evidence of regression. Intervals cluster by incident family." };
 }
 
 export function reportMarkdown(report: ReturnType<typeof buildReport>): string {
-  return [`# Evaluation ${report.run_id}`, `\nGate: **${report.gate}**. Draft labels: ${report.draft_labels}.`, `\n${report.note}`, `\nGate reasons: ${report.gate_reasons.join(", ") || "all checks passed"}.`, ...(report.accounting ? [`\nRun accounting: $${report.accounting.accounted_cost_usd.toFixed(6)} (known usage plus unresolved reservations). ${report.accounting.scope}`] : []), "\n| Mode | Planned | Assessed | Success | Cost/success |", "|---|---:|---:|---:|---:|", ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.planned} | ${s.assessed} | ${s.succeeded} | ${s.cost_per_success === null ? "unknown / no successes" : s.cost_per_success.toFixed(5)} |`), `\nComparison (paired family bootstrap):\n\n\`\`\`json\n${JSON.stringify(report.comparison, null, 2)}\n\`\`\``, "\nDetailed slices, costs, and failures: report.json.\n"].join("\n");
+  return [`# Evaluation ${report.run_id}`, `\nGate: **${report.gate}**. Draft labels: ${report.draft_labels}.`, `\n${report.note}`, `\nDataset cases by split: dev=${report.dataset_splits.dev}, validation=${report.dataset_splits.validation}, test=${report.dataset_splits.test}. Only test-only runs can pass the release gate; split labels do not establish an unseen holdout.`, `\nGate reasons: ${report.gate_reasons.join(", ") || "all checks passed"}.`, ...(report.accounting ? [`\nRun accounting: $${report.accounting.accounted_cost_usd.toFixed(6)} (known usage plus unresolved reservations). ${report.accounting.scope}`] : []), "\n| Mode | Planned | Assessed | Success | Cost/success |", "|---|---:|---:|---:|---:|", ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.planned} | ${s.assessed} | ${s.succeeded} | ${s.cost_per_success === null ? "unknown / no successes" : s.cost_per_success.toFixed(5)} |`), `\nComparison (paired family bootstrap):\n\n\`\`\`json\n${JSON.stringify(report.comparison, null, 2)}\n\`\`\``, "\nDetailed slices, costs, and failures: report.json.\n"].join("\n");
 }

@@ -162,3 +162,9 @@ Resume validates ledger identities, nonnegative costs, state and usage purpose b
 A trial fails the supported-diagnosis criterion when a compatible, current judge verdict identifies any unsupported claim, including a noncritical fabrication. Critical unsupported assertions still trigger the separate safety gate. Reports distinguish deterministic `invalid_claims` (citation and arithmetic checks) from `semantic_unsupported_claims` (unique judge-reported assertion IDs per trial) and `trials_with_semantic_unsupported_claims`. IDs for assertions omitted from the candidate's claims are retained; stale or incompatible verdicts do not contribute to these metrics.
 
 Required-evidence coverage counts only records whose complete snapshot matches the frozen, time-visible evidence. An altered record with a valid ID earns no retrieval credit. These checks improve evaluation integrity; they do not independently establish judge accuracy or production readiness.
+
+## Release evaluation split
+
+Only a run containing exclusively `test` cases can pass the release gate. Development, validation and mixed-split runs remain exploratory: even otherwise passing results are `inconclusive` with reason `non_test_dataset`. Quality and safety regressions remain detectable on every split. Reports include case counts in `dataset_splits`; these counts are independent of arm, language and repeat counts.
+
+Use `--split=test` when creating a release evaluation, with enough independent, reviewed incident families and compatible judge calibration. Do not relabel development cases to obtain approval. Split metadata is a necessary boundary, not proof of an unseen holdout: the published synthetic cases remain public, and controlled holdout collection and access must be managed separately. This change does not promote any existing benchmark to release-ready status.
