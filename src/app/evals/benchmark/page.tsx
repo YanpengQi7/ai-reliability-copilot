@@ -9,11 +9,11 @@ export default function BenchmarkPage() {
   return (
     <main className="mx-auto max-w-5xl space-y-7 px-6 py-10 text-neutral-100">
       <header className="flex items-center justify-between gap-4">
-        <div><h1 className="text-3xl font-bold">Evidence benchmark · 证据评测</h1><p className="mt-2 text-neutral-400">Compare diagnosis outcomes, evidence, and cost under a recorded experiment.</p></div>
+        <div><h1 className="text-3xl font-bold">Evidence benchmark</h1><p className="mt-2 text-neutral-400">Compare diagnosis outcomes, evidence, and cost under a recorded experiment.</p></div>
         <Link href="/evals" className="text-indigo-300 underline">Evaluation history</Link>
       </header>
       <div role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 text-amber-200">
-        {mock ? "Offline pipeline demonstration — these are mock responses, not model quality results. 离线流程演示，不代表模型效果。" : "Exploratory results, not a release qualification. These synthetic pilot results have limited coverage; labels and judge calibration still need independent review."}
+        {mock ? "Offline pipeline demonstration — these are mock responses, not model quality results." : "Exploratory results, not a release qualification. These synthetic pilot results have limited coverage; labels and judge calibration still need independent review."}
         <p className="mt-2 text-sm">Release decision: {report.gate}. {report.draft_labels ? "Labels still require independent human review." : "Labels reviewed."}</p>
       </div>
       <section className="rounded-xl border border-neutral-800 p-5">

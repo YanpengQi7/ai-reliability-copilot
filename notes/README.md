@@ -4,7 +4,6 @@ This directory keeps evaluation evidence, design write-ups, and publication draf
 
 ## Reviewed reports
 
-- [`reports/core-competitiveness-eval-plan-2026-09-27.md`](reports/core-competitiveness-eval-plan-2026-09-27.md) — implementation plan focused on evidence-backed diagnosis, comparable evals, replayable experiments, and calibrated judges.
 - [`reports/eval-run-3.md`](reports/eval-run-3.md) — repeated prompt-version evaluation; version deltas were inside run-to-run noise.
 - [`reports/agentic-harness.md`](reports/agentic-harness.md) — agent loop design and single-shot versus agentic results.
 - [`reports/calib-grounding-findings.md`](reports/calib-grounding-findings.md) — stable, human-reviewed grounding-judge conclusions.

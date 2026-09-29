@@ -1,19 +1,19 @@
-# 核心评测加固：开发集试跑记录
+# Evaluation hardening: development pilot results
 
-这些是人工审核前的合成开发案例；提示词和数据在迭代中变化，以下通过数不能作为独立泛化能力提升的证据。
+These are synthetic development cases awaiting human review. Prompts and data changed during iteration, so the pass counts below are not independent evidence of improved generalization.
 
-| 运行 | 固定流程通过 | Agent 通过 | 估算总费用（含 Judge） |
+| Run | Fixed workflow passes | Agent passes | Estimated total cost (including judge) |
 |---|---:|---:|---:|
 | challenge-pilot-20260927 | 4/6 | 2/6 | $0.049812 |
 | challenge-refined-20260927 | 5/6 | 5/6 | $0.052903 |
 | challenge-scoped-20260927 | 6/6 | 6/6 | $0.053253 |
 
-本轮累计估算费用 $0.155968，低于 $0.20。
+Total estimated cost was $0.155968, below the $0.20 budget.
 
-第一轮暴露告警缺少引用 ID、无效推导和小比例用户影响误降级。第二轮修复引用和严重性提示后，发现部分草稿案例只提供请求失败率，无法支持预设的用户影响严重性。第三轮为这些合成案例补充明确的受影响用户范围，保留旧运行和旧数据快照。
+The first run exposed missing alert citation IDs, invalid derivations, and inappropriate severity downgrades for small affected-user populations. After citation and severity-prompt fixes, the second run revealed that some draft cases supplied only request failure rates, which did not justify their expected user-impact severity. The third run added explicit affected-user scope to these synthetic cases. Earlier runs and dataset snapshots were preserved.
 
-最终两种方案均通过 6/6 开发案例检查，必要证据召回为 100%；Agent 每次成功的生成费用约为固定流程的 3.21 倍，因此未达到成本门槛。标签未审核、Judge 未经人工校准、仅 6 个事故家族，发布判断仍为 inconclusive。
+Both approaches ultimately passed all six development cases, with 100% retrieval of required evidence. However, the agent's generation cost per successful outcome was approximately 3.21 times that of the fixed workflow, exceeding the cost gate. Labels remain unreviewed, the judge lacks human calibration, and the pilot covers only six incident families. The release decision remains **inconclusive**.
 
-验证：220 项测试通过；类型检查、代码检查、生产构建通过；离线恢复、独立重评分、校准流程及盲审内容变更拒绝检查通过。
+Validation at the time of this pilot: 220 tests passed, along with type checking, linting and the production build. Offline resume, independent rescoring, calibration, and rejection of altered human-review content also passed.
 
-原始运行与人工审核目录保留在本地并被 Git 忽略；公开页面只加载显式导出的合成汇总。
+Raw runs and human-review directories remain local and are ignored by Git. The public page loads only explicitly exported synthetic aggregates.
