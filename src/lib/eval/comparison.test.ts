@@ -99,6 +99,21 @@ describe("paired comparisons between saved runs", () => {
     expect(result.modes.full.scope).toBe("mock_plumbing");
     expect(result.modes.full.inference_ready).toBe(false);
   });
+  it("cannot infer independent results from renamed copies, even with reviewed labels and calibration", () => {
+    const run = fixture("copied");
+    run.cases = run.cases.map((c, i) => ({ ...(i === 1 ? run.cases[0] : c), id: c.id, family: c.family,
+      gold: { ...(i === 1 ? run.cases[0].gold : c.gold), review_status: "gold", reviewers: ["a", "b"] } }));
+    run.manifest.dataset_hash = hash(run.cases);
+    run.manifest.calibration = { judge_model: run.manifest.judge_model, prompt_hash: run.manifest.rubric_hash, pack_hash: "fixture", labels_hash: "fixture", n: 30, precision: 1, recall: 1, reviewed: true, execution: "live" };
+    run.trials = run.trials.map(t => t.case_id === cases[1].id ? { ...run.trials[0], id: t.id, case_id: t.case_id, family: t.family } : t);
+    run.judgments = run.judgments.map(j => ({ ...j, trial_hash: hash(run.trials.find(t => t.id === j.trial_id)) }));
+    const result = compareRuns(run, run);
+    expect(result.complete).toBe(true);
+    expect(result.modes.full.interval.families).toBe(3);
+    expect(result.modes.full).toMatchObject({ scope: "dataset_independence_conflict", inference_ready: false });
+    expect(result.dataset_audit).toMatchObject({ valid: false, unique_snapshots: 2, conflicting_groups: 1 });
+    expect(comparisonMarkdown(result)).toContain("Dataset snapshot conflicts: 1");
+  });
   it("withholds cost deltas when reservations or per-trial usage are unresolved", () => {
     const baseline = fixture("baseline"), candidate = fixture("candidate");
     candidate.ledger = [{ id: "orphan", owner: "lost", purpose: "generation", state: "reserved", reservation_usd: 0.25, usage: null, at: "2026-09-29T00:00:00.000Z" }];

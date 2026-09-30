@@ -3,12 +3,13 @@ import { z } from "zod";
 import { CaseSchema, type EvalCase } from "./contracts";
 import { evidenceItem, evidenceVisibleAt, alertEvidence as sharedAlertEvidence, isReservedEvidenceId, type EvidenceItem } from "../agent/evidence";
 import type { TelemetryAdapter } from "../agent/tools";
+import { auditDatasetSnapshots } from "./datasetAudit";
 
 export function isVisible(e: EvidenceItem, at: string): boolean {
   return evidenceVisibleAt(e, at);
 }
 
-export function validateDataset(raw: unknown): EvalCase[] {
+export function validateDataset(raw: unknown, options: { snapshotPolicy: "strict" | "audit" } = { snapshotPolicy: "strict" }): EvalCase[] {
   const cases = z.array(CaseSchema).min(1).parse(raw);
   const ids = new Set<string>();
   const splits = new Map<string, string>();
@@ -27,9 +28,10 @@ export function validateDataset(raw: unknown): EvalCase[] {
     if (c.gold.review_status === "gold" && new Set(c.gold.reviewers.map(r => r.trim().toLowerCase()).filter(Boolean)).size < 2) throw new Error(`Gold requires independent reviewers: ${c.id}`);
     if (!c.gold.sufficient && c.gold.acceptable_severities.length) throw new Error(`Insufficient-evidence case has a forced severity: ${c.id}`);
   }
+  if (options.snapshotPolicy === "strict" && !auditDatasetSnapshots(cases).valid) throw new Error("Identical incident snapshots appear across families or splits; keep correlated variants in one family and split.");
   return cases;
 }
-export function loadDataset(path: string): EvalCase[] { return validateDataset(JSON.parse(readFileSync(path, "utf8"))); }
+export function loadDataset(path: string, options?: { snapshotPolicy: "strict" | "audit" }): EvalCase[] { return validateDataset(JSON.parse(readFileSync(path, "utf8")), options); }
 /** Alert text is reported context, never independently verified telemetry. */
 export function alertEvidence(c: EvalCase): EvidenceItem {
   return sharedAlertEvidence(c.alert);

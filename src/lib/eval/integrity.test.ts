@@ -163,7 +163,7 @@ describe("evaluation artifact integrity", () => {
     expect(r.modes[failed.mode].p95_ms).toBeNull();
   });
   it("cannot release equally poor arms just because their relative difference is zero", () => {
-    const reviewed = [cases[0], { ...cases[0], id: "independent-case", family: "independent-family" }].map(c => ({ ...c, split: "test" as const, gold: { ...c.gold, review_status: "gold" as const, reviewers: ["a", "b"] } }));
+    const reviewed = [cases[0], { ...cases[0], id: "independent-case", family: "independent-family", alert: { ...cases[0].alert, symptoms: "Separate incident with independently authored scope" } }].map(c => ({ ...c, split: "test" as const, gold: { ...c.gold, review_status: "gold" as const, reviewers: ["a", "b"] } }));
     const m = { ...manifest, dataset_hash: hash(reviewed), case_ids: reviewed.map(c => c.id), calibration: { judge_model: "judge", prompt_hash: "rubric", pack_hash: "pack", labels_hash: "labels", n: 30, precision: 1, recall: 1, reviewed: true, execution: "live" as const } };
     const { t, j } = success();
     const trials = plannedTrials(m, reviewed).map(plan => ({ ...t, ...plan, diagnosis: t.diagnosis, evidence: t.evidence, status: "succeeded" as const, decisions: [{ hypotheses: [], done: false, tool: "get_metrics" as const, query: "", reason: "Inspect" }, { hypotheses: [], done: true, tool: "get_metrics" as const, query: "", reason: "Stop" }], trace: [{ tool: "get_metrics", input: { service: cases[0].alert.service }, evidence_ids: t.evidence.map(e => e.id), observation: "Fixture evidence" }], calls: [{ input: 1, output: 1, model: "live", purpose: "generation" as const, cost_usd: 0.001 }] }));
@@ -176,6 +176,14 @@ describe("evaluation artifact integrity", () => {
     const passing = buildReport(m, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })));
     expect(passing.gate).toBe("passed");
     expect(passing.gate_reasons).toEqual([]);
+    const copied = reviewed.map(c => ({ ...c, alert: cases[0].alert }));
+    const copiedTrials = trials.map(t => ({ ...t, input: cases[0].alert }));
+    const copiedJudgments = judgments.map(j => ({ ...j, trial_hash: hash(copiedTrials.find(t => t.id === j.trial_id)), verdict: { ...j.verdict!, root_cause_acceptable: true } }));
+    const duplicateReport = buildReport({ ...m, dataset_hash: hash(copied) }, copied, copiedTrials, copiedJudgments);
+    expect(duplicateReport.gate).toBe("inconclusive");
+    expect(duplicateReport.gate_reasons).toContain("duplicate_snapshots_across_families_or_splits");
+    expect(duplicateReport.dataset_audit).toMatchObject({ valid: false, unique_snapshots: 1, conflicting_groups: 1 });
+    expect(reportMarkdown(duplicateReport)).toContain("Conflicting cases:");
     const legacy = buildReport({ ...m, engine_version: "experimental-eval-v2" }, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })));
     expect(legacy.gate).toBe("inconclusive");
     expect(legacy.gate_reasons).toContain("legacy_experimental_engine");
@@ -204,7 +212,7 @@ describe("evaluation artifact integrity", () => {
   });
 
   it("blocks release when easy-case padding hides a failed family, and keeps missing grades incomplete", () => {
-    const reviewed = Array.from({ length: 9 }, (_, i) => ({ ...cases[0], id: `quality-case-${i}`, family: i < 8 ? "easy-family" : "hard-family",
+    const reviewed = Array.from({ length: 9 }, (_, i) => ({ ...cases[0], id: `quality-case-${i}`, family: i < 8 ? "easy-family" : "hard-family", alert: { ...cases[0].alert, symptoms: i < 8 ? cases[0].alert.symptoms : "Independent difficult incident" },
       split: "test" as const, gold: { ...cases[0].gold, review_status: "gold" as const, reviewers: ["a", "b"] } }));
     const m = { ...manifest, dataset_hash: hash(reviewed), case_ids: reviewed.map(c => c.id),
       calibration: { judge_model: "judge", prompt_hash: "rubric", pack_hash: "pack", labels_hash: "labels", n: 30, precision: 1, recall: 1, reviewed: true, execution: "live" as const } };

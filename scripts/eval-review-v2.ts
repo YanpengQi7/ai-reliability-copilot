@@ -9,7 +9,7 @@ import { shuffled } from "../src/lib/eval/statistics";
 const [command, id, reviewer, judgeRun = "primary"] = process.argv.slice(2);
 if (!["export", "summarize"].includes(command) || !id || !reviewer) throw new Error("Usage: npm run evals:review -- export|summarize RUN_ID REVIEWER_ID [JUDGE_RUN]");
 const root = join("evals/runs", safeId(id)), store = new ArtifactStore(root), manifest = store.manifest();
-const cases = loadDataset(join(root, "dataset.json"));
+const cases = loadDataset(join(root, "dataset.json"), { snapshotPolicy: "audit" });
 const trials = plannedTrials(manifest, cases).map(t => store.trial(t.id)).filter(t => t.status === "succeeded");
 const directory = join("evals/reviews", safeId(id), safeId(reviewer));
 const map = Object.fromEntries(trials.map(t => [hash({ run: id, trial: t.id, reviewer }).slice(0, 16), t.id]));

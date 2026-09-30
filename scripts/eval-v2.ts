@@ -18,6 +18,7 @@ import { INVESTIGATION_ENGINE_VERSION } from "../src/lib/agent/runtime";
 import { parseEvalFlags, validateEvalFlags } from "../src/lib/eval/cliConfig";
 import { safeErrorDetail } from "../src/lib/observability";
 import { sourceHash } from "../src/lib/eval/sourceVersion";
+import { auditDatasetSnapshots } from "../src/lib/eval/datasetAudit";
 
 const argv = process.argv.slice(2);
 const command = argv.shift() ?? "validate";
@@ -42,7 +43,7 @@ async function main() {
   validateEvalFlags(command, flags, false);
   if (command === "validate") {
     const cases = loadDataset(datasetPath);
-    console.log(JSON.stringify({ cases: cases.length, families: new Set(cases.map(c => c.family)).size, draft: cases.filter(c => c.gold.review_status === "draft").length, splits: Object.fromEntries(["dev", "validation", "test"].map(s => [s, cases.filter(c => c.split === s).length])) }, null, 2));
+    console.log(JSON.stringify({ cases: cases.length, families: new Set(cases.map(c => c.family)).size, draft: cases.filter(c => c.gold.review_status === "draft").length, splits: Object.fromEntries(["dev", "validation", "test"].map(s => [s, cases.filter(c => c.split === s).length])), snapshot_audit: auditDatasetSnapshots(cases) }, null, 2));
     return;
   }
   if (!["generate", "score", "report", "check", "run", "calibrate", "calibration-report"].includes(command)) throw new Error("Commands: validate, generate, score, report, check, run");
@@ -76,7 +77,7 @@ async function main() {
       writeJson(join(root, "dataset.json"), cases);
       store.initialize(manifest, plannedTrials(manifest, cases));
     }
-    const cases = validateDataset(JSON.parse(readFileSync(join(root, "dataset.json"), "utf8")));
+    const cases = validateDataset(JSON.parse(readFileSync(join(root, "dataset.json"), "utf8")), { snapshotPolicy: ["run", "generate"].includes(command) ? "strict" : "audit" });
     if (hash(cases) !== manifest.dataset_hash) throw new Error("Dataset snapshot changed");
     if (["run", "generate"].includes(command) && manifest.source_hash !== sourceHash()) throw new Error("Source changed. Create a new run; report/check can still replay the saved artifacts.");
     if (flags.has("mock") && manifest.model !== "mock" || flags.has("live") && manifest.model === "mock") throw new Error("Execution mode differs from manifest");

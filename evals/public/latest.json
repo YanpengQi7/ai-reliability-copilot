@@ -6,6 +6,14 @@
     "validation": 0,
     "test": 0
   },
+  "dataset_audit": {
+    "valid": true,
+    "unique_snapshots": 6,
+    "duplicate_cases": 0,
+    "conflicting_groups": 0,
+    "duplicate_groups": [],
+    "scope": "Exact time-visible alert/evidence snapshots, ignoring evidence IDs, labels, order and duplicate observations. No detected conflict does not establish statistical independence or an unseen holdout."
+  },
   "accounting": {
     "generation": {
       "calls": 34,
@@ -1097,7 +1105,7 @@
   "execution": "live",
   "judge_run": "primary",
   "versions": {
-    "evaluator": "e64cfc11c7d091982fc270a1aa486f7db949a7f19fe0dca820459b6018c37607",
+    "evaluator": "44f78a3096626690d6c27ff614dbc616bd1ddf11c595d7761b0ac2e38efd24cf",
     "dataset": "85dd55679eaeed4e559e43e3145810807fd3f063dbe6f689d47aaaf6dd7ffd93",
     "source": "61560d71b3514f572df9ae1884e08ee58d9ff6e3509f8e51b710e551931f6835",
     "prompt": "67fbc9020bfa2021c69e84f23314feafa8c09ad4d7329c7e1802be5d2a2e6f79",

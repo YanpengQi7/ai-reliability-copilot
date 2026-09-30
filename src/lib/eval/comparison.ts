@@ -21,7 +21,7 @@ export function loadComparisonRun(root: string, judgeRun = "primary"): Compariso
   const lock = join(root, ".lock");
   if (existsSync(lock)) throw new Error("Run is active or locked; compare only idle saved runs");
   const store = new ArtifactStore(root), original = store.manifest();
-  const cases = validateDataset(JSON.parse(readFileSync(join(root, "dataset.json"), "utf8")));
+  const cases = validateDataset(JSON.parse(readFileSync(join(root, "dataset.json"), "utf8")), { snapshotPolicy: "audit" });
   const configPath = join(root, "judgments", judgeRun, "config.json");
   const config = existsSync(configPath) ? JudgeConfigSchema.parse(JSON.parse(readFileSync(configPath, "utf8"))) : null;
   const manifest = { ...original, judge_model: config?.model ?? original.judge_model, rubric_hash: config?.prompt_hash ?? original.rubric_hash };
@@ -37,7 +37,7 @@ export function loadComparisonRun(root: string, judgeRun = "primary"): Compariso
 export function compareRuns(baseline: ComparisonRun, candidate: ComparisonRun) {
   const a = baseline.manifest, b = candidate.manifest;
   for (const run of [baseline, candidate]) {
-    validateDataset(run.cases);
+    validateDataset(run.cases, { snapshotPolicy: "audit" });
     if (run.judgments.some(j => j.judge_run_id !== run.judge_run)) throw new Error("Judgment belongs to a different judge-run");
   }
   for (const key of ["dataset_hash", "policy_version", "protocol"] as const) {
@@ -64,6 +64,7 @@ export function compareRuns(baseline: ComparisonRun, candidate: ComparisonRun) {
   });
   const mock = a.model === "mock" || b.model === "mock";
   const reviewed = !baselineReport.draft_labels && !candidateReport.draft_labels && baselineReport.calibrated && candidateReport.calibrated;
+  const independentSnapshots = baselineReport.dataset_audit.valid && candidateReport.dataset_audit.valid;
   const summarize = (selected: typeof pairs) => {
     const assessed = selected.filter(p => p.transition !== "unassessed");
     const interval = pairedClusterInterval(assessed.map(p => ({ family: p.family, a: Number(p.baseline_success), b: Number(p.candidate_success) })), a.seed);
@@ -72,8 +73,8 @@ export function compareRuns(baseline: ComparisonRun, candidate: ComparisonRun) {
       persistent_failures: selected.filter(p => p.transition === "persistent_failure").length, stable_successes: selected.filter(p => p.transition === "stable_success").length,
       new_safety_failures: selected.filter(p => p.new_safety_failure).length,
       unassessed: selected.length - assessed.length, interval,
-      scope: mock ? "mock_plumbing" : !reviewed ? "unreviewed_exploration" : "reviewed_comparison",
-      inference_ready: !mock && reviewed && selected.length > 0 && assessed.length === selected.length && interval.families >= a.protocol.min_families };
+      scope: mock ? "mock_plumbing" : !independentSnapshots ? "dataset_independence_conflict" : !reviewed ? "unreviewed_exploration" : "reviewed_comparison",
+      inference_ready: !mock && independentSnapshots && reviewed && selected.length > 0 && assessed.length === selected.length && interval.families >= a.protocol.min_families };
   };
   const modes = Object.fromEntries(a.modes.map(mode => {
     const left = baselineReport.modes[mode], right = candidateReport.modes[mode];
@@ -102,7 +103,7 @@ export function compareRuns(baseline: ComparisonRun, candidate: ComparisonRun) {
     thinking: run.manifest.thinking, ablation: run.manifest.ablation, budget: run.manifest.budget, seed: run.manifest.seed });
   const changed = (["engine_version", "source_hash", "prompt_hash", "schema_hash", "model", "thinking", "ablation", "budget", "seed"] as const).filter(key => hash(a[key]) !== hash(b[key]));
   return { version: "run-comparison-v1", baseline: identity(baseline), candidate: identity(candidate), changed_configuration: changed,
-    dataset_hash: a.dataset_hash, judge: { model: a.judge_model, rubric: a.rubric_hash, thinking: baseline.judge_thinking },
+    dataset_hash: a.dataset_hash, dataset_audit: baselineReport.dataset_audit, judge: { model: a.judge_model, rubric: a.rubric_hash, thinking: baseline.judge_thinking },
     complete: pairs.every(p => p.transition !== "unassessed"), modes, slices,
     changes: pairs.filter(p => ["fixed", "regressed", "unassessed"].includes(p.transition)),
     persistent_failures: pairs.filter(p => p.transition === "persistent_failure"),
@@ -116,6 +117,7 @@ export function comparisonMarkdown(comparison: ReturnType<typeof compareRuns>) {
   const details = [...comparison.changes, ...comparison.persistent_failures].sort((a, b) => (a.new_safety_failure ? 0 : priority[a.transition]) - (b.new_safety_failure ? 0 : priority[b.transition]) || a.id.localeCompare(b.id));
   return [`# Evaluation comparison: ${comparison.baseline.run} → ${comparison.candidate.run}`, `\n${comparison.note}`,
     `\nComplete paired coverage: ${comparison.complete}. Changed configuration: ${comparison.changed_configuration.join(", ") || "none"}.`,
+    `\nDataset snapshot conflicts: ${comparison.dataset_audit.conflicting_groups}. ${comparison.dataset_audit.scope}`,
     `\nNew safety failures: ${comparison.safety_regressions.length}. These can occur even when a case failed in both versions.`,
     "\n| Mode | Paired / planned | Fixed | Regressed | Persistent failures | Family delta (95% interval) | Cost delta (USD) | Scope |",
     "|---|---:|---:|---:|---:|---|---|---|",

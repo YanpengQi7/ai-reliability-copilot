@@ -21,6 +21,8 @@ export default function BenchmarkPage() {
         <h2 className="mb-3 text-lg font-semibold">Release criteria</h2>
         <ul className="list-disc space-y-1 pl-5 text-sm text-neutral-300">{report.gate_reasons.map(reason => <li key={reason}>{reason.replaceAll("_", " ")}</li>)}</ul>
         <p className="mt-3 text-sm text-neutral-400">Independent incident families: {report.comparison?.families ?? "No paired comparison"}. Judge calibrated: {report.calibrated ? "yes" : "no"}.</p>
+        <p className="mt-3 text-sm text-neutral-400">Distinct recorded snapshots: {report.dataset_audit.unique_snapshots}. {report.dataset_audit.valid ? "No identical snapshots found across families or splits. Family assignments still need independent review." : `${report.dataset_audit.conflicting_groups} copied snapshot groups appear across families or splits; these results cannot qualify for release.`}</p>
+        {!report.dataset_audit.valid && <ul className="mt-3 space-y-2 text-sm text-amber-200">{report.dataset_audit.duplicate_groups.filter(g => g.cross_family || g.cross_split).map(g => <li key={g.snapshot_hash}>Cases requiring review: {g.case_ids.join(", ")}. Families: {g.families.join(", ")}. Splits: {g.splits.join(", ")}.</li>)}</ul>}
       </section>
       <section className="overflow-x-auto rounded-xl border border-neutral-800 p-5">
         <h2 className="mb-4 text-lg font-semibold">Every planned trial stays in the denominator</h2>

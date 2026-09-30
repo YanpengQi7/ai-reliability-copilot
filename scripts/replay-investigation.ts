@@ -9,7 +9,7 @@ async function main() {
   if (args.length !== 2 || !args[0].startsWith("--id=") || !args[1].startsWith("--trial=")) throw new Error("Usage: npm run agent:replay -- --id=RUN --trial=TRIAL");
   const root = join("evals/runs", safeId(args[0].slice(5)));
   const store = new ArtifactStore(root), trial = store.trial(safeId(args[1].slice(8)));
-  const cases = validateDataset(JSON.parse(readFileSync(join(root, "dataset.json"), "utf8")));
+  const cases = validateDataset(JSON.parse(readFileSync(join(root, "dataset.json"), "utf8")), { snapshotPolicy: "audit" });
   const result = await replayProductionTrial(store.manifest(), cases, trial);
   console.log(JSON.stringify({ verified: true, execution: "offline_recorded_responses", engine: result.engine_version, trial: trial.id, steps: result.steps, stop_reason: result.stop_reason,
     note: "Verifies recorded control flow and diagnosis presentation through the production entry point. No provider calls; not a fresh model-quality measurement." }, null, 2));
