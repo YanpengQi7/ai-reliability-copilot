@@ -1,7 +1,7 @@
 import { config } from "dotenv";
 config({ path: ".env.local", quiet: true });
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, mkdirSync, openSync, closeSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync, openSync, closeSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { ArtifactStore, hash, safeId, writeJson } from "../src/lib/eval/artifacts";
@@ -17,25 +17,13 @@ import { PLANNER_PROMPT } from "../src/lib/agent/diagnosisPrompt";
 import { INVESTIGATION_ENGINE_VERSION } from "../src/lib/agent/runtime";
 import { parseEvalFlags, validateEvalFlags } from "../src/lib/eval/cliConfig";
 import { safeErrorDetail } from "../src/lib/observability";
+import { sourceHash } from "../src/lib/eval/sourceVersion";
 
 const argv = process.argv.slice(2);
 const command = argv.shift() ?? "validate";
 const flags = parseEvalFlags(argv);
 const numeric = (name: string, fallback: number) => flags.has(name) ? Number(flags.get(name)) : fallback;
 const datasetPath = flags.get("dataset") ?? "evals/datasets/sre-v2/cases.json";
-
-function sourceHash() {
-  const paths: string[] = [];
-  function scan(dir: string) {
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, e.name);
-      if (e.isDirectory()) scan(path);
-      else if (/\.(ts|tsx|json)$/.test(path)) paths.push(path);
-    }
-  }
-  scan("src"); scan("scripts");
-  return hash([...paths.sort(), "package-lock.json", "evals/protocol-v2.json"].map(p => [p, readFileSync(p, "utf8")]));
-}
 
 // Deliberately a plumbing fixture, not an evaluator or a source of quality claims.
 function mockModel(): EvalModel {

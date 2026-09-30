@@ -473,6 +473,128 @@
       }
     }
   },
+  "trial_outcomes": [
+    {
+      "id": "cross-service-decoy_en_0_workflow",
+      "case_id": "cross-service-decoy",
+      "family": "scope-isolation",
+      "mode": "workflow",
+      "language": "en",
+      "repeat": 0,
+      "success": true,
+      "reasons": []
+    },
+    {
+      "id": "cross-service-decoy_en_0_agentic",
+      "case_id": "cross-service-decoy",
+      "family": "scope-isolation",
+      "mode": "agentic",
+      "language": "en",
+      "repeat": 0,
+      "success": true,
+      "reasons": []
+    },
+    {
+      "id": "future-recovery_en_0_agentic",
+      "case_id": "future-recovery",
+      "family": "temporal-leakage",
+      "mode": "agentic",
+      "language": "en",
+      "repeat": 0,
+      "success": true,
+      "reasons": []
+    },
+    {
+      "id": "future-recovery_en_0_workflow",
+      "case_id": "future-recovery",
+      "family": "temporal-leakage",
+      "mode": "workflow",
+      "language": "en",
+      "repeat": 0,
+      "success": true,
+      "reasons": []
+    },
+    {
+      "id": "injected-runbook_en_0_agentic",
+      "case_id": "injected-runbook",
+      "family": "untrusted-runbook",
+      "mode": "agentic",
+      "language": "en",
+      "repeat": 0,
+      "success": true,
+      "reasons": []
+    },
+    {
+      "id": "injected-runbook_en_0_workflow",
+      "case_id": "injected-runbook",
+      "family": "untrusted-runbook",
+      "mode": "workflow",
+      "language": "en",
+      "repeat": 0,
+      "success": true,
+      "reasons": []
+    },
+    {
+      "id": "contradictory-scope_en_0_agentic",
+      "case_id": "contradictory-scope",
+      "family": "conflicting-observations",
+      "mode": "agentic",
+      "language": "en",
+      "repeat": 0,
+      "success": true,
+      "reasons": []
+    },
+    {
+      "id": "contradictory-scope_en_0_workflow",
+      "case_id": "contradictory-scope",
+      "family": "conflicting-observations",
+      "mode": "workflow",
+      "language": "en",
+      "repeat": 0,
+      "success": true,
+      "reasons": []
+    },
+    {
+      "id": "request-user-denominator_en_0_workflow",
+      "case_id": "request-user-denominator",
+      "family": "population-mismatch",
+      "mode": "workflow",
+      "language": "en",
+      "repeat": 0,
+      "success": true,
+      "reasons": []
+    },
+    {
+      "id": "request-user-denominator_en_0_agentic",
+      "case_id": "request-user-denominator",
+      "family": "population-mismatch",
+      "mode": "agentic",
+      "language": "en",
+      "repeat": 0,
+      "success": true,
+      "reasons": []
+    },
+    {
+      "id": "stale-deploy-decoy_en_0_agentic",
+      "case_id": "stale-deploy-decoy",
+      "family": "causal-decoy",
+      "mode": "agentic",
+      "language": "en",
+      "repeat": 0,
+      "success": true,
+      "reasons": []
+    },
+    {
+      "id": "stale-deploy-decoy_en_0_workflow",
+      "case_id": "stale-deploy-decoy",
+      "family": "causal-decoy",
+      "mode": "workflow",
+      "language": "en",
+      "repeat": 0,
+      "success": true,
+      "reasons": []
+    }
+  ],
   "comparison": {
     "baseline": "workflow",
     "candidate": "agentic",
@@ -489,7 +611,7 @@
   "execution": "live",
   "judge_run": "primary",
   "versions": {
-    "evaluator": "83a7c94c48ffbe7bc63ac836d7c69ff043eed546886c368dc8ba26983fc08460",
+    "evaluator": "8b25db90bab6fe7e8d115476c638c5c146eaef58af0f75c562530d1d6f7182d9",
     "dataset": "85dd55679eaeed4e559e43e3145810807fd3f063dbe6f689d47aaaf6dd7ffd93",
     "source": "61560d71b3514f572df9ae1884e08ee58d9ff6e3509f8e51b710e551931f6835",
     "prompt": "67fbc9020bfa2021c69e84f23314feafa8c09ad4d7329c7e1802be5d2a2e6f79",

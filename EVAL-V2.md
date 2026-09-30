@@ -94,7 +94,7 @@ The export hides model, mode, prompt version and machine scores, and shows compl
 
 `check` exits 0 only for a live passing gate; 1 = regression, 2 = incomplete, 3 = inconclusive, 4 = mock. Changing a judge invalidates calibration tied to a different model or prompt. `report` does not fail merely because it reports bad or incomplete results.
 
-`report --export-public` exports aggregates only for synthetic datasets to `evals/public/latest.json`. `/evals/benchmark` shows that export, including an explicit mock banner when applicable. It never scans private run folders. Legacy `/evals` remains the historical database view; its recent-200 aggregation is not a v2 experiment.
+`report --export-public` exports aggregate metrics and case outcomes only for synthetic datasets to `evals/public/latest.json`. Evidence text and model responses are excluded. `/evals/benchmark` shows that export, including an explicit mock banner when applicable. It never scans private run folders. Legacy `/evals` remains the historical database view; its recent-200 aggregation is not a v2 experiment.
 
 ## Remaining work requiring additional inputs
 
@@ -213,3 +213,20 @@ Metrics distinguish `audited_decision_trials`, `decision_history_errors` and `mi
 Evaluation generation retains the rejected candidate and its observation checkpoints for local inspection, marks the trial failed, and preserves all recorded model usage in the planned denominator. Reports expose `diagnosis_integrity_failures` and per-trial `diagnosis_errors` for failed candidates as well as completed historical artifacts. Historical engine versions remain readable but cannot pass the current release gate or replay as the current engine. No rejected candidate is automatically published.
 
 Passing this gate establishes structural integrity only. It cannot establish whether prose is true, whether citations actually support a causal interpretation, whether all consequential assertions were listed as claims, or whether a mitigation is appropriate. Those questions still require semantic evaluation and reviewed labels.
+
+## Comparing investigation versions
+
+Compare two idle saved runs without generating diagnoses or making judge/provider calls:
+
+```sh
+npm run evals:compare -- --baseline=BASELINE_RUN --candidate=CANDIDATE_RUN
+npm run evals:compare -- --baseline=BASELINE_RUN --candidate=CANDIDATE_RUN --baseline-judge-run=replay --candidate-judge-run=primary
+```
+
+The command replays both reports under the current evaluator and requires identical frozen datasets, planned trial assignments, severity policy, statistical protocol and judge configuration (model, rubric and thinking mode). Run IDs, generation prompts, source/engine versions, generation models, ablations, budgets and execution seeds may differ; changed settings are listed so the comparison cannot silently attribute a combined change to one component. Selected judge-runs require their original saved configuration. Dataset mismatches require matching runs; judge mismatches require re-scoring the fixed answers with a common judge.
+
+The JSON and Markdown files are saved under the candidate's ignored `evals/runs/CANDIDATE_RUN/comparisons/` directory with input snapshot hashes and evaluator source identity. Original trials, judgments and ledgers are not changed or recreated. Per-mode and category results show fixes, regressions, persistent failures, paired coverage and family-clustered intervals. Case transitions retain both versions' failure reasons and distinguish newly introduced and resolved reasons. New prohibited actions or critical unsupported assertions are highlighted even when both versions failed that case.
+
+Missing trials, stale judgments and incompatible assessments remain unassessed, rather than becoming failures or fixes. Failed/interrupted generations remain assessed failures. All planned pairs remain in the coverage denominator. Unknown usage or unresolved reservations prevent a numeric cost delta; known generation spending and full-run accounting remain visible. Ledger accounting includes every judge-run and calibration call, so it is not presented as the cost of the selected judge-run alone.
+
+Mock comparisons are marked `mock_plumbing`; draft labels or missing judge calibration produce `unreviewed_exploration`. `inference_ready` requires complete paired coverage, reviewed labels, compatible calibrated judges, live execution and the protocol's minimum independent families. It describes statistical prerequisites, not release eligibility, an unseen holdout or a causal claim. Run comparisons never replace the product release gate or establish production readiness. Reports expose `trial_outcomes` so downstream comparison tools can reuse the same assessment and integrity rules.

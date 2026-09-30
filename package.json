@@ -18,6 +18,7 @@
     "calib:grounding": "tsx scripts/calib-grounding.ts",
     "evals:calibrate": "tsx scripts/human-vs-judge.ts",
     "evals:v2": "tsx scripts/eval-v2.ts",
+    "evals:compare": "tsx scripts/compare-evals.ts",
     "evals:review": "tsx scripts/eval-review-v2.ts",
     "backfill:similar": "tsx scripts/backfill-similar.ts",
     "kb:ingest": "tsx scripts/ingest-kb.ts"
