@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { VerdictSchema, type EvalCase, type Manifest, type Trial, type Judgment } from "./contracts";
 import { runInvestigation } from "../agent/runtime";
+import { DiagnosisValidationError } from "../agent/diagnosisValidation";
 import { FixtureAdapter, visibleEvidence, alertEvidence } from "./dataset";
 import { hash } from "./artifacts";
 import { SEVERITY_POLICY } from "./severityPolicy";
@@ -26,21 +27,30 @@ export function plannedTrials(m: Manifest, cases: EvalCase[]): Trial[] {
 
 export async function generateTrial(trial: Trial, c: EvalCase, m: Manifest, model: EvalModel, checkpoint: () => void) {
   const available = visibleEvidence(c, m.ablation === "no_kb");
-  const result = await runInvestigation({
-    input: { service: c.alert.service, symptoms: c.alert.symptoms, raw_context: "" },
-    alert: c.alert, language: trial.language, mode: trial.mode,
-    initialEvidence: [alertEvidence(c)], fullEvidence: available,
-    adapter: new FixtureAdapter(available, c.alert.at), allowInternalKb: false,
-    model, useState: m.ablation !== "no_state",
-    onCheckpoint: state => {
-      trial.evidence = [...state.evidence];
-      trial.trace = state.trace.map(step => ({ ...step, evidence_ids: step.evidence?.map(e => e.id) ?? [] }));
-      trial.decisions = [...state.decisions];
-      trial.stop_reason = state.stop_reason;
+  try {
+    const result = await runInvestigation({
+      input: { service: c.alert.service, symptoms: c.alert.symptoms, raw_context: "" },
+      alert: c.alert, language: trial.language, mode: trial.mode,
+      initialEvidence: [alertEvidence(c)], fullEvidence: available,
+      adapter: new FixtureAdapter(available, c.alert.at), allowInternalKb: false,
+      model, useState: m.ablation !== "no_state",
+      onCheckpoint: state => {
+        trial.evidence = [...state.evidence];
+        trial.trace = state.trace.map(step => ({ ...step, evidence_ids: step.evidence?.map(e => e.id) ?? [] }));
+        trial.decisions = [...state.decisions];
+        trial.stop_reason = state.stop_reason;
+        checkpoint();
+      },
+    });
+    trial.diagnosis = result.diagnosis;
+  } catch (error) {
+    if (error instanceof DiagnosisValidationError) {
+      // Retain the rejected candidate for offline inspection, without a second model call.
+      trial.diagnosis = error.diagnosis;
       checkpoint();
-    },
-  });
-  trial.diagnosis = result.diagnosis;
+    }
+    throw error;
+  }
 }
 
 export function judgeInput(trial: Trial, c: EvalCase): string {

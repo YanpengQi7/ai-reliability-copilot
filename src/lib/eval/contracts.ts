@@ -29,7 +29,7 @@ export const CalibrationSchema = z.object({
 export const UsageSchema = z.object({ input: z.number().nonnegative(), output: z.number().nonnegative(), cost_usd: z.number().nonnegative().nullable(), model: z.string(), purpose: z.enum(["generation", "judge"]), request_id: z.string().optional() });
 export type CallUsage = z.infer<typeof UsageSchema>;
 export const ManifestSchema = z.object({
-  version: z.literal("eval-v2"), engine_version: z.enum(["experimental-eval-v2", "shared-investigator-v1"]).default("experimental-eval-v2"), id: z.string().regex(/^[a-zA-Z0-9_-]+$/), created_at: z.string(),
+  version: z.literal("eval-v2"), engine_version: z.enum(["experimental-eval-v2", "shared-investigator-v1", "shared-investigator-v2"]).default("experimental-eval-v2"), id: z.string().regex(/^[a-zA-Z0-9_-]+$/), created_at: z.string(),
   git_sha: z.string(), dirty: z.boolean(), source_hash: z.string(), dataset_hash: z.string(),
   prompt_hash: z.string(), schema_hash: z.string(), rubric_hash: z.string(), policy_version: z.literal("impact-v2"),
   thinking: z.enum(["disabled", "provider_default"]).default("provider_default"),

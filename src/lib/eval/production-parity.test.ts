@@ -52,5 +52,6 @@ describe("production/eval execution parity", () => {
     await expect(replayProductionTrial({ ...manifest, schema_hash: "changed" }, cases, trial)).rejects.toThrow(/schemas changed/);
     await expect(replayProductionTrial(manifest, cases, { ...trial, evidence: [] })).rejects.toThrow(/differs/);
     await expect(replayProductionTrial({ ...manifest, engine_version: "experimental-eval-v2" }, cases, trial)).rejects.toThrow(/shared-engine/);
+    await expect(replayProductionTrial({ ...manifest, engine_version: "shared-investigator-v1" }, cases, trial)).rejects.toThrow(/shared-engine/);
   });
 });

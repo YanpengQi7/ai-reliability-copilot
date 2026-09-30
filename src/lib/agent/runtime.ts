@@ -4,9 +4,10 @@ import { DIAGNOSIS_PROMPT, PLANNER_PROMPT } from "./diagnosisPrompt";
 import { conclusionEvidence, formatEvidence, mergeEvidence, type EvidenceItem } from "./evidence";
 import { dispatchTool, type DispatchContext, type TelemetryAdapter } from "./tools";
 import { Scratchpad } from "./state";
+import { checkDiagnosis, DiagnosisValidationError } from "./diagnosisValidation";
 import type { InvestigationInput, TraceStep } from "./types";
 
-export const INVESTIGATION_ENGINE_VERSION = "shared-investigator-v1";
+export const INVESTIGATION_ENGINE_VERSION = "shared-investigator-v2";
 export interface InvestigationModel {
   call<T>(schema: z.ZodType<T>, system: string, prompt: string, purpose: "generation"): Promise<T>;
 }
@@ -87,5 +88,7 @@ export async function runInvestigation(opts: RuntimeOptions): Promise<Investigat
     JSON.stringify({ alert: opts.alert, evidence: formatEvidence(state.evidence), language, stop_reason: state.stop_reason,
       limitations: promptTrace(limitations), ...(opts.useState !== false ? { hypotheses: state.decisions.at(-1)?.hypotheses } : {}) }), "generation"));
   opts.abortSignal?.throwIfAborted();
+  const issues = checkDiagnosis(diagnosis, state.evidence);
+  if (issues.length) throw new DiagnosisValidationError(diagnosis, issues);
   return { ...state, diagnosis };
 }

@@ -2,7 +2,7 @@
 
 The v2 harness measures supported diagnoses, appropriate uncertainty, severity, and prohibited actions. Its full-context, fixed-workflow and adaptive-investigator arms use the same generation model, frozen evidence pool, diagnosis schema and blinded judge protocol. The full-context arm sees all time-visible evidence; it is a reference baseline, not a claim of equal retrieval cost. Optional `alert` mode sees the alert alone.
 
-This is a separate protocol from the legacy five-scenario reports. New runs use `shared-investigator-v1`: the same planner, diagnosis schema, prompts, read dispatcher and stopping policy as the web investigator. Older `experimental-eval-v2` runs remain historical experiments and cannot qualify the current product for release.
+This is a separate protocol from the legacy five-scenario reports. New runs use `shared-investigator-v2`: the same planner, diagnosis schema, prompts, read dispatcher and stopping policy as the web investigator. Older `experimental-eval-v2` and `shared-investigator-v1` runs remain readable historical artifacts and cannot qualify the current product for release.
 
 ## Offline verification
 
@@ -205,3 +205,11 @@ The investigation page displays each planner decision, its reason, read outcome,
 Reports audit completed agentic decision histories against retrieval order. A decision may cite the alert or evidence returned by earlier reads, but cannot cite a record first returned by its own or a later read. The audit also checks tool order, missing/extra reads, decisions after stopping and returned IDs absent from the final evidence snapshot. Shared-engine trials with missing or invalid decision histories cannot count as successful even if the final judge accepts their diagnosis. Failed/interrupted trials retain their existing failure accounting.
 
 Metrics distinguish `audited_decision_trials`, `decision_history_errors` and `missing_decision_histories`. Historical runs without decision artifacts are reported as unavailable; the report does not manufacture a history. This is a structural audit of recorded reference timing and control flow, not a semantic assessment of whether a check was useful or an independent authentication of telemetry.
+
+## Withholding invalid diagnoses
+
+`shared-investigator-v2` validates final diagnoses in the shared runtime before returning a production response. The same deterministic checks cover claim references, structured measurement attribution and explicit arithmetic, cause references, required citations for supported conclusions, and null severity when the response declares insufficient evidence. Tentative uncited hypotheses remain allowed. A rejected response produces `DIAGNOSIS_REJECTED` without exposing the candidate or evidence in the API error, and without an automatic repair call that changes spending or evaluation behavior.
+
+Evaluation generation retains the rejected candidate and its observation checkpoints for local inspection, marks the trial failed, and preserves all recorded model usage in the planned denominator. Reports expose `diagnosis_integrity_failures` and per-trial `diagnosis_errors` for failed candidates as well as completed historical artifacts. Historical engine versions remain readable but cannot pass the current release gate or replay as the current engine. No rejected candidate is automatically published.
+
+Passing this gate establishes structural integrity only. It cannot establish whether prose is true, whether citations actually support a causal interpretation, whether all consequential assertions were listed as claims, or whether a mitigation is appropriate. Those questions still require semantic evaluation and reviewed labels.

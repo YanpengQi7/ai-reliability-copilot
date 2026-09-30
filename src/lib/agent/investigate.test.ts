@@ -7,6 +7,7 @@ import { investigate } from "./investigate";
 import { evidenceItem } from "./evidence";
 import { DiagnosisSchema, type Diagnosis } from "./diagnosis";
 import type { InvestigationModel } from "./runtime";
+import { DiagnosisValidationError } from "./diagnosisValidation";
 
 const diagnosis: Diagnosis = { summary: "Scope is unverified", conclusion_status: "insufficient_evidence", severity: null, severity_reasoning: "Missing scope", root_causes: [], claims: [], mitigation_plan: [], missing_information: ["Affected users"] };
 const at = "2026-09-01T00:00:00.000Z";
@@ -75,6 +76,13 @@ describe("production shared investigator", () => {
     const call = vi.fn(async () => { throw failure; });
     await expect(investigate({ input: { service: "checkout", raw_context: "" }, modelClient: { call } })).rejects.toBe(failure);
     expect(call).toHaveBeenCalledTimes(1);
+  });
+  it("withholds a final diagnosis with fabricated citations without a repair call", async () => {
+    const invalid = { ...diagnosis, claims: [{ id: "c1", text: "A private invented measurement", kind: "observed", evidence_ids: ["never-read"] }] };
+    vi.mocked(generateText).mockResolvedValueOnce({ output: plan(true), totalUsage: { inputTokens: 2, outputTokens: 3 } } as never)
+      .mockResolvedValueOnce({ output: invalid, totalUsage: { inputTokens: 4, outputTokens: 5 } } as never);
+    await expect(investigate({ input: { service: "checkout", raw_context: "" } })).rejects.toBeInstanceOf(DiagnosisValidationError);
+    expect(generateText).toHaveBeenCalledTimes(2);
   });
   it("keeps checkpoint consumers from modifying live evidence or decisions", async () => {
     const result = await investigate({ input: { service: "checkout", raw_context: "" }, modelClient: client(() => plan(true)),

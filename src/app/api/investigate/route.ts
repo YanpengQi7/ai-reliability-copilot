@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { investigate } from "@/lib/agent/investigate";
+import { DiagnosisValidationError } from "@/lib/agent/diagnosisValidation";
 import { rateLimit, clientKey, withRateLimitHeaders } from "@/lib/rateLimit";
 import { requestHasIncidentDataAccess } from "@/lib/incidentAccess";
 import { apiError } from "@/lib/http";
@@ -85,6 +86,10 @@ export async function POST(req: NextRequest) {
         error: detail,
       });
       return ctx.response(apiError(504, "INVESTIGATION_TIMEOUT", "Investigation timed out. Try fewer steps.", { requestId: ctx.requestId }));
+    }
+    if (err instanceof DiagnosisValidationError) {
+      ctx.log("warn", "investigation_diagnosis_rejected", { issue_count: err.issues.length });
+      return ctx.response(apiError(502, "DIAGNOSIS_REJECTED", "The diagnosis failed evidence checks and was withheld. Please retry or gather more evidence.", { requestId: ctx.requestId }));
     }
     ctx.log("error", "investigation_failed", { error: detail });
     return ctx.response(apiError(502, "INVESTIGATION_FAILED", "Investigation provider failed. Please try again.", { requestId: ctx.requestId }));

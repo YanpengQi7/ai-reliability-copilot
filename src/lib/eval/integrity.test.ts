@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { INVESTIGATION_ENGINE_VERSION } from "../agent/runtime";
+import { DiagnosisValidationError } from "../agent/diagnosisValidation";
 import { loadDataset, visibleEvidence, FixtureAdapter, validateDataset } from "./dataset";
 import { evidenceItem } from "../agent/evidence";
 import { hash } from "./artifacts";
@@ -8,7 +10,7 @@ import { EVAL_JUDGE_PROMPT, generateTrial, plannedTrials, type EvalModel } from 
 import { buildReport } from "./report";
 
 const cases = loadDataset("evals/datasets/sre-v2/cases.json").slice(0, 1);
-const manifest = ManifestSchema.parse({ version: "eval-v2", engine_version: "shared-investigator-v1", id: "integrity", created_at: "now", git_sha: "sha", dirty: false, source_hash: "source", dataset_hash: hash(cases), prompt_hash: "prompt", schema_hash: "schema", rubric_hash: "rubric", policy_version: "impact-v2", model: "live", judge_model: "judge", modes: ["workflow", "agentic"], languages: ["en"], repeats: 1, seed: 1, budget: { max_usd: 1, per_call_usd: 1, max_calls: 10, max_minutes: 10, max_output_tokens: 100, input_per_million: 1, output_per_million: 1, judge_input_per_million: 1, judge_output_per_million: 1 }, case_ids: cases.map(c => c.id), protocol: { min_families: 2, noninferiority_margin: 0.05, max_cost_ratio: 2 } });
+const manifest = ManifestSchema.parse({ version: "eval-v2", engine_version: INVESTIGATION_ENGINE_VERSION, id: "integrity", created_at: "now", git_sha: "sha", dirty: false, source_hash: "source", dataset_hash: hash(cases), prompt_hash: "prompt", schema_hash: "schema", rubric_hash: "rubric", policy_version: "impact-v2", model: "live", judge_model: "judge", modes: ["workflow", "agentic"], languages: ["en"], repeats: 1, seed: 1, budget: { max_usd: 1, per_call_usd: 1, max_calls: 10, max_minutes: 10, max_output_tokens: 100, input_per_million: 1, output_per_million: 1, judge_input_per_million: 1, judge_output_per_million: 1 }, case_ids: cases.map(c => c.id), protocol: { min_families: 2, noninferiority_margin: 0.05, max_cost_ratio: 2 } });
 function success() {
   const t = plannedTrials(manifest, cases)[0];
   t.status = "succeeded";
@@ -27,6 +29,31 @@ function success() {
 }
 
 describe("evaluation artifact integrity", () => {
+  it("retains rejected diagnoses, observations and usage without counting them as successes", async () => {
+    const { t } = success();
+    const invalid = { ...t.diagnosis!, claims: [{ id: "c1", text: "Invented measurement", kind: "observed" as const, evidence_ids: ["never-read"] }] };
+    const trial = plannedTrials(manifest, cases).find(plan => plan.mode === "agentic")!;
+    trial.status = "running";
+    let calls = 0;
+    const model: EvalModel = { async call(schema) {
+      calls++;
+      trial.calls.push({ input: 1, output: 1, model: "fixture", purpose: "generation", cost_usd: 0.01 });
+      return schema.parse(Object.is(schema, DiagnosisSchema) ? invalid : { hypotheses: [], done: calls > 1, tool: "get_metrics", query: "", reason: "Inspect" });
+    } };
+    const snapshots: typeof trial[] = [];
+    await expect(generateTrial(trial, cases[0], manifest, model, () => snapshots.push(structuredClone(trial)))).rejects.toBeInstanceOf(DiagnosisValidationError);
+    expect(trial.diagnosis).toEqual(invalid);
+    expect(snapshots.at(-1)?.diagnosis).toEqual(invalid);
+    expect(trial.evidence.length).toBeGreaterThan(1);
+    expect(trial.decisions).toHaveLength(2);
+    expect(calls).toBe(3);
+    trial.status = "failed";
+    const report = buildReport(manifest, cases, [trial], []);
+    expect(report.modes.agentic.succeeded).toBe(0);
+    expect(report.modes.agentic.known_cost_usd).toBeCloseTo(0.03);
+    expect(report.modes.agentic.diagnosis_integrity_failures).toBe(1);
+    expect(report.modes.agentic.failures.find(f => f.id === trial.id)?.diagnosis_errors).toContainEqual(expect.objectContaining({ reason: "unknown_reference" }));
+  });
   it("keeps alert provenance and hypothesis decisions through final synthesis", async () => {
     const prompts: Record<string, unknown>[] = [];
     const { t } = success();
@@ -152,6 +179,9 @@ describe("evaluation artifact integrity", () => {
     const legacy = buildReport({ ...m, engine_version: "experimental-eval-v2" }, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })));
     expect(legacy.gate).toBe("inconclusive");
     expect(legacy.gate_reasons).toContain("legacy_experimental_engine");
+    const previousShared = buildReport({ ...m, engine_version: "shared-investigator-v1" }, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })));
+    expect(previousShared.gate).toBe("inconclusive");
+    expect(previousShared.gate_reasons).toContain("legacy_experimental_engine");
     expect(passing.dataset_splits).toEqual({ dev: 0, validation: 0, test: 2 });
     for (const splits of [["dev", "dev"], ["validation", "validation"], ["test", "dev"]] as const) {
       const exploratory = reviewed.map((c, i) => ({ ...c, split: splits[i] }));

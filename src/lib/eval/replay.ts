@@ -10,7 +10,7 @@ import type { EvalCase, Manifest, Trial } from "./contracts";
 
 /** Re-run a saved agentic trial through the web entry point, without provider calls. */
 export async function replayProductionTrial(manifest: Manifest, cases: EvalCase[], trial: Trial) {
-  if (manifest.engine_version !== INVESTIGATION_ENGINE_VERSION) throw new Error("Replay requires a shared-engine run");
+  if (manifest.engine_version !== INVESTIGATION_ENGINE_VERSION) throw new Error("Replay requires a current shared-engine run; use the recorded source version for historical runs");
   if (manifest.prompt_hash !== hash({ diagnosis: DIAGNOSIS_PROMPT, planner: PLANNER_PROMPT })) throw new Error("Investigation prompts changed; use the recorded source version");
   if (manifest.schema_hash !== hash({ diagnosis: z.toJSONSchema(DiagnosisSchema), decision: z.toJSONSchema(DecisionSchema) })) throw new Error("Investigation schemas changed; use the recorded source version");
   if (hash(cases) !== manifest.dataset_hash) throw new Error("Dataset snapshot changed");
