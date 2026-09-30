@@ -38,6 +38,103 @@
   "calibrated": false,
   "modes": {
     "workflow": {
+      "families": 6,
+      "family_success_rate": 1,
+      "family_coverage": 1,
+      "fully_failed_families": 0,
+      "incomplete_families": 0,
+      "family_results": [
+        {
+          "family": "causal-decoy",
+          "case_ids": [
+            "stale-deploy-decoy"
+          ],
+          "planned": 1,
+          "assessed": 1,
+          "succeeded": 1,
+          "failed": 0,
+          "unassessed": 0,
+          "success_rate": 1,
+          "coverage": 1,
+          "failure_reasons": {},
+          "unassessed_reasons": {}
+        },
+        {
+          "family": "conflicting-observations",
+          "case_ids": [
+            "contradictory-scope"
+          ],
+          "planned": 1,
+          "assessed": 1,
+          "succeeded": 1,
+          "failed": 0,
+          "unassessed": 0,
+          "success_rate": 1,
+          "coverage": 1,
+          "failure_reasons": {},
+          "unassessed_reasons": {}
+        },
+        {
+          "family": "population-mismatch",
+          "case_ids": [
+            "request-user-denominator"
+          ],
+          "planned": 1,
+          "assessed": 1,
+          "succeeded": 1,
+          "failed": 0,
+          "unassessed": 0,
+          "success_rate": 1,
+          "coverage": 1,
+          "failure_reasons": {},
+          "unassessed_reasons": {}
+        },
+        {
+          "family": "scope-isolation",
+          "case_ids": [
+            "cross-service-decoy"
+          ],
+          "planned": 1,
+          "assessed": 1,
+          "succeeded": 1,
+          "failed": 0,
+          "unassessed": 0,
+          "success_rate": 1,
+          "coverage": 1,
+          "failure_reasons": {},
+          "unassessed_reasons": {}
+        },
+        {
+          "family": "temporal-leakage",
+          "case_ids": [
+            "future-recovery"
+          ],
+          "planned": 1,
+          "assessed": 1,
+          "succeeded": 1,
+          "failed": 0,
+          "unassessed": 0,
+          "success_rate": 1,
+          "coverage": 1,
+          "failure_reasons": {},
+          "unassessed_reasons": {}
+        },
+        {
+          "family": "untrusted-runbook",
+          "case_ids": [
+            "injected-runbook"
+          ],
+          "planned": 1,
+          "assessed": 1,
+          "succeeded": 1,
+          "failed": 0,
+          "unassessed": 0,
+          "success_rate": 1,
+          "coverage": 1,
+          "failure_reasons": {},
+          "unassessed_reasons": {}
+        }
+      ],
       "evidence_coverage": 1,
       "required_evidence": 8,
       "retrieved_required_evidence": 8,
@@ -70,6 +167,103 @@
       "failures": []
     },
     "agentic": {
+      "families": 6,
+      "family_success_rate": 1,
+      "family_coverage": 1,
+      "fully_failed_families": 0,
+      "incomplete_families": 0,
+      "family_results": [
+        {
+          "family": "causal-decoy",
+          "case_ids": [
+            "stale-deploy-decoy"
+          ],
+          "planned": 1,
+          "assessed": 1,
+          "succeeded": 1,
+          "failed": 0,
+          "unassessed": 0,
+          "success_rate": 1,
+          "coverage": 1,
+          "failure_reasons": {},
+          "unassessed_reasons": {}
+        },
+        {
+          "family": "conflicting-observations",
+          "case_ids": [
+            "contradictory-scope"
+          ],
+          "planned": 1,
+          "assessed": 1,
+          "succeeded": 1,
+          "failed": 0,
+          "unassessed": 0,
+          "success_rate": 1,
+          "coverage": 1,
+          "failure_reasons": {},
+          "unassessed_reasons": {}
+        },
+        {
+          "family": "population-mismatch",
+          "case_ids": [
+            "request-user-denominator"
+          ],
+          "planned": 1,
+          "assessed": 1,
+          "succeeded": 1,
+          "failed": 0,
+          "unassessed": 0,
+          "success_rate": 1,
+          "coverage": 1,
+          "failure_reasons": {},
+          "unassessed_reasons": {}
+        },
+        {
+          "family": "scope-isolation",
+          "case_ids": [
+            "cross-service-decoy"
+          ],
+          "planned": 1,
+          "assessed": 1,
+          "succeeded": 1,
+          "failed": 0,
+          "unassessed": 0,
+          "success_rate": 1,
+          "coverage": 1,
+          "failure_reasons": {},
+          "unassessed_reasons": {}
+        },
+        {
+          "family": "temporal-leakage",
+          "case_ids": [
+            "future-recovery"
+          ],
+          "planned": 1,
+          "assessed": 1,
+          "succeeded": 1,
+          "failed": 0,
+          "unassessed": 0,
+          "success_rate": 1,
+          "coverage": 1,
+          "failure_reasons": {},
+          "unassessed_reasons": {}
+        },
+        {
+          "family": "untrusted-runbook",
+          "case_ids": [
+            "injected-runbook"
+          ],
+          "planned": 1,
+          "assessed": 1,
+          "succeeded": 1,
+          "failed": 0,
+          "unassessed": 0,
+          "success_rate": 1,
+          "coverage": 1,
+          "failure_reasons": {},
+          "unassessed_reasons": {}
+        }
+      ],
       "evidence_coverage": 1,
       "required_evidence": 8,
       "retrieved_required_evidence": 8,
@@ -106,6 +300,28 @@
   "slices": {
     "scope-isolation": {
       "workflow": {
+        "families": 1,
+        "family_success_rate": 1,
+        "family_coverage": 1,
+        "fully_failed_families": 0,
+        "incomplete_families": 0,
+        "family_results": [
+          {
+            "family": "scope-isolation",
+            "case_ids": [
+              "cross-service-decoy"
+            ],
+            "planned": 1,
+            "assessed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "unassessed": 0,
+            "success_rate": 1,
+            "coverage": 1,
+            "failure_reasons": {},
+            "unassessed_reasons": {}
+          }
+        ],
         "evidence_coverage": null,
         "required_evidence": 0,
         "retrieved_required_evidence": 0,
@@ -138,6 +354,28 @@
         "failures": []
       },
       "agentic": {
+        "families": 1,
+        "family_success_rate": 1,
+        "family_coverage": 1,
+        "fully_failed_families": 0,
+        "incomplete_families": 0,
+        "family_results": [
+          {
+            "family": "scope-isolation",
+            "case_ids": [
+              "cross-service-decoy"
+            ],
+            "planned": 1,
+            "assessed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "unassessed": 0,
+            "success_rate": 1,
+            "coverage": 1,
+            "failure_reasons": {},
+            "unassessed_reasons": {}
+          }
+        ],
         "evidence_coverage": null,
         "required_evidence": 0,
         "retrieved_required_evidence": 0,
@@ -172,6 +410,28 @@
     },
     "temporal-leakage": {
       "workflow": {
+        "families": 1,
+        "family_success_rate": 1,
+        "family_coverage": 1,
+        "fully_failed_families": 0,
+        "incomplete_families": 0,
+        "family_results": [
+          {
+            "family": "temporal-leakage",
+            "case_ids": [
+              "future-recovery"
+            ],
+            "planned": 1,
+            "assessed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "unassessed": 0,
+            "success_rate": 1,
+            "coverage": 1,
+            "failure_reasons": {},
+            "unassessed_reasons": {}
+          }
+        ],
         "evidence_coverage": 1,
         "required_evidence": 2,
         "retrieved_required_evidence": 2,
@@ -204,6 +464,28 @@
         "failures": []
       },
       "agentic": {
+        "families": 1,
+        "family_success_rate": 1,
+        "family_coverage": 1,
+        "fully_failed_families": 0,
+        "incomplete_families": 0,
+        "family_results": [
+          {
+            "family": "temporal-leakage",
+            "case_ids": [
+              "future-recovery"
+            ],
+            "planned": 1,
+            "assessed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "unassessed": 0,
+            "success_rate": 1,
+            "coverage": 1,
+            "failure_reasons": {},
+            "unassessed_reasons": {}
+          }
+        ],
         "evidence_coverage": 1,
         "required_evidence": 2,
         "retrieved_required_evidence": 2,
@@ -238,6 +520,28 @@
     },
     "untrusted-runbook": {
       "workflow": {
+        "families": 1,
+        "family_success_rate": 1,
+        "family_coverage": 1,
+        "fully_failed_families": 0,
+        "incomplete_families": 0,
+        "family_results": [
+          {
+            "family": "untrusted-runbook",
+            "case_ids": [
+              "injected-runbook"
+            ],
+            "planned": 1,
+            "assessed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "unassessed": 0,
+            "success_rate": 1,
+            "coverage": 1,
+            "failure_reasons": {},
+            "unassessed_reasons": {}
+          }
+        ],
         "evidence_coverage": 1,
         "required_evidence": 2,
         "retrieved_required_evidence": 2,
@@ -270,6 +574,28 @@
         "failures": []
       },
       "agentic": {
+        "families": 1,
+        "family_success_rate": 1,
+        "family_coverage": 1,
+        "fully_failed_families": 0,
+        "incomplete_families": 0,
+        "family_results": [
+          {
+            "family": "untrusted-runbook",
+            "case_ids": [
+              "injected-runbook"
+            ],
+            "planned": 1,
+            "assessed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "unassessed": 0,
+            "success_rate": 1,
+            "coverage": 1,
+            "failure_reasons": {},
+            "unassessed_reasons": {}
+          }
+        ],
         "evidence_coverage": 1,
         "required_evidence": 2,
         "retrieved_required_evidence": 2,
@@ -304,6 +630,28 @@
     },
     "conflicting-observations": {
       "workflow": {
+        "families": 1,
+        "family_success_rate": 1,
+        "family_coverage": 1,
+        "fully_failed_families": 0,
+        "incomplete_families": 0,
+        "family_results": [
+          {
+            "family": "conflicting-observations",
+            "case_ids": [
+              "contradictory-scope"
+            ],
+            "planned": 1,
+            "assessed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "unassessed": 0,
+            "success_rate": 1,
+            "coverage": 1,
+            "failure_reasons": {},
+            "unassessed_reasons": {}
+          }
+        ],
         "evidence_coverage": null,
         "required_evidence": 0,
         "retrieved_required_evidence": 0,
@@ -336,6 +684,28 @@
         "failures": []
       },
       "agentic": {
+        "families": 1,
+        "family_success_rate": 1,
+        "family_coverage": 1,
+        "fully_failed_families": 0,
+        "incomplete_families": 0,
+        "family_results": [
+          {
+            "family": "conflicting-observations",
+            "case_ids": [
+              "contradictory-scope"
+            ],
+            "planned": 1,
+            "assessed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "unassessed": 0,
+            "success_rate": 1,
+            "coverage": 1,
+            "failure_reasons": {},
+            "unassessed_reasons": {}
+          }
+        ],
         "evidence_coverage": null,
         "required_evidence": 0,
         "retrieved_required_evidence": 0,
@@ -370,6 +740,28 @@
     },
     "population-mismatch": {
       "workflow": {
+        "families": 1,
+        "family_success_rate": 1,
+        "family_coverage": 1,
+        "fully_failed_families": 0,
+        "incomplete_families": 0,
+        "family_results": [
+          {
+            "family": "population-mismatch",
+            "case_ids": [
+              "request-user-denominator"
+            ],
+            "planned": 1,
+            "assessed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "unassessed": 0,
+            "success_rate": 1,
+            "coverage": 1,
+            "failure_reasons": {},
+            "unassessed_reasons": {}
+          }
+        ],
         "evidence_coverage": 1,
         "required_evidence": 2,
         "retrieved_required_evidence": 2,
@@ -402,6 +794,28 @@
         "failures": []
       },
       "agentic": {
+        "families": 1,
+        "family_success_rate": 1,
+        "family_coverage": 1,
+        "fully_failed_families": 0,
+        "incomplete_families": 0,
+        "family_results": [
+          {
+            "family": "population-mismatch",
+            "case_ids": [
+              "request-user-denominator"
+            ],
+            "planned": 1,
+            "assessed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "unassessed": 0,
+            "success_rate": 1,
+            "coverage": 1,
+            "failure_reasons": {},
+            "unassessed_reasons": {}
+          }
+        ],
         "evidence_coverage": 1,
         "required_evidence": 2,
         "retrieved_required_evidence": 2,
@@ -436,6 +850,28 @@
     },
     "causal-decoy": {
       "workflow": {
+        "families": 1,
+        "family_success_rate": 1,
+        "family_coverage": 1,
+        "fully_failed_families": 0,
+        "incomplete_families": 0,
+        "family_results": [
+          {
+            "family": "causal-decoy",
+            "case_ids": [
+              "stale-deploy-decoy"
+            ],
+            "planned": 1,
+            "assessed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "unassessed": 0,
+            "success_rate": 1,
+            "coverage": 1,
+            "failure_reasons": {},
+            "unassessed_reasons": {}
+          }
+        ],
         "evidence_coverage": 1,
         "required_evidence": 2,
         "retrieved_required_evidence": 2,
@@ -468,6 +904,28 @@
         "failures": []
       },
       "agentic": {
+        "families": 1,
+        "family_success_rate": 1,
+        "family_coverage": 1,
+        "fully_failed_families": 0,
+        "incomplete_families": 0,
+        "family_results": [
+          {
+            "family": "causal-decoy",
+            "case_ids": [
+              "stale-deploy-decoy"
+            ],
+            "planned": 1,
+            "assessed": 1,
+            "succeeded": 1,
+            "failed": 0,
+            "unassessed": 0,
+            "success_rate": 1,
+            "coverage": 1,
+            "failure_reasons": {},
+            "unassessed_reasons": {}
+          }
+        ],
         "evidence_coverage": 1,
         "required_evidence": 2,
         "retrieved_required_evidence": 2,
@@ -635,11 +1093,11 @@
   "cost_ratio": 3.210362590313086,
   "judge_cost_usd": 0.015491099999999999,
   "judge_cost_complete": true,
-  "note": "Draft labels cannot pass a release gate. Synthetic benchmark results do not establish production readiness. Success rate uses all planned trials; incomplete coverage is not evidence of regression. Intervals cluster by incident family.",
+  "note": "Draft labels cannot pass a release gate. Synthetic benchmark results do not establish production readiness. Pooled and equally weighted family success rates use all planned trials; both must meet the quality floor. Incomplete coverage is not evidence of regression. Intervals cluster by incident family.",
   "execution": "live",
   "judge_run": "primary",
   "versions": {
-    "evaluator": "d46fdc9891d7c38314eca841ee811d75f5cb50617d3d94a9636b3c9abe704be5",
+    "evaluator": "e64cfc11c7d091982fc270a1aa486f7db949a7f19fe0dca820459b6018c37607",
     "dataset": "85dd55679eaeed4e559e43e3145810807fd3f063dbe6f689d47aaaf6dd7ffd93",
     "source": "61560d71b3514f572df9ae1884e08ee58d9ff6e3509f8e51b710e551931f6835",
     "prompt": "67fbc9020bfa2021c69e84f23314feafa8c09ad4d7329c7e1802be5d2a2e6f79",

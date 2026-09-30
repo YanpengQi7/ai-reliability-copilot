@@ -8,6 +8,7 @@ import { hash } from "./artifacts";
 import { plannedTrials } from "./engine";
 import { alertEvidence, visibleEvidence } from "./dataset";
 import { pairedClusterInterval, quantile } from "./statistics";
+import { summarizeFamilyQuality } from "./familyQuality";
 
 export function trialOutcome(t: Trial, c: EvalCase, j: Judgment | null): { success: boolean | null; reasons: string[] } {
   if (["failed", "interrupted"].includes(t.status)) return { success: false, reasons: [t.status] };
@@ -76,7 +77,8 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
     const retrieved = selected.reduce((s, r) => s + r.retrieved, 0);
     const attempted = selected.filter(r => r.trial.calls.length || r.trial.elapsed_ms > 0);
     const graded = selected.filter(r => r.judged !== null);
-    return { evidence_coverage: required ? retrieved / required : null,
+    return { ...summarizeFamilyQuality(selected.map(r => ({ family: r.trial.family, case_id: r.trial.case_id, success: r.success, reasons: r.reasons }))),
+      evidence_coverage: required ? retrieved / required : null,
       required_evidence: required, retrieved_required_evidence: retrieved,
       invalid_claims: selected.flatMap(r => r.claimChecks).filter(c => c.errors.length).length,
       diagnosis_integrity_failures: selected.filter(r => r.diagnosisIssues.length).length,
@@ -116,7 +118,10 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
   const baseCost = modes[baseline]?.cost_per_success;
   const agentCost = modes.agentic?.cost_per_success;
   const costRatio = baseCost && agentCost !== null && agentCost !== undefined ? agentCost / baseCost : null;
-  const meetsAbsoluteQuality = (modes.agentic?.success_rate ?? 0) >= (m.protocol.min_success_rate ?? 0.8);
+  const qualityFloor = m.protocol.min_success_rate ?? 0.8;
+  const meetsPooledQuality = (modes.agentic?.success_rate ?? 0) >= qualityFloor;
+  const meetsFamilyQuality = (modes.agentic?.family_success_rate ?? 0) >= qualityFloor;
+  const meetsAbsoluteQuality = meetsPooledQuality && meetsFamilyQuality;
   if (complete && accounting?.complete !== false && !unsafe && !draft && calibrated && m.model !== "mock" && comparison && comparison.families >= m.protocol.min_families && comparison.lower !== null && costRatio !== null) {
     if (meetsAbsoluteQuality && comparison.lower >= -m.protocol.noninferiority_margin && costRatio <= m.protocol.max_cost_ratio && testOnly && m.engine_version === INVESTIGATION_ENGINE_VERSION) gate = "passed";
     else if (!meetsAbsoluteQuality || comparison.upper! < -m.protocol.noninferiority_margin || costRatio > m.protocol.max_cost_ratio) gate = "regression";
@@ -126,7 +131,8 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
   if (accounting?.complete === false) gateReasons.push("unresolved_call_costs");
   if (!complete) gateReasons.push("incomplete_trial_or_judgment_coverage");
   if (unsafe) gateReasons.push("critical_safety_or_grounding_failure");
-  if (complete && !meetsAbsoluteQuality) gateReasons.push("candidate_below_absolute_success_floor");
+  if (complete && !meetsPooledQuality) gateReasons.push("candidate_below_absolute_success_floor");
+  if (complete && !meetsFamilyQuality) gateReasons.push("candidate_below_family_success_floor");
   if (draft) gateReasons.push("unreviewed_dataset_labels");
   if (!testOnly) gateReasons.push("non_test_dataset");
   if (!calibrated) gateReasons.push("judge_calibration_missing_or_incompatible");
@@ -136,15 +142,28 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
   else if (costRatio > m.protocol.max_cost_ratio) gateReasons.push("candidate_cost_exceeds_limit");
   if (comparison?.lower !== null && comparison?.lower !== undefined && comparison.lower < -m.protocol.noninferiority_margin) gateReasons.push("noninferiority_not_established");
   const trialOutcomes = rows.map(r => ({ id: r.trial.id, case_id: r.trial.case_id, family: r.trial.family, mode: r.trial.mode, language: r.trial.language, repeat: r.trial.repeat, success: r.success, reasons: r.reasons }));
-  return { run_id: m.id, engine_version: m.engine_version, dataset_splits: datasetSplits, accounting, gate, gate_reasons: gateReasons, draft_labels: draft, calibrated, modes, slices, trial_outcomes: trialOutcomes, comparison, cost_ratio: costRatio, judge_cost_usd: judgments.reduce((s, j) => s + j.calls.reduce((x, c) => x + (c.cost_usd ?? 0), 0), 0), judge_cost_complete: judgments.every(j => j.calls.every(c => c.cost_usd !== null)), note: "Draft labels cannot pass a release gate. Synthetic benchmark results do not establish production readiness. Success rate uses all planned trials; incomplete coverage is not evidence of regression. Intervals cluster by incident family." };
+  return { run_id: m.id, engine_version: m.engine_version, dataset_splits: datasetSplits, accounting, gate, gate_reasons: gateReasons, draft_labels: draft, calibrated, modes, slices, trial_outcomes: trialOutcomes, comparison, cost_ratio: costRatio, judge_cost_usd: judgments.reduce((s, j) => s + j.calls.reduce((x, c) => x + (c.cost_usd ?? 0), 0), 0), judge_cost_complete: judgments.every(j => j.calls.every(c => c.cost_usd !== null)), note: "Draft labels cannot pass a release gate. Synthetic benchmark results do not establish production readiness. Pooled and equally weighted family success rates use all planned trials; both must meet the quality floor. Incomplete coverage is not evidence of regression. Intervals cluster by incident family." };
 }
 
 export function reportMarkdown(report: ReturnType<typeof buildReport>): string {
+  const percent = (value: number | null) => value === null ? "unknown" : `${(100 * value).toFixed(1)}%`;
+  const familyQuality = [
+    "\n| Mode | Pooled success | Family success | Family coverage | Fully failed families | Incomplete families |",
+    "|---|---:|---:|---:|---:|---:|",
+    ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${percent(s.success_rate)} | ${percent(s.family_success_rate)} | ${percent(s.family_coverage)} | ${s.fully_failed_families} / ${s.families} | ${s.incomplete_families} |`),
+    "\nEach family receives equal weight. Unassessed trials remain in planned denominators and are shown separately from failures. Both pooled and family success must meet the release floor.",
+    "\n| Mode | Family | Assessed / planned | Success | Failure reasons | Unassessed reasons |",
+    "|---|---|---:|---:|---|---|",
+    ...Object.entries(report.modes).flatMap(([mode, s]) => s.family_results.map(f => ({ mode, ...f })))
+      .sort((a, b) => a.success_rate - b.success_rate || a.family.localeCompare(b.family) || a.mode.localeCompare(b.mode))
+      .slice(0, 30).map(f => `| ${f.mode} | ${f.family} | ${f.assessed} / ${f.planned} | ${percent(f.success_rate)} | ${Object.entries(f.failure_reasons).map(([r, n]) => `${r}: ${n}`).join(", ") || "none"} | ${Object.entries(f.unassessed_reasons).map(([r, n]) => `${r}: ${n}`).join(", ") || "none"} |`),
+    "\nUp to 30 lowest-scoring mode/family rows are shown above; all families and case IDs are in report.json.",
+  ].join("\n");
   const decisionHistory = [
     "\n| Mode | Audited decision histories | History errors | Missing histories | Diagnosis integrity failures | Rejected evidence reads |",
     "|---|---:|---:|---:|---:|---:|",
     ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.audited_decision_trials} | ${s.decision_history_errors} | ${s.missing_decision_histories} | ${s.diagnosis_integrity_failures} | ${s.rejected_evidence_reads} |`),
     "\nDecision audits check recorded citation timing and control flow, not semantic correctness. Shared-engine agentic trials require valid histories to count as successful.",
   ].join("\n");
-  return [`# Evaluation ${report.run_id}`, `\nGate: **${report.gate}**. Draft labels: ${report.draft_labels}.`, `\nInvestigation engine: ${report.engine_version}.`, `\n${report.note}`, `\nDataset cases by split: dev=${report.dataset_splits.dev}, validation=${report.dataset_splits.validation}, test=${report.dataset_splits.test}. Only test-only runs can pass the release gate; split labels do not establish an unseen holdout.`, `\nGate reasons: ${report.gate_reasons.join(", ") || "all checks passed"}.`, ...(report.accounting ? [`\nRun accounting: $${report.accounting.accounted_cost_usd.toFixed(6)} (known usage plus unresolved reservations). ${report.accounting.scope}`] : []), "\n| Mode | Planned | Assessed | Success | Cost/success |", "|---|---:|---:|---:|---:|", ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.planned} | ${s.assessed} | ${s.succeeded} | ${s.cost_per_success === null ? "unknown / no successes" : s.cost_per_success.toFixed(5)} |`), `\nComparison (paired family bootstrap):\n\n\`\`\`json\n${JSON.stringify(report.comparison, null, 2)}\n\`\`\``, decisionHistory, "\nDetailed slices, costs, and failures: report.json.\n"].join("\n");
+  return [`# Evaluation ${report.run_id}`, `\nGate: **${report.gate}**. Draft labels: ${report.draft_labels}.`, `\nInvestigation engine: ${report.engine_version}.`, `\n${report.note}`, `\nDataset cases by split: dev=${report.dataset_splits.dev}, validation=${report.dataset_splits.validation}, test=${report.dataset_splits.test}. Only test-only runs can pass the release gate; split labels do not establish an unseen holdout.`, `\nGate reasons: ${report.gate_reasons.join(", ") || "all checks passed"}.`, ...(report.accounting ? [`\nRun accounting: $${report.accounting.accounted_cost_usd.toFixed(6)} (known usage plus unresolved reservations). ${report.accounting.scope}`] : []), "\n| Mode | Planned | Assessed | Success | Cost/success |", "|---|---:|---:|---:|---:|", ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.planned} | ${s.assessed} | ${s.succeeded} | ${s.cost_per_success === null ? "unknown / no successes" : s.cost_per_success.toFixed(5)} |`), `\nComparison (paired family bootstrap):\n\n\`\`\`json\n${JSON.stringify(report.comparison, null, 2)}\n\`\`\``, familyQuality, decisionHistory, "\nDetailed slices, costs, and failures: report.json.\n"].join("\n");
 }

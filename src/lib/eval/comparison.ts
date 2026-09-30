@@ -78,7 +78,20 @@ export function compareRuns(baseline: ComparisonRun, candidate: ComparisonRun) {
   const modes = Object.fromEntries(a.modes.map(mode => {
     const left = baselineReport.modes[mode], right = candidateReport.modes[mode];
     const knownCost = left.cost_complete && right.cost_complete && baselineReport.accounting!.complete && candidateReport.accounting!.complete;
+    const leftFamilies = new Map(left.family_results.map(f => [f.family, f]));
+    const familyResults = right.family_results.map(f => {
+      const before = leftFamilies.get(f.family)!;
+      return { family: f.family, case_ids: f.case_ids,
+        baseline_success_rate: before.success_rate, candidate_success_rate: f.success_rate,
+        baseline_coverage: before.coverage, candidate_coverage: f.coverage,
+        delta: before.unassessed === 0 && f.unassessed === 0 ? f.success_rate - before.success_rate : null,
+        baseline_failure_reasons: before.failure_reasons, candidate_failure_reasons: f.failure_reasons,
+        baseline_unassessed_reasons: before.unassessed_reasons, candidate_unassessed_reasons: f.unassessed_reasons };
+    }).sort((x, y) => (x.delta ?? Infinity) - (y.delta ?? Infinity) || x.family.localeCompare(y.family));
     return [mode, { ...summarize(pairs.filter(p => p.mode === mode)), baseline_success_rate: left.success_rate, candidate_success_rate: right.success_rate,
+      baseline_family_success_rate: left.family_success_rate, candidate_family_success_rate: right.family_success_rate,
+      baseline_family_coverage: left.family_coverage, candidate_family_coverage: right.family_coverage,
+      family_results: familyResults,
       baseline_known_generation_cost_usd: left.known_cost_usd, candidate_known_generation_cost_usd: right.known_cost_usd,
       generation_cost_delta_usd: knownCost ? right.known_cost_usd - left.known_cost_usd : null }];
   }));
@@ -107,6 +120,10 @@ export function comparisonMarkdown(comparison: ReturnType<typeof compareRuns>) {
     "\n| Mode | Paired / planned | Fixed | Regressed | Persistent failures | Family delta (95% interval) | Cost delta (USD) | Scope |",
     "|---|---:|---:|---:|---:|---|---|---|",
     ...Object.entries(comparison.modes).map(([mode, s]) => `| ${mode} | ${s.paired_assessed} / ${s.planned} | ${s.fixed} | ${s.regressed} | ${s.persistent_failures} | ${s.interval.delta ?? "unknown"} (${s.interval.lower ?? "unknown"}, ${s.interval.upper ?? "unknown"}) | ${s.generation_cost_delta_usd ?? "unknown"} | ${s.scope} |`),
+    "\n| Mode | Baseline family success | Candidate family success | Baseline family coverage | Candidate family coverage |",
+    "|---|---:|---:|---:|---:|",
+    ...Object.entries(comparison.modes).map(([mode, s]) => `| ${mode} | ${s.baseline_family_success_rate ?? "unknown"} | ${s.candidate_family_success_rate ?? "unknown"} | ${s.baseline_family_coverage ?? "unknown"} | ${s.candidate_family_coverage ?? "unknown"} |`),
+    "\nFamily success uses all planned trials and weights families equally. Per-family deltas require complete coverage in both runs; missing assessments are not regressions. Family details and failure reasons are in the companion JSON.",
     "\n## Cases to inspect\n", ...details.slice(0, 30).map(p => `- ${p.id}: ${p.transition}. Baseline: ${p.baseline_reasons.join(", ") || "accepted"}. Candidate: ${p.candidate_reasons.join(", ") || "accepted"}.`),
     details.length ? `\nAll ${details.length} case transitions and failure reasons are in the companion JSON.` : "No fixes, regressions, missing assessments or persistent failures.",
   ].join("\n");

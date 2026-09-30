@@ -7,7 +7,7 @@ import { hash } from "./artifacts";
 import { DiagnosisSchema, ManifestSchema, TrialSchema, JudgmentSchema, type Judgment } from "./contracts";
 import { calibrationPack, summarizeCalibration } from "./calibration";
 import { EVAL_JUDGE_PROMPT, generateTrial, plannedTrials, type EvalModel } from "./engine";
-import { buildReport } from "./report";
+import { buildReport, reportMarkdown } from "./report";
 
 const cases = loadDataset("evals/datasets/sre-v2/cases.json").slice(0, 1);
 const manifest = ManifestSchema.parse({ version: "eval-v2", engine_version: INVESTIGATION_ENGINE_VERSION, id: "integrity", created_at: "now", git_sha: "sha", dirty: false, source_hash: "source", dataset_hash: hash(cases), prompt_hash: "prompt", schema_hash: "schema", rubric_hash: "rubric", policy_version: "impact-v2", model: "live", judge_model: "judge", modes: ["workflow", "agentic"], languages: ["en"], repeats: 1, seed: 1, budget: { max_usd: 1, per_call_usd: 1, max_calls: 10, max_minutes: 10, max_output_tokens: 100, input_per_million: 1, output_per_million: 1, judge_input_per_million: 1, judge_output_per_million: 1 }, case_ids: cases.map(c => c.id), protocol: { min_families: 2, noninferiority_margin: 0.05, max_cost_ratio: 2 } });
@@ -201,6 +201,33 @@ describe("evaluation artifact integrity", () => {
     expect(unresolved.gate).toBe("inconclusive");
     expect(unresolved.gate_reasons).toContain("unresolved_call_costs");
 
+  });
+
+  it("blocks release when easy-case padding hides a failed family, and keeps missing grades incomplete", () => {
+    const reviewed = Array.from({ length: 9 }, (_, i) => ({ ...cases[0], id: `quality-case-${i}`, family: i < 8 ? "easy-family" : "hard-family",
+      split: "test" as const, gold: { ...cases[0].gold, review_status: "gold" as const, reviewers: ["a", "b"] } }));
+    const m = { ...manifest, dataset_hash: hash(reviewed), case_ids: reviewed.map(c => c.id),
+      calibration: { judge_model: "judge", prompt_hash: "rubric", pack_hash: "pack", labels_hash: "labels", n: 30, precision: 1, recall: 1, reviewed: true, execution: "live" as const } };
+    const { t, j } = success();
+    const trials = plannedTrials(m, reviewed).map(plan => ({ ...t, ...plan, status: "succeeded" as const, diagnosis: t.diagnosis, evidence: t.evidence,
+      decisions: [{ hypotheses: [], done: false, tool: "get_metrics" as const, query: "", reason: "Inspect" }, { hypotheses: [], done: true, tool: "get_metrics" as const, query: "", reason: "Stop" }],
+      trace: [{ tool: "get_metrics", input: { service: cases[0].alert.service }, evidence_ids: t.evidence.map(e => e.id), observation: "Fixture evidence" }],
+      calls: [{ input: 1, output: 1, model: "live", purpose: "generation" as const, cost_usd: 0.001 }] }));
+    const judgments = trials.map(trial => ({ ...j, trial_id: trial.id, trial_hash: hash(trial), verdict: { ...j.verdict!, root_cause_acceptable: trial.family === "easy-family" } }));
+    const report = buildReport(m, reviewed, trials, judgments);
+    expect(report.modes.agentic.success_rate).toBeCloseTo(8 / 9);
+    expect(report.modes.agentic.family_success_rate).toBe(0.5);
+    expect(report.comparison?.delta).toBe(0);
+    expect(report.cost_ratio).toBe(1);
+    expect(report.gate).toBe("regression");
+    expect(report.gate_reasons).toEqual(["candidate_below_family_success_floor"]);
+    expect(report.modes.agentic.family_results[0]).toMatchObject({ family: "hard-family", failed: 1, failure_reasons: { root_cause: 1 } });
+    expect(reportMarkdown(report)).toContain("hard-family");
+    expect(buildReport({ ...m, protocol: { ...m.protocol, min_success_rate: 0.5 } }, reviewed, trials, judgments).gate).toBe("passed");
+    const missing = buildReport(m, reviewed, trials, judgments.filter(j => !j.trial_id.startsWith("quality-case-8")));
+    expect(missing.gate).toBe("incomplete");
+    expect(missing.gate_reasons).not.toContain("candidate_below_family_success_floor");
+    expect(missing.modes.agentic).toMatchObject({ family_coverage: 0.5, fully_failed_families: 0, incomplete_families: 1 });
   });
 
   it("requires output for successful artifact statuses", () => {

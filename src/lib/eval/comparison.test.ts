@@ -30,6 +30,9 @@ describe("paired comparisons between saved runs", () => {
     expect(result.changes.find(p => p.transition === "regressed")?.candidate_reasons).toContain("root_cause");
     expect(result.persistent_failures).toHaveLength(1);
     expect(result.modes.full.interval.delta).toBe(0);
+    expect(result.modes.full.baseline_family_success_rate).toBeCloseTo(1 / 3);
+    expect(result.modes.full.candidate_family_success_rate).toBeCloseTo(1 / 3);
+    expect(result.modes.full.family_results[0]).toMatchObject({ family: cases[1].family, delta: -1, candidate_failure_reasons: { root_cause: 1 } });
     expect(result.changed_configuration).toEqual(["source_hash"]);
     expect(comparisonMarkdown(result)).toContain("persistent_failure");
     expect(JSON.stringify(result)).not.toContain("Fixture diagnosis");
@@ -43,6 +46,9 @@ describe("paired comparisons between saved runs", () => {
     expect(result.modes.full).toMatchObject({ planned: 3, paired_assessed: 1, unassessed: 2, fixed: 0, regressed: 0 });
     expect(result.modes.full.inference_ready).toBe(false);
     expect(result.changes.every(p => p.transition === "unassessed")).toBe(true);
+    expect(result.modes.full.candidate_family_coverage).toBeCloseTo(1 / 3);
+    expect(result.modes.full.family_results.filter(f => f.delta === null)).toHaveLength(2);
+    expect(result.modes.full.family_results.find(f => f.family === cases[1].family)?.candidate_unassessed_reasons).toEqual({ unscored_or_stale: 1 });
   });
   it("reassesses candidates with the same integrity gate used by production and reports", () => {
     const candidate = fixture("candidate");

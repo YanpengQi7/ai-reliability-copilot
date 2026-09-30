@@ -3,6 +3,7 @@ import type { buildReport } from "@/lib/eval/report";
 import exportedReport from "../../../../evals/public/latest.json";
 
 const report = exportedReport as ReturnType<typeof buildReport> & { execution: string; versions: Record<string, string> };
+const percent = (value: number | null) => value === null ? "Not available" : `${(value * 100).toFixed(1)}%`;
 
 export default function BenchmarkPage() {
   const mock = report.execution === "mock";
@@ -27,6 +28,16 @@ export default function BenchmarkPage() {
           <thead><tr className="text-neutral-400"><th className="p-2">Approach</th><th className="p-2">Planned</th><th className="p-2">Assessed</th><th className="p-2">Checks passed</th><th className="p-2">Required evidence retrieved</th><th className="p-2">All attempts p95</th><th className="p-2">Cost / success</th></tr></thead>
           <tbody>{Object.entries(report.modes).map(([mode, s]) => <tr key={mode} className="border-t border-neutral-800"><td className="p-2">{mode}</td><td className="p-2">{s.planned}</td><td className="p-2">{s.assessed}</td><td className="p-2">{mock ? "Not measured" : `${s.succeeded}/${s.planned}`}</td><td className="p-2">{s.evidence_coverage === null ? "Not applicable" : `${Math.round(s.evidence_coverage * 100)}%`}</td><td className="p-2">{s.attempted_p95_ms === null ? "Not available" : `${(s.attempted_p95_ms / 1000).toFixed(1)}s`}</td><td className="p-2">{s.cost_per_success === null ? "Not available" : `$${Number(s.cost_per_success).toFixed(5)}`}</td></tr>)}</tbody>
         </table>
+      </section>
+      <section className="overflow-x-auto rounded-xl border border-neutral-800 p-5">
+        <h2 className="mb-3 text-lg font-semibold">Reliability across incident families</h2>
+        <p className="mb-4 text-sm text-neutral-400">Each incident family receives equal weight, so many similar cases cannot hide failures in other incident types. Both the overall and family success rates must meet the release threshold.</p>
+        <table className="w-full text-left text-sm">
+          <thead><tr className="text-neutral-400"><th scope="col" className="p-2">Approach</th><th scope="col" className="p-2">Overall success</th><th scope="col" className="p-2">Family success</th><th scope="col" className="p-2">Family coverage</th><th scope="col" className="p-2">Families with all trials failing</th><th scope="col" className="p-2">Incomplete families</th></tr></thead>
+          <tbody>{Object.entries(report.modes).map(([mode, s]) => <tr key={mode} className="border-t border-neutral-800"><th scope="row" className="p-2 font-normal">{mode}</th><td className="p-2">{mock ? "Not measured" : percent(s.success_rate)}</td><td className="p-2">{mock ? "Not measured" : percent(s.family_success_rate)}</td><td className="p-2">{percent(s.family_coverage)}</td><td className="p-2">{mock ? "Not measured" : `${s.fully_failed_families}/${s.families}`}</td><td className="p-2">{s.incomplete_families}</td></tr>)}</tbody>
+        </table>
+        <p className="mt-3 text-sm text-neutral-400">Success rates include all planned trials. Missing grades reduce coverage and remain unresolved; they are not counted as assessed failures.</p>
+        <div className="mt-4 space-y-3">{Object.entries(report.modes).map(([mode, s]) => <details key={mode} className="rounded-lg border border-neutral-800 p-4"><summary className="cursor-pointer">{mode} · {s.families} incident families</summary><ul className="mt-3 space-y-3 text-sm text-neutral-400">{s.family_results.map(f => <li key={f.family}><span className="font-mono text-neutral-200">{f.family}</span>: {mock ? "quality not measured" : `${f.succeeded}/${f.planned} passed`}, {f.assessed}/{f.planned} assessed.<div>Cases: {f.case_ids.join(", ")}</div>{Object.keys(f.failure_reasons).length > 0 && <div>Failure reasons: {Object.entries(f.failure_reasons).map(([reason, count]) => `${reason.replaceAll("_", " ")} (${count})`).join(", ")}</div>}{Object.keys(f.unassessed_reasons).length > 0 && <div>Unresolved reasons: {Object.entries(f.unassessed_reasons).map(([reason, count]) => `${reason.replaceAll("_", " ")} (${count})`).join(", ")}</div>}</li>)}</ul></details>)}</div>
       </section>
       <section className="rounded-xl border border-neutral-800 p-5">
         <h2 className="mb-3 text-lg font-semibold">Experiment identity</h2>
