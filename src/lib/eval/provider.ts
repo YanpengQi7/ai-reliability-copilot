@@ -1,4 +1,4 @@
-import { generateText, Output } from "ai";
+import { generateText, Output, NoObjectGeneratedError, type LanguageModelUsage } from "ai";
 import { z } from "zod";
 import { resolveModel } from "../ai";
 import { ManifestSchema, type Manifest, type CallUsage } from "./contracts";
@@ -40,10 +40,22 @@ export function liveModel(manifest: Manifest, owner: string, budget: Budget, onU
       const reserve = (inputBound * inputPrice + b.max_output_tokens * outputPrice) / 1_000_000;
       const entry = budget.reserve(owner, purpose, reserve);
       let usage: CallUsage | null = null;
+      const recordedUsage = (reported: LanguageModelUsage | undefined, requestId?: string): CallUsage => {
+        const validCount = (count: number | undefined) => typeof count === "number" && Number.isFinite(count) && count >= 0;
+        const inputKnown = validCount(reported?.inputTokens), outputKnown = validCount(reported?.outputTokens);
+        const input = inputKnown ? reported!.inputTokens! : 0, output = outputKnown ? reported!.outputTokens! : 0;
+        return { input, output, cost_usd: inputKnown && outputKnown ? (input * inputPrice + output * outputPrice) / 1_000_000 : null,
+          model: modelId, purpose, ...(typeof requestId === "string" ? { request_id: requestId } : {}) };
+      };
       try {
         const result = await generateText({ model: resolveModel(modelId), output: Output.object({ schema }), system, prompt, ...(manifest.thinking === "disabled" && (modelId.startsWith("deepseek:") || !modelId.includes(":")) ? { providerOptions: { deepseek: { thinking: { type: "disabled" } } } } : {}), temperature: 0, maxRetries: 0, maxOutputTokens: b.max_output_tokens, abortSignal: AbortSignal.timeout(Math.min(120_000, budget.remainingTime())) });
-        usage = { input: result.totalUsage.inputTokens ?? 0, output: result.totalUsage.outputTokens ?? 0, cost_usd: result.totalUsage.inputTokens === undefined || result.totalUsage.outputTokens === undefined ? null : ((result.totalUsage.inputTokens * inputPrice) + (result.totalUsage.outputTokens * outputPrice)) / 1_000_000, model: modelId, purpose, request_id: result.response.id };
+        usage = recordedUsage(result.totalUsage, result.response.id);
         return schema.parse(result.output);
+      } catch (error) {
+        // This SDK error retains usage even though structured output was rejected.
+        // Only take its documented accounting fields, never raw text/cause/bodies.
+        if (usage === null && NoObjectGeneratedError.isInstance(error)) usage = recordedUsage(error.usage, error.response?.id);
+        throw error;
       } finally {
         budget.settle(entry, usage);
         onUsage(usage ?? { input: 0, output: 0, cost_usd: null, model: modelId, purpose });
