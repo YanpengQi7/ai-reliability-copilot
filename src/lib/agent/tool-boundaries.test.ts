@@ -5,6 +5,40 @@ const at = "2026-09-01T00:00:00.000Z";
 const item = (id: string, text: string) => evidenceItem({ id, kind: "metric", source: "fixture", service: "payment-svc", observed_at: at, available_at: at, text });
 
 describe("read-only observation boundaries", () => {
+  it.each(["observed_at", "available_at"] as const)("rejects future %s atomically before trimming observation budgets", async field => {
+    const original = item("original", "known observation");
+    const future = evidenceItem({ ...item("future", "private future observation ".repeat(130)), [field]: "2027-01-01T00:00:00.000Z" });
+    const context = { ctx: { raw_context: "" }, callCounts: {}, evidenceAt: at, evidenceRegistry: [original], adapter: { read: async () => [item("current", "visible"), future] } };
+    const result = await dispatchTool(1, "get_metrics", { service: "payment-svc" }, context);
+    expect(result).toMatchObject({ status: "error", reason: "invalid_evidence" });
+    expect(result.observation).toContain("future_evidence");
+    expect(result.observation).not.toContain("private future observation");
+    expect(result.evidence).toBeUndefined();
+    expect(context.evidenceRegistry).toEqual([original]);
+  });
+  it("rejects forged hashes without accepting any records from the batch", async () => {
+    const context = { ctx: { raw_context: "" }, callCounts: {}, evidenceRegistry: [], adapter: { read: async () => [item("good", "visible"), { ...item("forged", "original"), text: "private forged observation" }] } };
+    const result = await dispatchTool(1, "get_metrics", { service: "payment-svc" }, context);
+    expect(result).toMatchObject({ status: "error", reason: "invalid_evidence" });
+    expect(result.observation).toContain("hash_mismatch");
+    expect(result.observation).not.toContain("private forged observation");
+    expect(context.evidenceRegistry).toEqual([]);
+  });
+  it("rejects conflicting IDs even when the conflicting record would exceed the budget", async () => {
+    const original = item("known", "original");
+    const context = { ctx: { raw_context: "" }, callCounts: {}, evidenceRegistry: [original], adapter: { read: async () => [item("known", "x".repeat(3000)), item("good", "visible")] } };
+    const result = await dispatchTool(1, "get_metrics", { service: "payment-svc" }, context);
+    expect(result).toMatchObject({ status: "error", reason: "invalid_evidence" });
+    expect(result.observation).toContain("conflicting_id");
+    expect(result.evidence).toBeUndefined();
+    expect(context.evidenceRegistry).toEqual([original]);
+  });
+  it("validates the cutoff before making adapter calls", async () => {
+    const read = vi.fn(async () => []);
+    const result = await dispatchTool(1, "get_metrics", { service: "payment-svc" }, { ctx: { raw_context: "" }, callCounts: {}, evidenceAt: "invalid", adapter: { read } });
+    expect(result).toMatchObject({ status: "error", reason: "invalid_evidence" });
+    expect(read).not.toHaveBeenCalled();
+  });
   it("rejects reused IDs across reads and preserves the first observation", async () => {
     const first = item("m1", "errors 10%");
     const read = vi.fn().mockResolvedValueOnce([first]).mockResolvedValueOnce([item("m1", "errors 0%")]).mockResolvedValueOnce([item("m2", "errors 0%")]);

@@ -80,6 +80,8 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
       required_evidence: required, retrieved_required_evidence: retrieved,
       invalid_claims: selected.flatMap(r => r.claimChecks).filter(c => c.errors.length).length,
       diagnosis_integrity_failures: selected.filter(r => r.diagnosisIssues.length).length,
+      rejected_evidence_reads: selected.reduce((sum, r) => sum + r.trial.trace.filter(step => step.reason === "invalid_evidence").length, 0),
+      trials_with_rejected_evidence: selected.filter(r => r.trial.trace.some(step => step.reason === "invalid_evidence")).length,
       critical_unsupported: graded.filter(r => r.judged!.verdict!.critical_unsupported).length,
       semantic_unsupported_claims: graded.reduce((sum, r) => sum + new Set(r.judged!.verdict!.unsupported_claim_ids).size, 0),
       trials_with_semantic_unsupported_claims: graded.filter(r => r.judged!.verdict!.unsupported_claim_ids.length).length,
@@ -139,9 +141,9 @@ export function buildReport(m: Manifest, cases: EvalCase[], trials: Trial[], jud
 
 export function reportMarkdown(report: ReturnType<typeof buildReport>): string {
   const decisionHistory = [
-    "\n| Mode | Audited decision histories | History errors | Missing histories | Diagnosis integrity failures |",
-    "|---|---:|---:|---:|---:|",
-    ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.audited_decision_trials} | ${s.decision_history_errors} | ${s.missing_decision_histories} | ${s.diagnosis_integrity_failures} |`),
+    "\n| Mode | Audited decision histories | History errors | Missing histories | Diagnosis integrity failures | Rejected evidence reads |",
+    "|---|---:|---:|---:|---:|---:|",
+    ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.audited_decision_trials} | ${s.decision_history_errors} | ${s.missing_decision_histories} | ${s.diagnosis_integrity_failures} | ${s.rejected_evidence_reads} |`),
     "\nDecision audits check recorded citation timing and control flow, not semantic correctness. Shared-engine agentic trials require valid histories to count as successful.",
   ].join("\n");
   return [`# Evaluation ${report.run_id}`, `\nGate: **${report.gate}**. Draft labels: ${report.draft_labels}.`, `\nInvestigation engine: ${report.engine_version}.`, `\n${report.note}`, `\nDataset cases by split: dev=${report.dataset_splits.dev}, validation=${report.dataset_splits.validation}, test=${report.dataset_splits.test}. Only test-only runs can pass the release gate; split labels do not establish an unseen holdout.`, `\nGate reasons: ${report.gate_reasons.join(", ") || "all checks passed"}.`, ...(report.accounting ? [`\nRun accounting: $${report.accounting.accounted_cost_usd.toFixed(6)} (known usage plus unresolved reservations). ${report.accounting.scope}`] : []), "\n| Mode | Planned | Assessed | Success | Cost/success |", "|---|---:|---:|---:|---:|", ...Object.entries(report.modes).map(([mode, s]) => `| ${mode} | ${s.planned} | ${s.assessed} | ${s.succeeded} | ${s.cost_per_success === null ? "unknown / no successes" : s.cost_per_success.toFixed(5)} |`), `\nComparison (paired family bootstrap):\n\n\`\`\`json\n${JSON.stringify(report.comparison, null, 2)}\n\`\`\``, decisionHistory, "\nDetailed slices, costs, and failures: report.json.\n"].join("\n");

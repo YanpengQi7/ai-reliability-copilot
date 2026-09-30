@@ -2,7 +2,7 @@
 
 The v2 harness measures supported diagnoses, appropriate uncertainty, severity, and prohibited actions. Its full-context, fixed-workflow and adaptive-investigator arms use the same generation model, frozen evidence pool, diagnosis schema and blinded judge protocol. The full-context arm sees all time-visible evidence; it is a reference baseline, not a claim of equal retrieval cost. Optional `alert` mode sees the alert alone.
 
-This is a separate protocol from the legacy five-scenario reports. New runs use `shared-investigator-v2`: the same planner, diagnosis schema, prompts, read dispatcher and stopping policy as the web investigator. Older `experimental-eval-v2` and `shared-investigator-v1` runs remain readable historical artifacts and cannot qualify the current product for release.
+This is a separate protocol from the legacy five-scenario reports. New runs use `shared-investigator-v3`: the same planner, diagnosis schema, prompts, read dispatcher and stopping policy as the web investigator. Older `experimental-eval-v2`, `shared-investigator-v1` and `shared-investigator-v2` runs remain readable historical artifacts and cannot qualify the current product for release.
 
 ## Offline verification
 
@@ -208,7 +208,7 @@ Metrics distinguish `audited_decision_trials`, `decision_history_errors` and `mi
 
 ## Withholding invalid diagnoses
 
-`shared-investigator-v2` validates final diagnoses in the shared runtime before returning a production response. The same deterministic checks cover claim references, structured measurement attribution and explicit arithmetic, cause references, required citations for supported conclusions, and null severity when the response declares insufficient evidence. Tentative uncited hypotheses remain allowed. A rejected response produces `DIAGNOSIS_REJECTED` without exposing the candidate or evidence in the API error, and without an automatic repair call that changes spending or evaluation behavior.
+The shared runtime validates final diagnoses before returning a production response (introduced in `shared-investigator-v2`, retained by later versions). The same deterministic checks cover claim references, structured measurement attribution and explicit arithmetic, cause references, required citations for supported conclusions, and null severity when the response declares insufficient evidence. Tentative uncited hypotheses remain allowed. A rejected response produces `DIAGNOSIS_REJECTED` without exposing the candidate or evidence in the API error, and without an automatic repair call that changes spending or evaluation behavior.
 
 Evaluation generation retains the rejected candidate and its observation checkpoints for local inspection, marks the trial failed, and preserves all recorded model usage in the planned denominator. Reports expose `diagnosis_integrity_failures` and per-trial `diagnosis_errors` for failed candidates as well as completed historical artifacts. Historical engine versions remain readable but cannot pass the current release gate or replay as the current engine. No rejected candidate is automatically published.
 
@@ -230,3 +230,14 @@ The JSON and Markdown files are saved under the candidate's ignored `evals/runs/
 Missing trials, stale judgments and incompatible assessments remain unassessed, rather than becoming failures or fixes. Failed/interrupted generations remain assessed failures. All planned pairs remain in the coverage denominator. Unknown usage or unresolved reservations prevent a numeric cost delta; known generation spending and full-run accounting remain visible. Ledger accounting includes every judge-run and calibration call, so it is not presented as the cost of the selected judge-run alone.
 
 Mock comparisons are marked `mock_plumbing`; draft labels or missing judge calibration produce `unreviewed_exploration`. `inference_ready` requires complete paired coverage, reviewed labels, compatible calibrated judges, live execution and the protocol's minimum independent families. It describes statistical prerequisites, not release eligibility, an unseen holdout or a causal claim. Run comparisons never replace the product release gate or establish production readiness. Reports expose `trial_outcomes` so downstream comparison tools can reuse the same assessment and integrity rules.
+
+
+## Enforcing evidence ingestion contracts
+
+`shared-investigator-v3` checks evidence content hashes and the investigation's fixed timestamp cutoff in the shared runtime. Both `observed_at` and `available_at` must be at or before `alert.at`; equality is allowed, and fractional-second precision is preserved beyond JavaScript milliseconds. Initial and full-context snapshots are validated before any model call. Adapter batches are validated before records enter planner or diagnosis prompts, including records that would otherwise be omitted by the observation budget. Adapters must provide a point-in-time snapshot for that cutoff; an evolving live investigation needs a new snapshot with a later cutoff.
+
+Evidence creation normalizes the schema's property order, including structured measurements, and excludes unknown fields before hashing. Changed observations need new IDs and fresh hashes. Conflicting IDs, incorrect hashes, future timestamps, reserved IDs, wrong service/kind and malformed adapter records reject the whole batch. Rejected batches do not change the observation registry or leak their contents into tool observations. The registered initial observations also participate in identity checks.
+
+Contract failures produce an `invalid_evidence` trace reason and cannot be retried with identical tool arguments. Ordinary handler failures retain one bounded retry. Valid evidence from other checks can still support a diagnosis; an adapter contract failure does not automatically make the final diagnosis incorrect. Reports separately count `rejected_evidence_reads` and `trials_with_rejected_evidence`, including unscored and interrupted investigations, without inventing a semantic assessment.
+
+These checks establish consistency with the adapter's declared metadata and recorded content, not independent source authentication or truth. They do not infer timestamps hidden in prose, correct clock skew, or prove that supplied timestamps are honest. Semantic review and trustworthy connector implementations remain necessary. Historical engine versions stay readable but cannot qualify or replay as the current engine.

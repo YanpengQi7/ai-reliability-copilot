@@ -35,7 +35,7 @@ export class Scratchpad {
   record(step: TraceStep): void {
     const key = this.sig(step.tool, step.input);
     if (step.reason === "duplicate") return;
-    if (step.status === "error") {
+    if (step.status === "error" && step.reason !== "invalid_evidence") {
       this.failures.set(key, (this.failures.get(key) ?? 0) + 1);
       return; // One bounded retry is allowed after a transient handler failure.
     }
@@ -45,7 +45,7 @@ export class Scratchpad {
       const firstLine = step.observation.split("\n").find((l) => l.trim().length > 0) ?? step.observation.slice(0, 120);
       const summary = `${step.tool}: ${firstLine.slice(0, 200)}`;
       if (!this.evidence.includes(summary)) this.evidence.push(summary);
-    } else if (step.status === "refused") {
+    } else if (step.status === "refused" || step.reason === "invalid_evidence") {
       this.refusals.push(`${step.tool} → ${step.reason ?? "refused"}`);
     }
   }

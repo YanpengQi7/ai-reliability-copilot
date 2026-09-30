@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkClaims, conclusionEvidence, evidenceItem, mergeEvidence, type Claim } from "./evidence";
+import { assertEvidenceAt, checkClaims, conclusionEvidence, evidenceItem, mergeEvidence, type Claim } from "./evidence";
 const at = "2026-09-01T00:00:00.000Z";
 const e = evidenceItem({ id: "m1", kind: "metric", source: "fixture", service: "checkout", observed_at: at, available_at: at, text: "Success rate 96.8% over 5m", measurement: { metric: "success_rate", value: 96.8, unit: "%", window: "5m" } });
 
@@ -11,7 +11,32 @@ describe("immutable evidence identity", () => {
   it("refuses later observations that reuse an ID for different content", () => {
     expect(() => mergeEvidence([e], [{ ...e, text: "Now all requests succeed" }])).toThrow(/Conflicting evidence ID/);
     expect(() => mergeEvidence([e], [{ ...e, service: "billing" }])).toThrow(/Conflicting evidence ID/);
-    expect(mergeEvidence([e], [{ ...e, id: "m2", text: "Updated observation" }])).toHaveLength(2);
+    expect(mergeEvidence([e], [evidenceItem({ ...e, id: "m2", text: "Updated observation" })])).toHaveLength(2);
+  });
+  it("computes stable hashes for reordered payloads and structured measurements", () => {
+    const reordered = Object.fromEntries(Object.entries({ ...e, measurement: Object.fromEntries(Object.entries(e.measurement!).reverse()) }).reverse());
+    expect(evidenceItem(reordered as typeof e)).toEqual(e);
+  });
+  it("rejects altered payloads even before their IDs have been seen", () => {
+    for (const altered of [{ ...e, text: "fabricated" }, { ...e, id: "new-id" }, { ...e, measurement: { ...e.measurement!, value: 80 } }, { ...e, content_hash: "forged" }]) {
+      expect(() => mergeEvidence([altered])).toThrow(/content hash/);
+    }
+  });
+  it("uses inclusive observation and availability cutoffs and refuses invalid cutoffs", () => {
+    expect(() => assertEvidenceAt([e], at)).not.toThrow();
+    for (const field of ["observed_at", "available_at"] as const) {
+      const future = evidenceItem({ ...e, [field]: "2026-09-01T00:00:00.001Z" });
+      expect(() => assertEvidenceAt([future], at)).toThrow(/investigation cutoff/);
+    }
+    expect(() => assertEvidenceAt([], "invalid-date")).toThrow(/Invalid investigation/);
+  });
+  it("preserves fractional timestamp precision beyond JavaScript milliseconds", () => {
+    for (const field of ["observed_at", "available_at"] as const) {
+      const future = evidenceItem({ ...e, [field]: "2026-09-01T00:00:00.000000001Z" });
+      expect(() => assertEvidenceAt([future], at)).toThrow(/investigation cutoff/);
+      expect(() => assertEvidenceAt([future], "2026-09-01T00:00:00.000000001Z")).not.toThrow();
+    }
+    expect(() => assertEvidenceAt([e], "2026-09-01T00:00:00Z")).not.toThrow();
   });
   it("reports ambiguous claim references instead of using the last duplicate", () => {
     const claim: Claim = { id: "c", text: "Success rate 96.8%", kind: "observed", evidence_ids: ["m1"], measurement: { service: "checkout", ...e.measurement! } };

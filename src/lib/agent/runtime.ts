@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { DecisionSchema, DiagnosisSchema, type Decision, type Diagnosis } from "./diagnosis";
 import { DIAGNOSIS_PROMPT, PLANNER_PROMPT } from "./diagnosisPrompt";
-import { conclusionEvidence, formatEvidence, mergeEvidence, type EvidenceItem } from "./evidence";
+import { assertEvidenceAt, conclusionEvidence, formatEvidence, mergeEvidence, type EvidenceItem } from "./evidence";
 import { dispatchTool, type DispatchContext, type TelemetryAdapter } from "./tools";
 import { Scratchpad } from "./state";
 import { checkDiagnosis, DiagnosisValidationError } from "./diagnosisValidation";
 import type { InvestigationInput, TraceStep } from "./types";
 
-export const INVESTIGATION_ENGINE_VERSION = "shared-investigator-v2";
+export const INVESTIGATION_ENGINE_VERSION = "shared-investigator-v3";
 export interface InvestigationModel {
   call<T>(schema: z.ZodType<T>, system: string, prompt: string, purpose: "generation"): Promise<T>;
 }
@@ -37,7 +37,8 @@ export async function runInvestigation(opts: RuntimeOptions): Promise<Investigat
   if (!Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > 12) throw new Error("maxSteps must be an integer from 1 to 12");
   const mode = opts.mode ?? "agentic", language = opts.language ?? "en";
   const state: InvestigationState = { evidence: mergeEvidence(opts.initialEvidence), trace: [], decisions: [], steps: 0, stop_reason: "single_pass" };
-  const context: DispatchContext = { ctx: opts.input, callCounts: {}, adapter: opts.adapter, allowInternalKb: opts.allowInternalKb, abortSignal: opts.abortSignal };
+  assertEvidenceAt(state.evidence, opts.alert.at);
+  const context: DispatchContext = { ctx: opts.input, callCounts: {}, adapter: opts.adapter, allowInternalKb: opts.allowInternalKb, abortSignal: opts.abortSignal, evidenceAt: opts.alert.at, evidenceRegistry: state.evidence };
   const scratch = new Scratchpad();
   const checkpoint = () => opts.onCheckpoint?.(structuredClone(state));
   // Timing belongs in telemetry, not model context: replays must use stable inputs.
@@ -56,7 +57,10 @@ export async function runInvestigation(opts: RuntimeOptions): Promise<Investigat
     return state.evidence.filter(e => !before.has(e.content_hash)).length;
   };
   opts.abortSignal?.throwIfAborted();
-  if (mode === "full") state.evidence = mergeEvidence(state.evidence, opts.fullEvidence ?? []);
+  if (mode === "full") {
+    state.evidence = mergeEvidence(state.evidence, opts.fullEvidence ?? []);
+    assertEvidenceAt(state.evidence, opts.alert.at);
+  }
   if (mode === "workflow") {
     for (const tool of ["get_metrics", "get_logs", "get_deploy_history", "search_runbooks"]) await read(tool, tool === "search_runbooks" ? { query: opts.alert.service, limit: 4 } : { service: opts.alert.service });
   }

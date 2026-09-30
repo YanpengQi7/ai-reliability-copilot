@@ -179,9 +179,11 @@ describe("evaluation artifact integrity", () => {
     const legacy = buildReport({ ...m, engine_version: "experimental-eval-v2" }, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })));
     expect(legacy.gate).toBe("inconclusive");
     expect(legacy.gate_reasons).toContain("legacy_experimental_engine");
-    const previousShared = buildReport({ ...m, engine_version: "shared-investigator-v1" }, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })));
-    expect(previousShared.gate).toBe("inconclusive");
-    expect(previousShared.gate_reasons).toContain("legacy_experimental_engine");
+    for (const engine_version of ["shared-investigator-v1", "shared-investigator-v2"] as const) {
+      const previousShared = buildReport({ ...m, engine_version }, reviewed, trials, judgments.map(j => ({ ...j, verdict: { ...j.verdict!, root_cause_acceptable: true } })));
+      expect(previousShared.gate).toBe("inconclusive");
+      expect(previousShared.gate_reasons).toContain("legacy_experimental_engine");
+    }
     expect(passing.dataset_splits).toEqual({ dev: 0, validation: 0, test: 2 });
     for (const splits of [["dev", "dev"], ["validation", "validation"], ["test", "dev"]] as const) {
       const exploratory = reviewed.map((c, i) => ({ ...c, split: splits[i] }));

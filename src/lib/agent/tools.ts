@@ -19,7 +19,7 @@ import { getScenario, type Scenario, type LogLine } from "@/lib/scenarios";
 import { retrieveContext } from "@/lib/kb";
 import { safeErrorDetail } from "@/lib/observability";
 import type { InvestigationInput, TraceStep } from "./types";
-import { EvidenceSchema, formatEvidence, mergeEvidence, isReservedEvidenceId, type EvidenceItem } from "./evidence";
+import { EvidenceSchema, EvidenceValidationError, assertEvidenceAt, formatEvidence, mergeEvidence, isReservedEvidenceId, type EvidenceItem } from "./evidence";
 
 // ── Budget constants ─────────────────────────────────────────────────
 export const LOG_BUDGET_LINES_DEFAULT = 12;
@@ -238,6 +238,8 @@ export type DispatchContext = {
   allowInternalKb?: boolean;
   adapter?: TelemetryAdapter;
   evidenceRegistry?: EvidenceItem[];
+  // Runtime supplies one fixed cutoff for the entire investigation and replay.
+  evidenceAt?: string;
 };
 
 /** The same read-only boundary serves immutable eval snapshots and future authorized connectors. */
@@ -290,14 +292,21 @@ export async function dispatchTool(
   // Recovery: a handler throwing must not crash the loop.
   try {
     if (dctx.adapter) {
-      const candidates = mergeEvidence(z.array(EvidenceSchema).parse(await dctx.adapter.read(toolName, parsed.data as Record<string, unknown>, dctx.abortSignal)));
-      if (candidates.some(e => isReservedEvidenceId(e.id))) throw new Error("Adapter used a reserved evidence ID");
+      const at = dctx.evidenceAt ?? new Date(started).toISOString();
+      assertEvidenceAt([], at);
+      const result = z.array(EvidenceSchema).safeParse(await dctx.adapter.read(toolName, parsed.data as Record<string, unknown>, dctx.abortSignal));
+      if (!result.success) throw new EvidenceValidationError("malformed_evidence", "Adapter returned malformed evidence.");
+      const candidates = mergeEvidence(result.data);
+      assertEvidenceAt(candidates, at);
+      if (candidates.some(e => isReservedEvidenceId(e.id))) throw new EvidenceValidationError("reserved_id", "Adapter used a reserved evidence ID");
       const allowedKinds = READ_TOOL_EVIDENCE_KINDS[toolName];
-      if (!allowedKinds || candidates.some(e => !allowedKinds.includes(e.kind))) throw new Error(`Adapter returned an evidence kind incompatible with ${toolName}`);
+      if (!allowedKinds || candidates.some(e => !allowedKinds.includes(e.kind))) throw new EvidenceValidationError("wrong_kind", `Adapter returned an evidence kind incompatible with ${toolName}`);
 
       dctx.abortSignal?.throwIfAborted();
       const requestedService = "service" in parsed.data ? parsed.data.service.trim().toLowerCase() : null;
-      if (toolName !== "search_runbooks" && requestedService !== null && candidates.some(e => e.service.trim().toLowerCase() !== requestedService)) throw new Error("Adapter returned telemetry for a different service");
+      if (toolName !== "search_runbooks" && requestedService !== null && candidates.some(e => e.service.trim().toLowerCase() !== requestedService)) throw new EvidenceValidationError("wrong_service", "Adapter returned telemetry for a different service");
+      // Validate the entire batch before budgeting; omitted records cannot bypass identity checks.
+      mergeEvidence(dctx.evidenceRegistry ?? [], candidates);
       const evidence: EvidenceItem[] = [];
       for (const e of candidates) {
         if (formatEvidence([...evidence, e]).length > MAX_OBSERVATION_CHARS - 160) continue;
@@ -315,6 +324,7 @@ export async function dispatchTool(
     return { ...base, status: out.status, observation: clampObservation(out.text), latency_ms: Date.now() - started };
   } catch (err) {
     if (dctx.abortSignal?.aborted) throw err;
+    if (err instanceof EvidenceValidationError) return { ...base, status: "error", observation: `Evidence rejected (${err.code}): ${safeErrorDetail(err)} Do not repeat this call; use other sources.`, reason: "invalid_evidence", latency_ms: Date.now() - started };
     const msg = safeErrorDetail(err);
     return { ...base, status: "error", observation: `Tool "${toolName}" failed: ${msg}. Continue with other evidence.`, reason: "handler_threw", latency_ms: Date.now() - started };
   }

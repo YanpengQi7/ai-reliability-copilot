@@ -14,9 +14,38 @@ export const EvidenceSchema = z.object({
   measurement: z.object({ metric: z.string(), value: z.number().finite(), unit: z.string(), window: z.string() }).optional(),
 });
 export type EvidenceItem = z.infer<typeof EvidenceSchema>;
+const EvidencePayloadSchema = EvidenceSchema.omit({ content_hash: true });
+
+export class EvidenceValidationError extends Error {
+  constructor(readonly code: "hash_mismatch" | "conflicting_id" | "invalid_cutoff" | "future_evidence" | "reserved_id" | "wrong_kind" | "wrong_service" | "malformed_evidence", message: string) {
+    super(message);
+    this.name = "EvidenceValidationError";
+  }
+}
 
 export function evidenceItem(input: Omit<EvidenceItem, "content_hash">): EvidenceItem {
-  return EvidenceSchema.parse({ ...input, content_hash: createHash("sha256").update(JSON.stringify(input)).digest("hex") });
+  // Schema normalization fixes property order and excludes unknown fields before hashing.
+  const payload = EvidencePayloadSchema.parse(input);
+  return EvidenceSchema.parse({ ...payload, content_hash: createHash("sha256").update(JSON.stringify(payload)).digest("hex") });
+}
+
+export function evidenceVisibleAt(item: EvidenceItem, at: string): boolean {
+  // Date.parse truncates sub-millisecond precision. Compare UTC fractional
+  // seconds separately so nanosecond timestamps cannot cross the cutoff.
+  const noLater = (value: string) => {
+    const seconds = Math.floor(Date.parse(value) / 1000), cutoff = Math.floor(Date.parse(at) / 1000);
+    if (seconds !== cutoff) return seconds < cutoff;
+    const fraction = value.match(/\.(\d+)Z$/)?.[1] ?? "", limit = at.match(/\.(\d+)Z$/)?.[1] ?? "";
+    const width = Math.max(fraction.length, limit.length);
+    return fraction.padEnd(width, "0") <= limit.padEnd(width, "0");
+  };
+  return noLater(item.observed_at) && noLater(item.available_at);
+}
+
+/** Typed timestamps define a point-in-time snapshot; prose dates still need semantic review. */
+export function assertEvidenceAt(items: EvidenceItem[], at: string): void {
+  if (!EvidenceSchema.shape.observed_at.safeParse(at).success) throw new EvidenceValidationError("invalid_cutoff", "Invalid investigation evidence cutoff.");
+  if (items.some(item => !evidenceVisibleAt(item, at))) throw new EvidenceValidationError("future_evidence", "Evidence falls after the investigation cutoff; use a point-in-time snapshot.");
 }
 
 /** Alert text is reported context, never independently verified telemetry. */
@@ -34,7 +63,8 @@ export function mergeEvidence(...groups: EvidenceItem[][]): EvidenceItem[] {
   for (const item of groups.flat()) {
     const normalized = EvidenceSchema.parse(item);
     const existing = byId.get(normalized.id);
-    if (existing && JSON.stringify(existing) !== JSON.stringify(normalized)) throw new Error(`Conflicting evidence ID: ${normalized.id}. Use a new ID for a new observation.`);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(normalized)) throw new EvidenceValidationError("conflicting_id", `Conflicting evidence ID: ${normalized.id}. Use a new ID for a new observation.`);
+    if (evidenceItem(normalized).content_hash !== normalized.content_hash) throw new EvidenceValidationError("hash_mismatch", "Evidence content hash does not match its normalized payload.");
     if (!existing) byId.set(normalized.id, normalized);
   }
   return [...byId.values()];

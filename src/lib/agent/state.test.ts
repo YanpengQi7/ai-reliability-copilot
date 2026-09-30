@@ -19,6 +19,13 @@ describe("investigation state", () => {
     expect(state.evidenceCount()).toBe(0);
     expect(state.render({ stepsUsed: 2, stepCap: 8 })).toContain("2 failure(s)");
   });
+  it("does not retry permanent evidence-contract failures", () => {
+    const state = new Scratchpad();
+    state.record({ ...step, status: "error", reason: "invalid_evidence" });
+    expect(state.isDuplicate(step.tool, step.input)).toBe(true);
+    expect(state.isDuplicate(step.tool, { ...step.input, query: "other source" })).toBe(false);
+    expect(state.evidenceCount()).toBe(0);
+  });
   it("does not repeat successful, empty or refused reads", () => {
     for (const status of ["ok", "empty", "refused"] as const) {
       const state = new Scratchpad(); state.record({ ...step, status });

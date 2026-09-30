@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { CaseSchema, type EvalCase } from "./contracts";
-import { evidenceItem, alertEvidence as sharedAlertEvidence, isReservedEvidenceId, type EvidenceItem } from "../agent/evidence";
+import { evidenceItem, evidenceVisibleAt, alertEvidence as sharedAlertEvidence, isReservedEvidenceId, type EvidenceItem } from "../agent/evidence";
 import type { TelemetryAdapter } from "../agent/tools";
 
 export function isVisible(e: EvidenceItem, at: string): boolean {
-  return Date.parse(e.available_at) <= Date.parse(at) && Date.parse(e.observed_at) <= Date.parse(at);
+  return evidenceVisibleAt(e, at);
 }
 
 export function validateDataset(raw: unknown): EvalCase[] {
