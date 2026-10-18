@@ -13,6 +13,7 @@ import type { EvidenceItem } from "./evidence";
 // metrics/logs/deploys tools have nothing structured to return, which is itself
 // honest signal to the model).
 export type InvestigationInput = {
+  title?: string;
   service?: string;
   symptoms?: string;
   raw_context: string;

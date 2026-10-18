@@ -4,6 +4,8 @@ import type { Locale } from "./i18n/messages";
 
 export type InvestigationReportContext = {
   scenario_slug?: string;
+  title?: string;
+  service?: string;
   requested_language?: "en" | "zh";
   generated_at?: string;
 };
@@ -62,7 +64,7 @@ const LABELS = {
   en: {
     title: "Investigation evidence report", unknown: "Not recorded", none: "None recorded", unknownSeverity: "Unknown severity",
     complete: "Run completed", incomplete: "Investigation incomplete", unknownCompletion: "Completion not recorded",
-    scenario: "Scenario", requestedLanguage: "Requested output language", language: "Result language", generated: "Report generated",
+    scenario: "Scenario", incidentTitle: "Incident title", requestedLanguage: "Requested output language", language: "Result language", generated: "Report generated",
     engine: "Engine version", completion: "Run completion", stop: "Stop reason", steps: "Loop steps",
     conclusion: "Diagnosis status", diagnosis: "Diagnosis", summary: "Summary", severity: "Severity", severityReasoning: "Severity reasoning",
     causes: "Root cause hypotheses", hypothesis: "Hypothesis", supporting: "Supporting evidence IDs", refuting: "Contradicting evidence IDs",
@@ -86,7 +88,7 @@ const LABELS = {
   zh: {
     title: "故障排查证据报告", unknown: "未记录", none: "未记录任何内容", unknownSeverity: "严重等级未知",
     complete: "排查运行已结束", incomplete: "排查未完成", unknownCompletion: "未记录完成状态",
-    scenario: "场景", requestedLanguage: "请求的输出语言", language: "结果语言", generated: "报告生成时间",
+    scenario: "场景", incidentTitle: "故障标题", requestedLanguage: "请求的输出语言", language: "结果语言", generated: "报告生成时间",
     engine: "引擎版本", completion: "运行完成状态", stop: "停止原因", steps: "循环步骤数",
     conclusion: "诊断状态", diagnosis: "诊断", summary: "摘要", severity: "严重等级", severityReasoning: "严重等级理由",
     causes: "根因假设", hypothesis: "假设", supporting: "支持证据 ID", refuting: "反驳证据 ID",
@@ -122,6 +124,8 @@ function reportData(result: unknown, context: InvestigationReportContext, option
     report_type: "investigation_evidence_report",
     context: {
       scenario_slug: text(rawContext.scenario_slug),
+      ...(text(rawContext.title) ? { title: text(rawContext.title) } : {}),
+      ...(text(rawContext.service) ? { service: text(rawContext.service) } : {}),
       requested_language: language(rawContext.requested_language),
       generated_at: text(rawContext.generated_at),
     },
@@ -204,7 +208,7 @@ export function buildInvestigationMarkdown(result: unknown, context: Investigati
   };
   field(l.completion, r.completed === false ? l.incomplete : r.completed === true ? l.complete : l.unknownCompletion);
   field(l.stop, r.stop_reason); field(l.conclusion, d.conclusion_status ? l.statuses[d.conclusion_status] : null); field(l.severity, d.severity ?? l.unknownSeverity);
-  for (const [label, item] of [[l.scenario, report.context.scenario_slug], [l.requestedLanguage, report.context.requested_language], [l.language, r.language], [l.generated, report.context.generated_at], [l.engine, r.engine_version]] as const) field(label, typeof item === "string" ? oneLine(item) : item);
+  for (const [label, item] of [[l.scenario, report.context.scenario_slug], [l.incidentTitle, report.context.title], [l.service, report.context.service], [l.requestedLanguage, report.context.requested_language], [l.language, r.language], [l.generated, report.context.generated_at], [l.engine, r.engine_version]] as const) field(label, typeof item === "string" ? oneLine(item) : item);
   field(l.privacy, report.privacy.raw_evidence_included ? l.included : l.omitted);
   lines.push(l.hashNote, "");
 

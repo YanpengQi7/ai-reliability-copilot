@@ -65,6 +65,11 @@ describe("production shared investigator", () => {
     expect(result.analysis.mitigation_plan).toEqual([]);
     expect(result.analysis.customer_impact).toBe(diagnosis.severity_reasoning);
   });
+  it("keeps the custom incident title with the unverified alert context", async () => {
+    const result = await investigate({ input: { title: "Checkout latency spike", service: "checkout", symptoms: "p99 latency is elevated", raw_context: "Requests from one region exceed the latency threshold" }, modelClient: client(() => plan(true)), alertAt: at });
+    expect(result.evidence?.find(item => item.id === "alert-context")?.text).toContain("Incident: Checkout latency spike");
+    expect(result.evidence?.find(item => item.id === "user-context")?.text).toContain("Requests from one region");
+  });
   it("refuses unsupported planner references before another read", async () => {
     const read = vi.fn();
     const bad = { ...plan(), hypotheses: [{ hypothesis: "cause", supporting_ids: ["unseen"], refuting_ids: [], missing: "" }] };

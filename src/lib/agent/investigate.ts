@@ -35,7 +35,11 @@ export async function investigate(opts: InvestigateOptions): Promise<Investigati
   const input = { ...opts.input, service: scenario?.service ?? opts.input.service, symptoms: opts.input.symptoms || scenario?.symptoms };
   const language = opts.language ?? "en", model = opts.model ?? ANALYSIS_MODEL;
   const at = opts.alertAt ?? new Date().toISOString();
-  const alert = { service: input.service || "unknown", symptoms: input.symptoms || "No symptoms provided", at };
+  const alert = {
+    service: input.service || "unknown",
+    symptoms: [input.title ? `Incident: ${input.title}` : "", input.symptoms || "No symptoms provided"].filter(Boolean).join("\n"),
+    at,
+  };
   const usage: UsageTotals = { model_calls: 0, tokens_in: 0, tokens_out: 0, cost_usd: 0 };
   const client: InvestigationModel = opts.modelClient ?? {
     async call<T>(schema: z.ZodType<T>, system: string, prompt: string): Promise<T> {

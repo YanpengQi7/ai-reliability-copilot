@@ -65,6 +65,17 @@ describe("dedicated investigation report", () => {
     expect(markdown).not.toContain("SEV3");
   });
 
+  it("exports a sanitized custom incident identity without exporting its raw context", () => {
+    const reportContext = { scenario_slug: "custom", title: "Checkout latency", service: "checkout", requested_language: "en" as const };
+    const jsonText = buildInvestigationJson(result, reportContext);
+    const json = JSON.parse(jsonText);
+    expect(json.context).toMatchObject({ scenario_slug: "custom", title: "Checkout latency", service: "checkout" });
+    expect(jsonText).not.toContain("RAW_EVIDENCE_TEXT_ONLY");
+    const markdown = buildInvestigationMarkdown(result, reportContext);
+    expect(markdown).toContain("**Incident title:** Checkout latency");
+    expect(markdown).toContain("**Service:** checkout");
+  });
+
   it("exports all presentation sections and diagnosis evidence/refutations without filling invented content", () => {
     const json = JSON.parse(buildInvestigationJson(result)).result;
     expect(json.analysis).toEqual(result.analysis);

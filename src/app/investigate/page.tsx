@@ -4,6 +4,9 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { InvestigationReview, type InvestigationReviewHandle } from "@/components/InvestigationReview";
 import { InvestigationExport } from "@/components/InvestigationExport";
+import { ContextFileImport } from "@/components/ContextFileImport";
+import { IncidentCredentialReview } from "@/components/IncidentCredentialReview";
+import type { IncidentInput } from "@/components/IncidentInputForm";
 import { Nav } from "@/components/Nav";
 import type { Diagnosis } from "@/lib/agent/diagnosis";
 import type { InvestigationAnalysis } from "@/lib/agent/presentation";
@@ -13,6 +16,9 @@ import { useLocale } from "@/lib/i18n/client";
 import { t, type Locale } from "@/lib/i18n/messages";
 import { buildInvestigationEvidenceIndex, type InvestigationEvidenceIndex } from "@/lib/investigationEvidence";
 import type { InvestigationReportContext } from "@/lib/investigationReport";
+import { composeImportedContext, type ContextAttachment } from "@/lib/contextFiles";
+import { prepareIncidentSubmission } from "@/lib/incidentPreflight";
+import { INPUT_LIMITS } from "@/lib/requestSafety";
 
 const SCENARIO_OPTIONS = [
   { slug: "db-connection-pool-exhausted", label: { en: "DB connection pool exhaustion (payment-svc)", zh: "数据库连接池耗尽（payment-svc）" } },
@@ -25,7 +31,8 @@ const SCENARIO_OPTIONS = [
 const LABELS = {
   en: {
     title: "Incident investigator", subtitle: "Start with an alert. The investigator gathers metrics, logs, deployment history, and runbooks, then records its checks and the evidence behind its conclusions.",
-    scenario: "Investigation scenario", output: "Investigation output language", run: "Run investigation", stop: "Stop investigation",
+    scenario: "Investigation scenario", custom: "Custom incident", sample: "Sample scenario", titleField: "Incident title", serviceField: "Service", symptomsField: "Symptoms / alert", contextField: "Incident context", contextHelp: "Paste an alert, timeline, logs, or other evidence. User-provided details are treated as unverified context.",
+    output: "Investigation output language", run: "Run investigation", stop: "Stop investigation", characters: "characters", customReport: "Custom incident", untitled: "Untitled incident", inputTooLong: "is over the allowed length", inputTooShort: "must contain at least 20 characters", finishImport: "Finish or discard the file import before starting the investigation.",
     loading: "Gathering evidence and preparing the report…", stopped: "Investigation stopped. Run again to produce a report.", failed: "Investigation failed",
     trace: "Investigation trace", structured: "Structured response", snapshot: "Report scenario", requested: "Requested output", unknown: "Unknown severity",
     diagnosis: "Diagnosis status", claims: "Claims and citations", noClaims: "No factual claims recorded.",
@@ -38,7 +45,8 @@ const LABELS = {
   },
   zh: {
     title: "故障调查", subtitle: "从告警开始。调查员收集指标、日志、部署历史和运维手册，并记录排查步骤与结论所引用的证据。",
-    scenario: "调查场景", output: "调查输出语言", run: "开始调查", stop: "停止调查",
+    scenario: "调查场景", custom: "自定义故障", sample: "示例场景", titleField: "故障标题", serviceField: "服务", symptomsField: "症状 / 告警", contextField: "故障上下文", contextHelp: "粘贴告警、时间线、日志或其他证据。用户提供的信息将作为未经独立验证的上下文处理。",
+    output: "调查输出语言", run: "开始调查", stop: "停止调查", characters: "字符", customReport: "自定义故障", untitled: "未命名故障", inputTooLong: "超过允许的长度", inputTooShort: "至少需要 20 个字符", finishImport: "请先完成或丢弃文件导入，再开始调查。",
     loading: "正在收集证据并生成报告…", stopped: "调查已停止。请重新运行以生成报告。", failed: "调查失败",
     trace: "调查记录", structured: "结构化响应", snapshot: "报告场景", requested: "请求的输出语言", unknown: "严重等级未知",
     diagnosis: "诊断状态", claims: "结论与引用", noClaims: "未记录事实性结论。",
@@ -210,6 +218,9 @@ export default function InvestigatePage() {
   const locale = useLocale();
   const labels = LABELS[locale];
   const [slug, setSlug] = useState(SCENARIO_OPTIONS[0].slug);
+  const [mode, setMode] = useState<"scenario" | "custom">("scenario");
+  const [customInput, setCustomInput] = useState<IncidentInput>({ title: "", service: "", symptoms: "", raw_context: "", prompt_version: "v3", output_language: "en" });
+  const [importBusy, setImportBusy] = useState(false);
   const [lang, setLang] = useState<"en" | "zh">("en");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -226,11 +237,30 @@ export default function InvestigatePage() {
   }, []);
 
   async function run() {
+    if (mode === "custom" && importBusy) {
+      setError(labels.finishImport);
+      return;
+    }
+    let requestBody: Record<string, string>;
+    let context: InvestigationReportContext;
+    if (mode === "custom") {
+      const prepared = prepareIncidentSubmission({ ...customInput, output_language: lang });
+      if (!prepared.ok) {
+        const fieldName = prepared.field === "raw_context" ? labels.contextField : prepared.field === "title" ? labels.titleField : prepared.field === "service" ? labels.serviceField : labels.symptomsField;
+        setError(`${fieldName} ${prepared.error === "too_long" ? labels.inputTooLong : labels.inputTooShort} (${prepared.limit} ${labels.characters}).`);
+        return;
+      }
+      setCustomInput(prepared.input);
+      context = { scenario_slug: "custom", title: prepared.input.title || labels.untitled, service: prepared.input.service, requested_language: lang };
+      requestBody = { title: prepared.input.title, service: prepared.input.service, symptoms: prepared.input.symptoms, raw_context: prepared.input.raw_context, output_language: lang };
+    } else {
+      context = { scenario_slug: slug, requested_language: lang };
+      requestBody = { scenario_slug: slug, output_language: lang };
+    }
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     const runId = ++runIdRef.current;
-    const context: InvestigationReportContext = { scenario_slug: slug, requested_language: lang };
     setLoading(true);
     setError(null);
     setStopped(false);
@@ -239,7 +269,7 @@ export default function InvestigatePage() {
       const res = await fetch("/api/investigate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario_slug: context.scenario_slug, output_language: context.requested_language }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -287,9 +317,13 @@ export default function InvestigatePage() {
         </div>
 
         <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
-          <select aria-label={labels.scenario} value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 sm:w-auto sm:max-w-full">
+          <div role="group" aria-label={labels.scenario} className="flex rounded-lg border border-neutral-700 p-1">
+            <button type="button" aria-pressed={mode === "scenario"} disabled={loading} onClick={() => setMode("scenario")} className={`rounded px-3 py-1.5 text-sm disabled:opacity-50 ${mode === "scenario" ? "bg-neutral-700 text-white" : "text-neutral-400 hover:text-white"}`}>{labels.sample}</button>
+            <button type="button" aria-pressed={mode === "custom"} disabled={loading} onClick={() => setMode("custom")} className={`rounded px-3 py-1.5 text-sm disabled:opacity-50 ${mode === "custom" ? "bg-neutral-700 text-white" : "text-neutral-400 hover:text-white"}`}>{labels.custom}</button>
+          </div>
+          {mode === "scenario" && <select aria-label={labels.scenario} value={slug} disabled={loading} onChange={(e) => setSlug(e.target.value)} className="w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 disabled:opacity-50 sm:w-auto sm:max-w-full">
             {SCENARIO_OPTIONS.map((o) => <option key={o.slug} value={o.slug}>{o.label[locale]}</option>)}
-          </select>
+          </select>}
           <select aria-label={labels.output} value={lang} onChange={(e) => setLang(e.target.value as "en" | "zh")} className="min-w-0 rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200">
             <option value="en">Output: English</option>
             <option value="zh">输出：中文</option>
@@ -297,6 +331,7 @@ export default function InvestigatePage() {
           <button
             type="button"
             onClick={loading ? stop : run}
+            disabled={!loading && importBusy}
             className={`rounded px-4 py-2 text-sm font-semibold text-white ${
               loading ? "bg-red-700 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-500"
             }`}
@@ -304,6 +339,23 @@ export default function InvestigatePage() {
             {loading ? labels.stop : labels.run}
           </button>
         </div>
+
+        {mode === "custom" && <section aria-label={labels.custom} className="mb-6 flex flex-col gap-4 rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="flex flex-col gap-1 text-sm text-neutral-300">{labels.titleField}<input value={customInput.title} maxLength={INPUT_LIMITS.shortText} disabled={loading} onChange={(e) => setCustomInput(current => ({ ...current, title: e.target.value }))} className="rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 disabled:opacity-50" /></label>
+            <label className="flex flex-col gap-1 text-sm text-neutral-300">{labels.serviceField}<input value={customInput.service} maxLength={INPUT_LIMITS.shortText} disabled={loading} onChange={(e) => setCustomInput(current => ({ ...current, service: e.target.value }))} className="rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 disabled:opacity-50" /></label>
+          </div>
+          <label className="flex flex-col gap-1 text-sm text-neutral-300">{labels.symptomsField}<input value={customInput.symptoms} maxLength={INPUT_LIMITS.shortText} disabled={loading} onChange={(e) => setCustomInput(current => ({ ...current, symptoms: e.target.value }))} className="rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-neutral-100 disabled:opacity-50" /></label>
+          <label className="flex flex-col gap-1 text-sm text-neutral-300">{labels.contextField}<span className="text-xs text-neutral-500">{labels.contextHelp}</span>
+            <textarea value={customInput.raw_context} maxLength={INPUT_LIMITS.rawContext} rows={8} disabled={loading} onChange={(e) => setCustomInput(current => ({ ...current, raw_context: e.target.value }))} className="resize-y rounded border border-neutral-700 bg-neutral-950 px-3 py-2 font-mono text-sm text-neutral-100 disabled:opacity-50" />
+            <span className="text-right text-xs text-neutral-500">{customInput.raw_context.length.toLocaleString(locale)} / {INPUT_LIMITS.rawContext.toLocaleString(locale)} {labels.characters}</span>
+          </label>
+          <ContextFileImport rawContext={customInput.raw_context} disabled={loading} onBusyChange={setImportBusy} onApply={(attachments: ContextAttachment[], fileMode) => {
+            const composed = composeImportedContext(customInput.raw_context, attachments, fileMode);
+            if (composed.ok) setCustomInput(current => ({ ...current, raw_context: composed.text }));
+          }} />
+          <IncidentCredentialReview value={customInput} onChange={setCustomInput} disabled={loading} />
+        </section>}
 
         {loading && (
           <div className="mb-6 animate-pulse rounded-xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-400">
@@ -315,7 +367,7 @@ export default function InvestigatePage() {
 
         {result && snapshot && (
           <div className="flex flex-col gap-6">
-            <p className="text-sm text-neutral-400">{labels.snapshot}: {SCENARIO_OPTIONS.find(option => option.slug === snapshot.context.scenario_slug)?.label[locale] ?? snapshot.context.scenario_slug} · {labels.requested}: {snapshot.context.requested_language}</p>
+            <p className="text-sm text-neutral-400">{labels.snapshot}: {snapshot.context.scenario_slug === "custom" ? `${labels.customReport}${snapshot.context.title ? ` · ${snapshot.context.title}` : ""}${snapshot.context.service ? ` (${snapshot.context.service})` : ""}` : SCENARIO_OPTIONS.find(option => option.slug === snapshot.context.scenario_slug)?.label[locale] ?? snapshot.context.scenario_slug} · {labels.requested}: {snapshot.context.requested_language}</p>
             <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
               <span>{labels.stopReason}: <b className="text-neutral-200">{result.stop_reason}</b></span>
               <span>{labels.steps}: <b className="text-neutral-200">{result.steps}</b></span>
