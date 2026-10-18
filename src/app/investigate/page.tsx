@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { InvestigationReview, type InvestigationReviewHandle } from "@/components/InvestigationReview";
+import { InvestigationComparison } from "@/components/InvestigationComparison";
 import { InvestigationExport } from "@/components/InvestigationExport";
 import { ContextFileImport } from "@/components/ContextFileImport";
 import { IncidentCredentialReview } from "@/components/IncidentCredentialReview";
@@ -33,7 +34,7 @@ const LABELS = {
     title: "Incident investigator", subtitle: "Start with an alert. The investigator gathers metrics, logs, deployment history, and runbooks, then records its checks and the evidence behind its conclusions.",
     scenario: "Investigation scenario", custom: "Custom incident", sample: "Sample scenario", titleField: "Incident title", serviceField: "Service", symptomsField: "Symptoms / alert", contextField: "Incident context", contextHelp: "Paste an alert, timeline, logs, or other evidence. User-provided details are treated as unverified context.",
     output: "Investigation output language", depth: "Investigation depth", focused: "Focused · 3 steps", standard: "Standard · 8 steps", thorough: "Thorough · 12 steps", run: "Run investigation", stop: "Stop investigation", characters: "characters", customReport: "Custom incident", untitled: "Untitled incident", inputTooLong: "is over the allowed length", inputTooShort: "must contain at least 20 characters", finishImport: "Finish or discard the file import before starting the investigation.",
-    loading: "Gathering evidence and preparing the report…", stopped: "Investigation stopped. Run again to produce a report.", failed: "Investigation failed",
+    loading: "Gathering evidence and preparing the report…", stopped: "Investigation stopped. Run again to produce a report.", stoppedWithPrevious: "Investigation stopped. The previous completed report is still available.", failed: "Investigation failed",
     trace: "Investigation trace", structured: "Structured response", snapshot: "Report scenario", requested: "Requested output", unknown: "Unknown severity",
     diagnosis: "Diagnosis status", claims: "Claims and citations", noClaims: "No factual claims recorded.",
     hypotheses: "Review supporting and contradicting evidence for each hypothesis.", noCauses: "No evidence-backed cause established.",
@@ -47,7 +48,7 @@ const LABELS = {
     title: "故障调查", subtitle: "从告警开始。调查员收集指标、日志、部署历史和运维手册，并记录排查步骤与结论所引用的证据。",
     scenario: "调查场景", custom: "自定义故障", sample: "示例场景", titleField: "故障标题", serviceField: "服务", symptomsField: "症状 / 告警", contextField: "故障上下文", contextHelp: "粘贴告警、时间线、日志或其他证据。用户提供的信息将作为未经独立验证的上下文处理。",
     output: "调查输出语言", depth: "调查深度", focused: "快速 · 3 步", standard: "标准 · 8 步", thorough: "深入 · 12 步", run: "开始调查", stop: "停止调查", characters: "字符", customReport: "自定义故障", untitled: "未命名故障", inputTooLong: "超过允许的长度", inputTooShort: "至少需要 20 个字符", finishImport: "请先完成或丢弃文件导入，再开始调查。",
-    loading: "正在收集证据并生成报告…", stopped: "调查已停止。请重新运行以生成报告。", failed: "调查失败",
+    loading: "正在收集证据并生成报告…", stopped: "调查已停止。请重新运行以生成报告。", stoppedWithPrevious: "调查已停止，之前完成的报告仍可查看。", failed: "调查失败",
     trace: "调查记录", structured: "结构化响应", snapshot: "报告场景", requested: "请求的输出语言", unknown: "严重等级未知",
     diagnosis: "诊断状态", claims: "结论与引用", noClaims: "未记录事实性结论。",
     hypotheses: "请检查每个假设的支持证据与反证。", noCauses: "尚未确定有证据支持的原因。",
@@ -226,6 +227,7 @@ export default function InvestigatePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<{ result: InvestigationResult; context: InvestigationReportContext; runId: number } | null>(null);
+  const [previousSnapshot, setPreviousSnapshot] = useState<{ result: InvestigationResult; context: InvestigationReportContext; runId: number } | null>(null);
   const [stopped, setStopped] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const runIdRef = useRef(0);
@@ -262,10 +264,10 @@ export default function InvestigatePage() {
     const controller = new AbortController();
     abortRef.current = controller;
     const runId = ++runIdRef.current;
+    if (snapshot) setPreviousSnapshot(snapshot);
     setLoading(true);
     setError(null);
     setStopped(false);
-    setSnapshot(null);
     try {
       const res = await fetch("/api/investigate", {
         method: "POST",
@@ -297,7 +299,6 @@ export default function InvestigatePage() {
     abortRef.current = null;
     setLoading(false);
     setStopped(true);
-    setSnapshot(null);
   }
 
   function onRevealEvidence(id: string) {
@@ -368,12 +369,13 @@ export default function InvestigatePage() {
             {labels.loading}
           </div>
         )}
-        {stopped && <p role="status" className="mb-6 text-sm text-neutral-400">{labels.stopped}</p>}
+        {stopped && <p role="status" className="mb-6 text-sm text-neutral-400">{snapshot ? labels.stoppedWithPrevious : labels.stopped}</p>}
         {error && <div role="alert" className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>}
 
         {result && snapshot && (
           <div className="flex flex-col gap-6">
             <p className="text-sm text-neutral-400">{labels.snapshot}: {snapshot.context.scenario_slug === "custom" ? `${labels.customReport}${snapshot.context.title ? ` · ${snapshot.context.title}` : ""}${snapshot.context.service ? ` (${snapshot.context.service})` : ""}` : SCENARIO_OPTIONS.find(option => option.slug === snapshot.context.scenario_slug)?.label[locale] ?? snapshot.context.scenario_slug} · {labels.requested}: {snapshot.context.requested_language} · {labels.depth}: {snapshot.context.max_steps_requested}</p>
+            {previousSnapshot && previousSnapshot.runId !== snapshot.runId && <InvestigationComparison key={`${previousSnapshot.runId}-${snapshot.runId}`} previous={previousSnapshot.result} current={snapshot.result} locale={locale} />}
             <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
               <span>{labels.stopReason}: <b className="text-neutral-200">{result.stop_reason}</b></span>
               <span>{labels.steps}: <b className="text-neutral-200">{result.steps}</b></span>
