@@ -1,0 +1,29 @@
+name: Feature request
+description: Suggest a capability or workflow improvement
+title: "Feature: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem should this solve?
+      description: Describe the user, situation, and current friction.
+      placeholder: When I am on call for…, I need…, because…
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would a useful solution look like?
+      description: Focus on the outcome; implementation ideas are welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or related tools
+      description: What do you use today, and what does it miss?
+  - type: markdown
+    attributes:
+      value: >-
+        Do not include customer information, credentials, private runbooks, or
+        details from incidents you are not authorized to share.

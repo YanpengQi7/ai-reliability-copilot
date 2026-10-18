@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible problem in the app, CLI, or MCP server
+title: "Bug: "
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Please remove credentials, customer data, private runbook content, and
+        real incident details before sharing logs or examples.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the behavior and where you saw it.
+      placeholder: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can we reproduce it?
+      description: Include the smallest safe example and steps to reproduce.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: App version, commit hash, or deployment URL (omit private URLs).
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add sanitized screenshots, logs, or details that help diagnose the issue.
