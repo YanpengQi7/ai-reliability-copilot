@@ -1,16 +1,52 @@
 # AI Reliability Copilot
 
-> Turn incident chaos into a structured 9-section response in seconds.
+> An open-source, evidence-first copilot for investigating production incidents and coordinating response.
+
+[![CI](https://github.com/YanpengQi7/ai-reliability-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/YanpengQi7/ai-reliability-copilot/actions/workflows/ci.yml)
+
+**[Try the live demo](https://ai-reliability-copilot.vercel.app)** · **[Get started locally](#quick-start)** · **[Contribute](./CONTRIBUTING.md)** · **[Usage guide (中文)](./USAGE.md)**
 
 ![AI Reliability Copilot — incident analysis form](./public/hero.png)
 
-Paste a production incident — logs, metrics, on-call notes. The copilot streams back a structured analysis: severity, ranked root-cause hypotheses with evidence, a copy-pasteable investigation checklist, a mitigation plan with rollback steps, customer-facing impact, postmortem skeleton, and prioritized follow-ups.
+Give it an incident, alert, logs, metrics, or on-call notes. It produces a structured response with severity, ranked hypotheses, cited evidence, investigation steps, mitigations with rollback plans, customer impact, a postmortem draft, and follow-ups. Use the web app, CLI, or MCP tools in your existing AI client.
 
-But the real story isn't the prompt. It's the **eval pipeline** — a 5-dimension rubric, a 5-scenario regression suite, and an LLM-as-judge that scores every change, so prompt iteration is measured instead of vibes-based.
+The project is built around **inspectable evidence and measured iteration**: investigation reports retain supporting and contradicting references, and the evaluation pipeline records uncertainty and failure cases instead of presenting prompt scores as proof of reliability.
 
-**Live demo:** [ai-reliability-copilot.vercel.app](https://ai-reliability-copilot.vercel.app)
-**📖 Usage guide (Chinese):** [USAGE.md](./USAGE.md) — how to actually use it, end-to-end
-**Methodology deep-dive:** [EVALUATION.md](./EVALUATION.md)
+If this helps your on-call work, **a GitHub star helps other SREs discover it**. Bugs, scenario contributions, and thoughtful feedback are welcome too.
+
+## Quick start
+
+Requires Node.js 22 or later. The core app can run locally without Supabase; persistence and archive features become available when Supabase is configured.
+
+```bash
+git clone https://github.com/YanpengQi7/ai-reliability-copilot.git
+cd ai-reliability-copilot
+npm ci
+cp .env.local.example .env.local
+```
+
+Add a `DEEPSEEK_API_KEY` to `.env.local`, then start the app:
+
+```bash
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). For database-backed features, configure the Supabase values in `.env.local` and apply [`supabase/schema.sql`](./supabase/schema.sql). See the [full setup and usage guide](./USAGE.md) for webhooks, MCP, the CLI, and the knowledge base.
+
+## What you can do
+
+- **Investigate with evidence:** inspect collected evidence, filter by service or type, open citations, and review missing or conflicting references.
+- **Keep reports portable:** export complete investigations and analyses as Markdown or JSON, with sensitive evidence excluded by default.
+- **Coordinate response:** assign owners and track investigation, mitigation, and follow-up actions.
+- **Use your own workflow:** work in the browser, pipe alerts through the CLI, or connect an MCP client to search runbooks and incident history.
+- **Evaluate changes transparently:** replay saved agent runs, compare outputs, and inspect the limits of the benchmark.
+
+## Project guides
+
+- [Full usage guide (中文)](./USAGE.md) — setup and end-to-end workflows
+- [Evaluation methodology](./EVALUATION.md) — rubric, methodology, limitations, and roadmap
+- [Evidence-first evaluation v2](./EVAL-V2.md) — frozen artifacts, comparison method, and replay instructions
+- [Contributing](./CONTRIBUTING.md) — development setup and useful ways to help
 
 **Evidence-first evaluation v2:** [EVAL-V2.md](./EVAL-V2.md) — frozen trial artifacts, blinded same-judge comparisons, fixed-answer calibration, failure accounting, and paired incident-family intervals. Includes 30 synthetic candidate cases awaiting independent review. Public pipeline demo: `/evals/benchmark`. Historical results below are legacy findings, not v2 quality claims.
 
@@ -119,15 +155,16 @@ See [EVALUATION.md](./EVALUATION.md) for the full methodology, including limitat
 
 Each has enough context (metrics, logs, deploy history, on-call notes) to differentiate prompt versions. Browse them at `/scenarios`.
 
-## Use it from your own Claude Code (MCP server mode)
+## Use it from an MCP client
 
-This project ships as **both a web app and an MCP server**. Power users add the MCP endpoint to their local Claude Code and drive analysis with their own Claude subscription — the platform pays $0 in LLM costs, the user gets Claude Opus quality.
+The MCP server exposes incident data, knowledge search, alert parsing, output guidance, and persistence tools. **Your MCP client’s model generates the analysis**; the server does not provide an `analyze_incident` model call. Search may use configured embeddings, and saved results use the configured database, so operating costs depend on your provider and deployment setup.
 
 ```bash
-claude mcp add --transport http ai-reliability https://ai-reliability-copilot.vercel.app/api/mcp
+# Local development after running `npm run dev`
+claude mcp add --transport http ai-reliability http://localhost:3000/api/mcp
 ```
 
-7 tools exposed: `search_kb`, `find_similar_incidents`, `list_scenarios`, `get_scenario`, `parse_alert_json`, `get_output_schema`, `save_incident_analysis`. See [USAGE.md](./USAGE.md) workflow D-bis for the full pattern.
+Hosted production and preview deployments require `MCP_AUTH_TOKEN` unless the owner explicitly enables public machine API access. If a token is configured, pass the owner-provided token as an Authorization bearer header in your MCP client. Treat incident context and knowledge-base content as sensitive; only connect a deployment you trust. The server exposes seven tools: `search_kb`, `find_similar_incidents`, `list_scenarios`, `get_scenario`, `parse_alert_json`, `get_output_schema`, and `save_incident_analysis`. See [USAGE.md](./USAGE.md#工作流-d-bis在自己的-claude-code-里用mcp-模式--推荐给团队内部) for the full setup.
 
 ## Use it from your terminal (CLI)
 

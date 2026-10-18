@@ -220,11 +220,11 @@ Authorization: Bearer <TOKEN>
 
 ### 工作流 D-bis：在自己的 Claude Code 里用（MCP 模式 — 推荐给团队内部）
 
-**为什么这是杀手锏**：用户用**自己的 Claude 订阅**（Opus 4.7 比 DeepSeek 强很多）做分析，KB / similar incidents / scenarios / 持久化都从这个 server 走。**LLM 成本归零给你，质量更高给用户**。
+MCP server 提供 KB / similar incidents / scenarios / alert parsing 和持久化工具；**分析由 MCP 客户端当前配置的模型生成**，server 不会调用一个隐藏的 incident-analysis 模型。成本取决于客户端订阅、embedding 配置和数据库部署；不同模型的分析质量也没有固定保证。
 
 ```bash
 # 一次性 setup（每个用户跑一次）
-claude mcp add --transport http ai-reliability https://ai-reliability-copilot.vercel.app/api/mcp
+claude mcp add --transport http ai-reliability http://localhost:3000/api/mcp
 
 # 然后在任何 Claude Code 会话里
 claude
@@ -378,7 +378,7 @@ Authorization: Bearer <HEALTHCHECK_TOKEN>
 
 ## 6a. MCP server 安全设置（公网部署必看）
 
-**默认是 public 模式** —— 没设 `MCP_AUTH_TOKEN` 时谁都能调。本地开发 / 内网 OK；**任何公网部署强烈建议加 token**：
+本地开发默认无需认证。Vercel production 和 preview 在没有 `MCP_AUTH_TOKEN` 时会拒绝 MCP / webhook 请求，除非部署者明确设置 `ALLOW_PUBLIC_MACHINE_API=true`。公网部署应配置 token；设置 token 后，每个 MCP 请求都需要对应的 Bearer header：
 
 ```bash
 # 生成一个随机 token
@@ -391,7 +391,7 @@ vercel env add MCP_AUTH_TOKEN production
 vercel --prod   # redeploy
 ```
 
-用户加 MCP 时带 header：
+客户端连接受保护的部署时带 header（token 应由部署者通过可信渠道提供）：
 
 ```bash
 claude mcp add --transport http ai-reliability \
@@ -411,7 +411,7 @@ claude mcp add --transport http ai-reliability \
 | 谁能看到什么 |  |
 |---|---|
 | **LLM provider (DeepSeek / OpenAI)** | 看到你贴的事故内容 + KB 检索到的片段。**不要贴 PII / 客户数据 / 密钥**。 |
-| **你的 Supabase 数据库** | 全部数据，包括 raw_context、embedding。RLS 默认没启用（service-role 客户端绕过）。如果要多租户上线，必须加 RLS + Supabase Auth。 |
+| **你的 Supabase 数据库** | 全部数据，包括 raw_context、embedding。schema 会启用 RLS 并撤销 `public`、`anon`、`authenticated` 角色的表访问；服务端 `service_role` 客户端绕过 RLS。当前服务端数据访问不是按用户隔离的，多租户上线前需要增加身份验证和租户级授权。 |
 | **Vercel logs** | 看到 API 请求路径 + status code，**不看到 body**。 |
 
 **生产部署 checklist**：
