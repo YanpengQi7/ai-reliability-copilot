@@ -1,6 +1,13 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import type { buildReport } from "@/lib/eval/report";
 import exportedReport from "../../../../evals/public/latest.json";
+
+export const metadata: Metadata = {
+  title: "Evidence benchmark",
+  description:
+    "Review a recorded synthetic incident-response benchmark, including evidence coverage, failures, cost, and evaluation limits.",
+};
 
 const report = exportedReport as ReturnType<typeof buildReport> & { execution: string; versions: Record<string, string> };
 const percent = (value: number | null) => value === null ? "Not available" : `${(value * 100).toFixed(1)}%`;

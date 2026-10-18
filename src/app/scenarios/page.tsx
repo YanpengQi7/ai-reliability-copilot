@@ -1,8 +1,15 @@
+import type { Metadata } from "next";
 import { SCENARIOS } from "@/lib/scenarios";
 import { RunScenarioButton } from "@/components/RunScenarioButton";
 import { Nav } from "@/components/Nav";
 import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
+
+export const metadata: Metadata = {
+  title: "SRE incident scenarios",
+  description:
+    "Explore synthetic production incidents with realistic symptoms, evidence, and expected severity. Use them to practice incident response or compare investigation approaches.",
+};
 
 export default async function ScenariosPage() {
   const locale = await getLocale();
