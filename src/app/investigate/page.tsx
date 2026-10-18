@@ -375,7 +375,7 @@ export default function InvestigatePage() {
         {result && snapshot && (
           <div className="flex flex-col gap-6">
             <p className="text-sm text-neutral-400">{labels.snapshot}: {snapshot.context.scenario_slug === "custom" ? `${labels.customReport}${snapshot.context.title ? ` · ${snapshot.context.title}` : ""}${snapshot.context.service ? ` (${snapshot.context.service})` : ""}` : SCENARIO_OPTIONS.find(option => option.slug === snapshot.context.scenario_slug)?.label[locale] ?? snapshot.context.scenario_slug} · {labels.requested}: {snapshot.context.requested_language} · {labels.depth}: {snapshot.context.max_steps_requested}</p>
-            {previousSnapshot && previousSnapshot.runId !== snapshot.runId && <InvestigationComparison key={`${previousSnapshot.runId}-${snapshot.runId}`} previous={previousSnapshot.result} current={snapshot.result} locale={locale} />}
+            {previousSnapshot && previousSnapshot.runId !== snapshot.runId && <InvestigationComparison key={`${previousSnapshot.runId}-${snapshot.runId}`} previous={previousSnapshot.result} current={snapshot.result} previousContext={previousSnapshot.context} currentContext={snapshot.context} locale={locale} />}
             <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
               <span>{labels.stopReason}: <b className="text-neutral-200">{result.stop_reason}</b></span>
               <span>{labels.steps}: <b className="text-neutral-200">{result.steps}</b></span>
