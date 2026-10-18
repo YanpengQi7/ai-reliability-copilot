@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/YanpengQi7/ai-reliability-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/YanpengQi7/ai-reliability-copilot/actions/workflows/ci.yml)
 
-**[Try the live demo](https://ai-reliability-copilot.vercel.app)** · **[Get started locally](#quick-start)** · **[Contribute](./CONTRIBUTING.md)** · **[Usage guide (中文)](./USAGE.md)**
+**[Try the live demo](https://ai-reliability-copilot.vercel.app)** · **[Get started locally](#quick-start)** · **[Contribute](./CONTRIBUTING.md)** · **[Security](./SECURITY.md)** · **[Usage guide (中文)](./USAGE.md)**
 
 ![AI Reliability Copilot — incident analysis form](./public/hero.png)
 
