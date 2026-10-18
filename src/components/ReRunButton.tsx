@@ -20,6 +20,9 @@ export function ReRunButton({ incidentId }: { incidentId: string }) {
       if (!res.ok) {
         throw new Error(await readApiError(res, "rerun failed"));
       }
+      const saved = await res.json() as { analysis_id?: string };
+      // Open the newly created run even when the current review is historical.
+      router.replace(`/incidents/${incidentId}${saved.analysis_id ? `?analysis=${encodeURIComponent(saved.analysis_id)}` : ""}`);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));

@@ -1,21 +1,55 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { InvestigationReview } from "@/components/InvestigationReview";
+import { InvestigationReview, type InvestigationReviewHandle } from "@/components/InvestigationReview";
+import { InvestigationExport } from "@/components/InvestigationExport";
 import { Nav } from "@/components/Nav";
 import type { Diagnosis } from "@/lib/agent/diagnosis";
 import type { InvestigationAnalysis } from "@/lib/agent/presentation";
 import type { InvestigationResult, TraceStep } from "@/lib/agent/types";
 import { readApiError } from "@/lib/http";
+import { useLocale } from "@/lib/i18n/client";
+import { t, type Locale } from "@/lib/i18n/messages";
+import { buildInvestigationEvidenceIndex, type InvestigationEvidenceIndex } from "@/lib/investigationEvidence";
+import type { InvestigationReportContext } from "@/lib/investigationReport";
 
 const SCENARIO_OPTIONS = [
-  { slug: "db-connection-pool-exhausted", label: "DB connection pool exhaustion (payment-svc)" },
-  { slug: "bad-deploy-memory-leak", label: "OOM crashloop after deploy (order-svc)" },
-  { slug: "upstream-dependency-timeout", label: "Upstream gateway timeout cascade (checkout-svc)" },
-  { slug: "dns-misconfiguration", label: "Regional 5xx after DNS change (api-gateway)" },
-  { slug: "cache-stampede", label: "Cache stampede on Black Friday (catalog-svc)" },
+  { slug: "db-connection-pool-exhausted", label: { en: "DB connection pool exhaustion (payment-svc)", zh: "数据库连接池耗尽（payment-svc）" } },
+  { slug: "bad-deploy-memory-leak", label: { en: "OOM crashloop after deploy (order-svc)", zh: "部署后内存不足反复重启（order-svc）" } },
+  { slug: "upstream-dependency-timeout", label: { en: "Upstream gateway timeout cascade (checkout-svc)", zh: "上游网关超时引发级联故障（checkout-svc）" } },
+  { slug: "dns-misconfiguration", label: { en: "Regional 5xx after DNS change (api-gateway)", zh: "DNS 变更后区域性 5xx（api-gateway）" } },
+  { slug: "cache-stampede", label: { en: "Cache stampede on Black Friday (catalog-svc)", zh: "黑色星期五缓存击穿（catalog-svc）" } },
 ];
+
+const LABELS = {
+  en: {
+    title: "Incident investigator", subtitle: "Start with an alert. The investigator gathers metrics, logs, deployment history, and runbooks, then records its checks and the evidence behind its conclusions.",
+    scenario: "Investigation scenario", output: "Investigation output language", run: "Run investigation", stop: "Stop investigation",
+    loading: "Gathering evidence and preparing the report…", stopped: "Investigation stopped. Run again to produce a report.", failed: "Investigation failed",
+    trace: "Investigation trace", structured: "Structured response", snapshot: "Report scenario", requested: "Requested output", unknown: "Unknown severity",
+    diagnosis: "Diagnosis status", claims: "Claims and citations", noClaims: "No factual claims recorded.",
+    hypotheses: "Review supporting and contradicting evidence for each hypothesis.", noCauses: "No evidence-backed cause established.",
+    supporting: "Supporting evidence", refuting: "Contradicting evidence", noRefs: "None cited", unavailable: "unavailable", ambiguous: "ambiguous record", open: "Open evidence",
+    kinds: { observed: "Observed", derived: "Derived", inference: "Inference", hypothesis: "Hypothesis" },
+    conclusion: { supported: "Supported", tentative: "Tentative", insufficient_evidence: "Insufficient evidence" },
+    complete: "Completed", partial: "Incomplete investigation", stopReason: "Stopped because", steps: "Investigation steps", calls: "Model calls", toolCalls: "Successful reads", tokens: "Tokens", cost: "Cost",
+    statuses: { ok: "Read succeeded", empty: "No data", refused: "Refused", error: "Read failed" },
+  },
+  zh: {
+    title: "故障调查", subtitle: "从告警开始。调查员收集指标、日志、部署历史和运维手册，并记录排查步骤与结论所引用的证据。",
+    scenario: "调查场景", output: "调查输出语言", run: "开始调查", stop: "停止调查",
+    loading: "正在收集证据并生成报告…", stopped: "调查已停止。请重新运行以生成报告。", failed: "调查失败",
+    trace: "调查记录", structured: "结构化响应", snapshot: "报告场景", requested: "请求的输出语言", unknown: "严重等级未知",
+    diagnosis: "诊断状态", claims: "结论与引用", noClaims: "未记录事实性结论。",
+    hypotheses: "请检查每个假设的支持证据与反证。", noCauses: "尚未确定有证据支持的原因。",
+    supporting: "支持证据", refuting: "反证", noRefs: "未引用", unavailable: "不可用", ambiguous: "记录存在歧义", open: "打开证据",
+    kinds: { observed: "观察", derived: "计算", inference: "推断", hypothesis: "假设" },
+    conclusion: { supported: "有证据支持", tentative: "暂定", insufficient_evidence: "证据不足" },
+    complete: "已完成", partial: "调查未完成", stopReason: "停止原因", steps: "调查步骤", calls: "模型调用", toolCalls: "成功读取", tokens: "Token", cost: "费用",
+    statuses: { ok: "读取成功", empty: "无数据", refused: "已拒绝", error: "读取失败" },
+  },
+};
 
 const STATUS_STYLE: Record<TraceStep["status"], { icon: string; cls: string }> = {
   ok: { icon: "✓", cls: "text-emerald-400 border-emerald-500/30 bg-emerald-500/5" },
@@ -30,7 +64,9 @@ const SEV_STYLE: Record<string, string> = {
   SEV3: "bg-sky-500/15 text-sky-300 border-sky-500/40",
 };
 
-function TraceTimeline({ trace }: { trace: TraceStep[] }) {
+function TraceTimeline({ trace, locale }: { trace: TraceStep[]; locale: Locale }) {
+  const labels = LABELS[locale];
+  const id = useId();
   const [open, setOpen] = useState<number | null>(null);
   return (
     <ol className="flex flex-col gap-2">
@@ -39,15 +75,15 @@ function TraceTimeline({ trace }: { trace: TraceStep[] }) {
         const isOpen = open === s.index;
         return (
           <li key={s.index} className={`rounded-lg border ${st.cls} px-3 py-2`}>
-            <button className="flex w-full items-center gap-3 text-left" onClick={() => setOpen(isOpen ? null : s.index)}>
+            <button type="button" aria-expanded={isOpen} aria-controls={`${id}-${s.index}`} className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-left focus-visible:outline-2 focus-visible:outline-indigo-400" onClick={() => setOpen(isOpen ? null : s.index)}>
               <span className="font-mono text-xs opacity-60">{s.index}</span>
               <span className="text-base">{st.icon}</span>
-              <span className="font-mono text-sm text-neutral-200">{s.tool}</span>
-              <span className="font-mono text-xs text-neutral-500 truncate">{JSON.stringify(s.input)}</span>
-              <span className="ml-auto text-xs uppercase tracking-wide opacity-60">{s.status}{s.reason ? ` · ${s.reason}` : ""}</span>
+              <span className="min-w-0 break-words font-mono text-sm text-neutral-200">{s.tool}</span>
+              <span className="ml-auto min-w-0 break-words text-xs opacity-80">{labels.statuses[s.status]}{s.reason ? ` · ${s.reason}` : ""}</span>
+              <span className="basis-full truncate font-mono text-xs text-neutral-500">{JSON.stringify(s.input)}</span>
             </button>
             {isOpen && (
-              <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-black/40 p-3 text-xs text-neutral-300">{s.observation}</pre>
+              <pre id={`${id}-${s.index}`} className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-black/40 p-3 text-xs text-neutral-300">{s.observation}</pre>
             )}
           </li>
         );
@@ -65,77 +101,98 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function AnalysisView({ a, diagnosis }: { a: InvestigationAnalysis; diagnosis: Diagnosis }) {
+function EvidenceReferences({ ids, index, onRevealEvidence, locale }: {
+  ids: string[]; index: InvestigationEvidenceIndex; onRevealEvidence: (id: string) => void; locale: Locale;
+}) {
+  const labels = LABELS[locale];
+  const known = new Set(index.evidence.map(item => item.id));
+  const ambiguous = new Set(index.ambiguousIds);
+  if (!ids.length) return <span className="text-xs text-neutral-500">{labels.noRefs}</span>;
+  return <span className="inline-flex flex-wrap gap-2">
+    {[...new Set(ids)].map(id => !known.has(id) || ambiguous.has(id)
+      ? <span key={id} className="break-all font-mono text-xs text-amber-300">{id} ({ambiguous.has(id) ? labels.ambiguous : labels.unavailable})</span>
+      : <button key={id} type="button" onClick={() => onRevealEvidence(id)} aria-label={`${labels.open}: ${id}`} className="break-all font-mono text-xs text-indigo-300 underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-indigo-400">{id}</button>)}
+  </span>;
+}
+
+function AnalysisView({ a, diagnosis, evidenceIndex, onRevealEvidence, locale }: {
+  a: InvestigationAnalysis; diagnosis: Diagnosis; evidenceIndex: InvestigationEvidenceIndex; onRevealEvidence: (id: string) => void; locale: Locale;
+}) {
+  const labels = LABELS[locale];
+  const section = (key: string) => t(locale, key);
   return (
     <div className="flex flex-col gap-4">
-      <Section title="Summary">
+      <Section title={section("section.summary")}>
         <div className="mb-3 flex items-center gap-3">
-          <span className={`rounded border px-2 py-0.5 text-sm font-bold ${SEV_STYLE[a.severity ?? "unknown"] ?? "border-neutral-600"}`}>{a.severity ?? "Unknown severity"}</span>
+          <span className={`rounded border px-2 py-0.5 text-sm font-bold ${SEV_STYLE[a.severity ?? "unknown"] ?? "border-neutral-600"}`}>{a.severity ?? labels.unknown}</span>
           <span className="text-xs text-neutral-400">{a.severity_reasoning}</span>
         </div>
-        <p className="mb-2 text-xs text-neutral-400">Diagnosis status: {diagnosis.conclusion_status.replaceAll("_", " ")}</p>
+        <p className="mb-2 text-xs text-neutral-400">{labels.diagnosis}: {labels.conclusion[diagnosis.conclusion_status]}</p>
         <p className="text-sm text-neutral-200">{a.summary}</p>
       </Section>
 
-      <Section title={`Claims and citations (${diagnosis.claims.length})`}>
-        {diagnosis.claims.length === 0 && <p className="text-sm text-neutral-400">No factual claims recorded.</p>}
+      <Section title={`${labels.claims} (${diagnosis.claims.length})`}>
+        {diagnosis.claims.length === 0 && <p className="text-sm text-neutral-400">{labels.noClaims}</p>}
         <ul className="space-y-2">
           {diagnosis.claims.map(claim => <li key={claim.id} className="text-sm text-neutral-200">
-            <span className="mr-2 text-xs text-neutral-500">{claim.kind}</span>{claim.text}
-            <div className="mt-1 font-mono text-xs text-neutral-500">{claim.evidence_ids.join(", ") || "No cited evidence"}</div>
+            <span className="mr-2 text-xs text-neutral-500">{labels.kinds[claim.kind]}</span>{claim.text}
+            <div className="mt-1"><EvidenceReferences ids={claim.evidence_ids} index={evidenceIndex} onRevealEvidence={onRevealEvidence} locale={locale} /></div>
           </li>)}
         </ul>
       </Section>
 
-      <Section title={`Root causes (${a.root_causes.length})`}>
-        <p className="text-xs text-neutral-500">Hypotheses are not probability estimates. Supporting and contradicting evidence are shown below.</p>
-        {a.root_causes.length === 0 && <p className="text-sm text-neutral-400">No evidence-backed cause established.</p>}
+      <Section title={`${section("section.rootCauses")} (${a.root_causes.length})`}>
+        <p className="text-xs text-neutral-500">{labels.hypotheses}</p>
+        {a.root_causes.length === 0 && <p className="text-sm text-neutral-400">{labels.noCauses}</p>}
         <ul className="flex flex-col gap-2">
           {a.root_causes.map((rc, i) => (
             <li key={i} className="text-sm">
-              <span className="mr-2 rounded px-1.5 py-0.5 text-xs font-semibold bg-neutral-500/15 text-neutral-300">Hypothesis</span>
+              <span className="mr-2 rounded px-1.5 py-0.5 text-xs font-semibold bg-neutral-500/15 text-neutral-300">{labels.kinds.hypothesis}</span>
               <span className="text-neutral-200">{rc.hypothesis}</span>
-              <div className="mt-0.5 pl-1 text-xs text-neutral-500">evidence: {rc.evidence}</div>
+              {diagnosis.root_causes[i] ? <div className="mt-2 space-y-1 text-xs text-neutral-400">
+                <div>{labels.supporting}: <EvidenceReferences ids={diagnosis.root_causes[i].supporting_ids} index={evidenceIndex} onRevealEvidence={onRevealEvidence} locale={locale} /></div>
+                <div>{labels.refuting}: <EvidenceReferences ids={diagnosis.root_causes[i].refuting_ids} index={evidenceIndex} onRevealEvidence={onRevealEvidence} locale={locale} /></div>
+              </div> : <div className="mt-0.5 pl-1 text-xs text-neutral-500">{rc.evidence}</div>}
             </li>
           ))}
         </ul>
       </Section>
 
-      <Section title={`Investigation checklist (${a.investigation_checklist.length})`}>
+      <Section title={`${section("section.investigation")} (${a.investigation_checklist.length})`}>
         <ol className="flex flex-col gap-3">
           {a.investigation_checklist.map((step, i) => (
             <li key={i} className="text-sm">
               <div className="text-neutral-200">{i + 1}. {step.step}</div>
               {step.command && <pre className="my-1 overflow-x-auto rounded bg-black/50 px-2 py-1 font-mono text-xs text-emerald-300">{step.command}</pre>}
-              <div className="text-xs text-neutral-500">expect: {step.expected}</div>
+              <div className="text-xs text-neutral-500">{section("section.expected")} {step.expected}</div>
             </li>
           ))}
         </ol>
       </Section>
 
-      <Section title={`Mitigation plan (${a.mitigation_plan.length})`}>
+      <Section title={`${section("section.mitigation")} (${a.mitigation_plan.length})`}>
         <ul className="flex flex-col gap-2">
           {a.mitigation_plan.map((m, i) => (
             <li key={i} className="text-sm">
               <div className="text-neutral-200">▸ {m.action}</div>
-              <div className="pl-3 text-xs text-amber-300/80">risk: {m.risk}</div>
-              <div className="pl-3 text-xs text-emerald-300/80">rollback: {m.rollback}</div>
+              <div className="pl-3 text-xs text-amber-300/80">{section("section.risk")} {m.risk}</div>
+              <div className="pl-3 text-xs text-emerald-300/80">{section("section.rollback")} {m.rollback}</div>
             </li>
           ))}
         </ul>
       </Section>
 
-      <Section title="Customer impact">
+      <Section title={section("section.customerImpact")}>
         <p className="text-sm text-neutral-200">{a.customer_impact}</p>
       </Section>
 
-      <Section title="Postmortem draft">
+      <Section title={section("section.postmortem")}>
         <div className="prose prose-invert prose-sm max-w-none">
           <ReactMarkdown>{a.postmortem_draft}</ReactMarkdown>
         </div>
       </Section>
 
-      <Section title={`Follow-ups (${a.follow_ups.length})`}>
+      <Section title={`${section("section.followUps")} (${a.follow_ups.length})`}>
         <ul className="flex flex-col gap-1">
           {a.follow_ups.map((f, i) => (
             <li key={i} className="text-sm text-neutral-200">
@@ -150,12 +207,19 @@ function AnalysisView({ a, diagnosis }: { a: InvestigationAnalysis; diagnosis: D
 }
 
 export default function InvestigatePage() {
+  const locale = useLocale();
+  const labels = LABELS[locale];
   const [slug, setSlug] = useState(SCENARIO_OPTIONS[0].slug);
   const [lang, setLang] = useState<"en" | "zh">("en");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<InvestigationResult | null>(null);
+  const [snapshot, setSnapshot] = useState<{ result: InvestigationResult; context: InvestigationReportContext; runId: number } | null>(null);
+  const [stopped, setStopped] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const runIdRef = useRef(0);
+  const reviewRef = useRef<InvestigationReviewHandle | null>(null);
+  const result = snapshot?.result ?? null;
+  const evidenceIndex = useMemo(() => buildInvestigationEvidenceIndex(result), [result]);
 
   useEffect(() => () => {
     abortRef.current?.abort();
@@ -165,25 +229,30 @@ export default function InvestigatePage() {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const runId = ++runIdRef.current;
+    const context: InvestigationReportContext = { scenario_slug: slug, requested_language: lang };
     setLoading(true);
     setError(null);
-    setResult(null);
+    setStopped(false);
+    setSnapshot(null);
     try {
       const res = await fetch("/api/investigate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario_slug: slug, output_language: lang }),
+        body: JSON.stringify({ scenario_slug: context.scenario_slug, output_language: context.requested_language }),
         signal: controller.signal,
       });
       if (!res.ok) {
-        setError(await readApiError(res, "Investigation failed"));
+        const message = await readApiError(res, labels.failed);
+        if (abortRef.current === controller && !controller.signal.aborted) setError(message);
         return;
       }
-      const j = await res.json();
-      setResult(j as InvestigationResult);
+      const response = await res.json() as InvestigationResult;
+      if (abortRef.current !== controller || controller.signal.aborted) return;
+      setSnapshot({ result: response, context: { ...context, generated_at: new Date().toISOString() }, runId });
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
-      setError(e instanceof Error ? e.message : String(e));
+      if (abortRef.current === controller && !controller.signal.aborted) setError(e instanceof Error ? e.message : String(e));
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = null;
@@ -194,71 +263,81 @@ export default function InvestigatePage() {
 
   function stop() {
     abortRef.current?.abort();
+    abortRef.current = null;
+    setLoading(false);
+    setStopped(true);
+    setSnapshot(null);
+  }
+
+  function onRevealEvidence(id: string) {
+    reviewRef.current?.revealEvidence(id);
   }
 
   return (
     <main className="min-h-screen bg-neutral-950 px-6 py-8 text-neutral-100">
       <div className="mx-auto max-w-5xl">
-        <div className="mb-6 flex items-start justify-between">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white">Agentic investigator</h1>
+            <h1 className="text-2xl font-bold text-white">{labels.title}</h1>
             <p className="mt-1 max-w-2xl text-sm text-neutral-400">
-              The agent gets only the <em>alert</em> — not the full incident dump. It calls read-only tools
-              (<code className="text-neutral-300">get_metrics</code>, <code className="text-neutral-300">get_logs</code>,
-              <code className="text-neutral-300"> get_deploy_history</code>, <code className="text-neutral-300">search_runbooks</code>)
-              in a hand-written loop to <em>discover</em> the evidence, then writes the structured response. Every step is shown below.
+              {labels.subtitle}
             </p>
           </div>
           <Nav />
         </div>
 
         <div className="mb-6 flex flex-wrap items-center gap-3 rounded-xl border border-neutral-800 bg-neutral-900/40 p-4">
-          <select value={slug} onChange={(e) => setSlug(e.target.value)} className="rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200">
-            {SCENARIO_OPTIONS.map((o) => <option key={o.slug} value={o.slug}>{o.label}</option>)}
+          <select aria-label={labels.scenario} value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full min-w-0 rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 sm:w-auto sm:max-w-full">
+            {SCENARIO_OPTIONS.map((o) => <option key={o.slug} value={o.slug}>{o.label[locale]}</option>)}
           </select>
-          <select value={lang} onChange={(e) => setLang(e.target.value as "en" | "zh")} className="rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200">
+          <select aria-label={labels.output} value={lang} onChange={(e) => setLang(e.target.value as "en" | "zh")} className="min-w-0 rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200">
             <option value="en">Output: English</option>
             <option value="zh">输出：中文</option>
           </select>
           <button
+            type="button"
             onClick={loading ? stop : run}
             className={`rounded px-4 py-2 text-sm font-semibold text-white ${
               loading ? "bg-red-700 hover:bg-red-600" : "bg-emerald-600 hover:bg-emerald-500"
             }`}
           >
-            {loading ? "Stop investigation" : "Run investigation"}
+            {loading ? labels.stop : labels.run}
           </button>
         </div>
 
         {loading && (
           <div className="mb-6 animate-pulse rounded-xl border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-400">
-            The agent is calling tools and reasoning across steps. This makes several model calls (~30s on DeepSeek)…
+            {labels.loading}
           </div>
         )}
-        {error && <div className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>}
+        {stopped && <p role="status" className="mb-6 text-sm text-neutral-400">{labels.stopped}</p>}
+        {error && <div role="alert" className="mb-6 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>}
 
-        {result && (
+        {result && snapshot && (
           <div className="flex flex-col gap-6">
+            <p className="text-sm text-neutral-400">{labels.snapshot}: {SCENARIO_OPTIONS.find(option => option.slug === snapshot.context.scenario_slug)?.label[locale] ?? snapshot.context.scenario_slug} · {labels.requested}: {snapshot.context.requested_language}</p>
             <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
-              <span>stop: <b className="text-neutral-200">{result.stop_reason}</b></span>
-              <span>loop steps: <b className="text-neutral-200">{result.steps}</b></span>
-              <span>model calls: <b className="text-neutral-200">{result.usage.model_calls}</b></span>
-              <span>tool calls: <b className="text-neutral-200">{result.trace.filter((s) => s.status === "ok").length}</b></span>
-              <span>tokens: <b className="text-neutral-200">{result.usage.tokens_in}/{result.usage.tokens_out}</b></span>
-              <span>cost: <b className="text-neutral-200">${result.usage.cost_usd.toFixed(5)}</b></span>
-              <span>{result.completed ? "✓ completed" : "⚠ incomplete"}</span>
+              <span>{labels.stopReason}: <b className="text-neutral-200">{result.stop_reason}</b></span>
+              <span>{labels.steps}: <b className="text-neutral-200">{result.steps}</b></span>
+              <span>{labels.calls}: <b className="text-neutral-200">{result.usage.model_calls}</b></span>
+              <span>{labels.toolCalls}: <b className="text-neutral-200">{result.trace.filter((s) => s.status === "ok").length}</b></span>
+              <span>{labels.tokens}: <b className="text-neutral-200">{result.usage.tokens_in}/{result.usage.tokens_out}</b></span>
+              <span>{labels.cost}: <b className="text-neutral-200">${result.usage.cost_usd.toFixed(5)}</b></span>
+              <span className={result.completed ? "text-emerald-300" : "font-medium text-amber-300"}>{result.completed ? labels.complete : labels.partial}</span>
             </div>
 
+            <InvestigationExport key={snapshot.runId} result={result} context={snapshot.context} />
+
             <div>
-              <h2 className="mb-3 text-lg font-semibold text-white">Investigation trace</h2>
-              <TraceTimeline trace={result.trace} />
+              <h2 className="mb-3 text-lg font-semibold text-white">{labels.trace}</h2>
+              <TraceTimeline key={snapshot.runId} trace={result.trace} locale={locale} />
             </div>
 
-            <InvestigationReview decisions={result.decisions} evidence={result.evidence ?? []} trace={result.trace} diagnosis={result.diagnosis} />
+            <InvestigationReview key={snapshot.runId} ref={reviewRef} decisions={result.decisions} evidence={result.evidence ?? []} trace={result.trace} diagnosis={result.diagnosis} />
 
             <div>
-              <h2 className="mb-3 text-lg font-semibold text-white">Structured response</h2>
-              <AnalysisView a={result.analysis} diagnosis={result.diagnosis} />
+              <h2 className="mb-3 text-lg font-semibold text-white">{labels.structured}</h2>
+              <AnalysisView a={result.analysis} diagnosis={result.diagnosis} evidenceIndex={evidenceIndex} onRevealEvidence={onRevealEvidence} locale={locale} />
             </div>
           </div>
         )}

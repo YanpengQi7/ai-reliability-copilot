@@ -53,6 +53,10 @@ export const MESSAGES: Messages = {
   "home.trySample": { en: "Load sample:", zh: "试用样例：" },
   "home.parsed": { en: "Parsed from", zh: "已解析" },
   "home.notRecognized": { en: "Not a recognized alert payload", zh: "未识别的告警格式" },
+  "home.alertTooLong": {
+    en: "Parsed alert fields exceed the input limits. The original context was kept; shorten the alert before parsing.",
+    zh: "解析后的告警字段超出输入上限。已保留原始上下文，请缩短告警后再解析。",
+  },
   "home.uploadScreenshot": { en: "📷 Attach screenshot (Grafana, error page, stack trace…)", zh: "📷 附加截图（Grafana、错误页、堆栈…）" },
   "home.describingImage": { en: "Analyzing image…", zh: "正在分析图像…" },
   "home.imageDescribed": { en: "Image description added to context", zh: "图像描述已加入上下文" },
@@ -61,6 +65,24 @@ export const MESSAGES: Messages = {
   "home.imageTooLarge": { en: "Image must be 5 MB or smaller", zh: "图片大小不能超过 5 MB" },
   "home.contextTooLong": { en: "Raw context has reached the 50,000 character limit", zh: "原始上下文已达到 50,000 字符上限" },
   "home.characters": { en: "characters", zh: "字符" },
+  "home.preflight.title": { en: "Credential check", zh: "凭据检查" },
+  "home.preflight.body": {
+    en: "Known credential patterns are removed in your browser before analysis. Review the context for other sensitive data.",
+    zh: "分析前会在浏览器中移除已知模式的凭据。请同时检查上下文中的其他敏感信息。",
+  },
+  "home.preflight.context": { en: "Context", zh: "上下文" },
+  "home.preflight.redact": { en: "Redact in editor", zh: "在编辑器中脱敏" },
+  "home.preflight.detected": { en: "potential credentials detected", zh: "处疑似凭据" },
+  "home.preflight.line": { en: "line", zh: "行" },
+  "home.preflight.clean": { en: "No supported credential patterns detected.", zh: "未检测到已支持模式的凭据。" },
+  "home.preflight.tooLong": {
+    en: "exceeds its character limit after redaction. Shorten this field before analyzing.",
+    zh: "脱敏后超出字符上限。请缩短此字段后再分析。",
+  },
+  "home.preflight.tooShort": {
+    en: "needs more incident evidence before analysis.",
+    zh: "需要更多故障证据才能分析。",
+  },
   "home.promptLabel": { en: "Prompt:", zh: "Prompt：" },
   "home.outputLanguage": { en: "Output:", zh: "输出语言：" },
   "home.analyze": { en: "Analyze incident", zh: "分析故障" },
@@ -89,6 +111,7 @@ export const MESSAGES: Messages = {
 
   // Analysis sections (UI labels — content stays in the LLM-output language)
   "section.summary": { en: "Summary", zh: "摘要" },
+  "section.severity": { en: "Severity", zh: "严重等级" },
   "section.severityReasoning": { en: "Severity reasoning:", zh: "严重等级理由：" },
   "section.rootCauses": { en: "Root cause hypotheses", zh: "根因假设" },
   "section.evidence": { en: "Evidence:", zh: "证据：" },
@@ -127,6 +150,22 @@ export const MESSAGES: Messages = {
   "detail.created": { en: "created:", zh: "创建时间：" },
   "detail.rawContext": { en: "Raw incident context", zh: "原始故障上下文" },
   "detail.noAnalyses": { en: "No analyses yet.", zh: "暂无分析。" },
+  "detail.review.title": { en: "Analysis history & comparison", zh: "分析历史与对比" },
+  "detail.review.body": {
+    en: "Open any saved analysis, or compare its content with another run. Differences show what changed, not which analysis is better.",
+    zh: "查看任意已保存的分析，或与另一次运行对比内容。差异仅表示内容变化，不代表分析质量更高。",
+  },
+  "detail.review.selected": { en: "View analysis", zh: "查看分析" },
+  "detail.review.baseline": { en: "Compare against", zh: "对比基准" },
+  "detail.review.none": { en: "No comparison", zh: "不对比" },
+  "detail.review.open": { en: "Open review", zh: "查看对比" },
+  "detail.review.latest": { en: "Latest", zh: "最新" },
+  "detail.review.previous": { en: "Viewing an earlier analysis", zh: "正在查看较早的分析" },
+  "detail.review.backToLatest": { en: "View latest analysis", zh: "查看最新分析" },
+  "detail.review.invalid": {
+    en: "A requested analysis is unavailable for this incident. Showing the available selection.",
+    zh: "请求的分析不属于此故障或已不可用，现显示可用的分析。",
+  },
   "detail.earlierVersions": {
     en: "earlier analysis version(s)",
     zh: "更早的分析版本",

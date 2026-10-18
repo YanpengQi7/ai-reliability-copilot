@@ -1,8 +1,17 @@
 import { redactSecrets } from "./secretScan";
 
+const SHORT_TEXT_LIMIT = 500;
+const RAW_CONTEXT_LIMIT = 50_000;
+const ANALYSIS_REQUEST_BYTES = (RAW_CONTEXT_LIMIT + 3 * SHORT_TEXT_LIMIT) * 6 + 16_384;
+
 export const INPUT_LIMITS = {
-  shortText: 500,
-  rawContext: 50_000,
+  shortText: SHORT_TEXT_LIMIT,
+  rawContext: RAW_CONTEXT_LIMIT,
+  // Each accepted UTF-16 code unit can require six bytes when JSON-escaped.
+  // Include all three short fields plus space for the keys and analysis options.
+  analysisRequestBytes: ANALYSIS_REQUEST_BYTES,
+  // Saving carries the same incident input plus the completed report and usage.
+  analysisSaveBytes: ANALYSIS_REQUEST_BYTES + 512_000,
   imagePayload: 8_000_000,
   imageFileBytes: 5_000_000,
   smallJson: 16_384,

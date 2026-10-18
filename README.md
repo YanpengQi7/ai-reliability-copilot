@@ -43,6 +43,20 @@ The `/investigate` product and new v2 agentic runs share one planning and diagno
 - **Supabase Postgres** for persistence; service-role client server-side only
 - **Vercel** auto-deploys on push to `main`
 
+## Investigation evidence workspace
+
+On **Investigate**, inspect the evidence captured by the investigator with local text search, kind and service filters, and cited/uncited views. Citation buttons in planner decisions, claims, and root-cause hypotheses open the referenced record, clearing filters that would hide it. Missing references and conflicting records with the same ID are called out for review. The reference audit checks record presence and identity, while factual support and arithmetic still require review.
+
+Use **Copy investigation report**, **Download Markdown**, or **Download JSON** to keep the diagnosis, supporting and contradicting references, structured measurements and derivations, unresolved checks, planner decisions, read outcomes, usage, and presentation response together. Reports retain unknown severity and incomplete status, including investigations stopped by a budget or step cap. Exports always use the full run, regardless of evidence filters. The scenario and requested language are captured when the run starts; later selections do not relabel the report, and canceled responses cannot replace a newer result.
+
+Evidence bodies, tool inputs and observations, and planner query fields are excluded by default. An explicit opt-in includes them with supported credential patterns redacted. Narratives and source metadata may still contain incident details; review the report before sharing. Original source hashes are labeled as provenance because omitted or redacted content cannot be verified against the original hashes. Filtering and exports run in the browser without additional model calls, server writes, or automatic browser storage.
+
+## Local evidence intake
+
+Use **Choose files** or drag log and alert files into the New page. Import up to five UTF-8 `.txt`, `.log`, `.json`, `.md`, or `.csv` files, preview the combined evidence, then append it to the current context or explicitly replace it. A single replacement keeps alert JSON intact for **Parse alert JSON**. File reads happen in the browser; contents are sent only when you start analysis. Invalid batches and context over the 50,000-character limit leave the existing evidence intact, with no silent truncation.
+
+The **Credential check** shows detected credential types and their locations without repeating the matched credentials. You can redact in the editor, and analysis automatically redacts supported patterns in the browser before submission. The saved input snapshot and exported raw context use that same sanitized input. Private-key redaction removes the complete key block, including truncated blocks. Detection covers known patterns; review evidence for other sensitive information.
+
 ## The 9-section output schema
 
 Enforced by Zod ([`src/lib/schema.ts`](./src/lib/schema.ts)):
@@ -147,6 +161,28 @@ Make the AI understand **your company**: drop your runbooks, postmortems, and se
 
 The signature for similarity retrieval is the chunk text itself. Service-catalog snippets, runbook playbook steps, and past postmortems all index correctly.
 
+## Search the incident archive
+
+The **Incidents** page searches the full saved archive, including records beyond the newest 50. Search titles, services, and symptoms for text, combine it with an exact service name, or filter by inclusive creation dates in UTC. Text searches ignore case and treat punctuation such as `%`, `_`, and `*` literally. Select a service badge to filter by that service.
+
+Browse 25 incidents per page with **Older matches** and **Newest matches**. Filters and the current page are stored in the URL for bookmarks, browser history, and sharing with people who already have access. Applying different filters starts from the newest matching records. Records without creation dates appear last. Pagination preserves timestamp precision and uses incident IDs to distinguish records created at the same time.
+
+Archive queries fetch only title, service, symptoms, creation date, and ID; raw incident context is not fetched for the list. Invalid filters show a correction message before querying, and database failures offer a retry of the same page. Hosted deployments retain their existing private-data settings.
+
+## Analysis review and portable reports
+
+Saved incident pages include an **Analysis history & comparison** workspace. Open any saved run, choose another run as a baseline, and review changes across all nine analysis sections. Commands, supporting evidence, mitigation risks, rollback steps, and follow-ups stay visible in the comparison. Different output languages are called out; content differences do not imply better quality. The evaluation button and internal-document audit always refer to the displayed run. Review selections live in the URL so browser history and bookmarks preserve them.
+
+Use **Copy report**, **Download Markdown**, or **Download JSON** to take a complete analysis into a handoff or postmortem. Raw incident context is excluded by default and can be included explicitly. On the New page, exports become available only after generation completes, including when persistence is disabled or saving fails. The report uses the incident input captured when that generation started. Exports run in the browser without extra model calls, database writes, or third-party services.
+
+## Response actions and handoffs
+
+After analysis completes, **Response workspace** turns the investigation checklist, mitigations, and follow-ups into a manual action list. Assign an owner, record observed outcomes or blockers, and mark actions to do, in progress, blocked, or done. Progress counts and filters help the next responder see what remains. Commands, expected results, mitigation risks, and rollback steps stay visible; marking an action done records your assessment.
+
+**Copy handoff**, **Download Markdown**, and **Download JSON** include every recommended action alongside the progress you recorded, with blocked and remaining actions called out. Observed outcomes are labeled separately from the model's expected results. Handoffs omit raw incident context and symptoms and redact supported credential patterns from notes and source recommendations. Review them for other sensitive information before sharing.
+
+Progress stays in memory by default. Saved incident analyses offer **Remember progress in this browser**; this opt-in stores only action status, owner, and outcome on this browser, without team synchronization. Turning it off removes the local copy while keeping your current session. Other open tabs retain their session notes and stop saving this analysis. Each incident, analysis run, and exact source version has separate progress, so reruns start fresh. Completed analyses that could not be saved still support session-only tracking and handoff exports. Resetting progress requires confirmation inside the workspace.
+
 ## Similar-incident search
 
 Every incident gets a **signature** (concatenation of title + service + symptoms + summary + severity) and, when `OPENAI_API_KEY` is configured, a **1536-dim embedding**. The detail page shows up to 5 past incidents ranked by similarity.
@@ -221,4 +257,3 @@ and send it as a Bearer token to retrieve detailed dependency diagnostics.
 ## License
 
 MIT
-

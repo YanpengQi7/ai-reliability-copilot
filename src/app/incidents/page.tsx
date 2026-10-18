@@ -1,14 +1,21 @@
-import Link from "next/link";
-import { listIncidents, hasSupabase } from "@/lib/db";
+import { hasSupabase } from "@/lib/db";
 import { Nav } from "@/components/Nav";
+import { IncidentArchive } from "@/components/IncidentArchive";
 import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
 import { publicIncidentDataEnabled } from "@/lib/incidentAccess";
 import { createDatabaseQuerySignal } from "@/lib/databaseDeadline";
+import {
+  archiveHref,
+  encodeIncidentArchiveCursor,
+  parseIncidentArchiveParams,
+  type ArchiveSearchParams,
+} from "@/lib/incidentArchive";
+import { listIncidentArchivePage, type IncidentArchiveRow } from "@/lib/incidentArchiveQuery";
 
 export const dynamic = "force-dynamic";
 
-export default async function IncidentsPage() {
+export default async function IncidentsPage({ searchParams }: { searchParams: Promise<ArchiveSearchParams> }) {
   const locale = await getLocale();
   const tr = (k: string) => t(locale, k);
   if (!publicIncidentDataEnabled()) {
@@ -25,26 +32,23 @@ export default async function IncidentsPage() {
       </PageShell>
     );
   }
-  const incidents = await listIncidents(50, { abortSignal: createDatabaseQuerySignal() });
+  const { filters, cursor, issues } = parseIncidentArchiveParams(await searchParams);
+  let incidents: IncidentArchiveRow[] = [];
+  let nextCursor: string | null = null;
+  let failed = false;
+  if (!issues.length) {
+    try {
+      const page = await listIncidentArchivePage(filters, cursor, { abortSignal: createDatabaseQuerySignal() });
+      incidents = page.incidents;
+      nextCursor = page.nextCursor;
+    } catch {
+      failed = true;
+    }
+  }
+  const retryHref = archiveHref(filters, !issues.length && cursor ? encodeIncidentArchiveCursor(cursor, filters) : undefined);
   return (
     <PageShell title={tr("incidents.title")}>
-      {incidents.length === 0 ? (
-        <EmptyState title={tr("incidents.empty.title")} body={tr("incidents.empty.body")} />
-      ) : (
-        <ul className="divide-y divide-neutral-800 bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden">
-          {incidents.map((i) => (
-            <li key={i.id}>
-              <Link href={`/incidents/${i.id}`} className="block px-5 py-4 hover:bg-neutral-800/50">
-                <div className="flex justify-between items-baseline gap-4">
-                  <span className="font-medium">{i.title || i.service || tr("incidents.untitled")}</span>
-                  <span className="text-xs text-neutral-500">{new Date(i.created_at).toLocaleString()}</span>
-                </div>
-                {i.symptoms && <p className="text-sm text-neutral-400 mt-1 line-clamp-2">{i.symptoms}</p>}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <IncidentArchive filters={filters} issues={issues} incidents={incidents} nextCursor={nextCursor} isOlderPage={Boolean(cursor)} failed={failed} locale={locale} retryHref={retryHref} />
     </PageShell>
   );
 }

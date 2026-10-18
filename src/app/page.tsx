@@ -4,12 +4,16 @@ import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { experimental_useObject as useObject } from "@ai-sdk/react";
 import { AnalysisSchema } from "@/lib/schema";
+import type { AnalysisContent } from "@/lib/analysisReview";
+import { AnalysisExport } from "@/components/AnalysisExport";
+import { ResponseWorkspace } from "@/components/ResponseWorkspace";
 import { useT } from "@/lib/i18n/client";
 import { Nav } from "@/components/Nav";
 import { makeUsageCapturingFetch, type StreamUsage } from "@/lib/streamUsage";
 import { readApiError } from "@/lib/http";
 import { StreamingAnalysisView } from "@/components/StreamingAnalysisView";
 import { IncidentInputForm, type IncidentInput } from "@/components/IncidentInputForm";
+import { prepareIncidentSubmission } from "@/lib/incidentPreflight";
 
 const SAMPLE = `Time: 14:02 UTC. payment-svc p99 latency jumped from 120ms to 4.8s.
 Error rate climbed from 0.1% to 12% (mostly 500s).
@@ -32,9 +36,12 @@ export default function Home() {
   const startedRef = useRef<number>(0);
   const usageRef = useRef<StreamUsage | null>(null);
   const submittedInputRef = useRef<IncidentInput | null>(null);
+  const completedRunRef = useRef(0);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [generationStopped, setGenerationStopped] = useState(false);
+  const [inputError, setInputError] = useState<string | null>(null);
+  const [completedReport, setCompletedReport] = useState<{ analysis: AnalysisContent; input: IncidentInput; workspaceId: string } | null>(null);
 
   // Peel the token-usage trailer off the stream before useObject parses the
   // JSON; stash it in a ref for the save call below. The write runs only inside
@@ -56,6 +63,21 @@ export default function Home() {
       if (!object) return;
       const submittedInput = submittedInputRef.current;
       if (!submittedInput) return;
+      const latencyMs = Date.now() - startedRef.current;
+      setCompletedReport({
+        // This key is memory-only, so a fresh per-page run counter also works
+        // for self-hosted HTTP pages where crypto.randomUUID is unavailable.
+        workspaceId: `session:${++completedRunRef.current}`,
+        analysis: {
+          ...object,
+          prompt_version: submittedInput.prompt_version,
+          output_language: submittedInput.output_language,
+          created_at: new Date().toISOString(),
+          latency_ms: latencyMs,
+          ...usageRef.current,
+        },
+        input: { ...submittedInput },
+      });
       setSaving(true);
       setSaveError(null);
       try {
@@ -68,7 +90,7 @@ export default function Home() {
             symptoms: submittedInput.symptoms,
             raw_context: submittedInput.raw_context,
             analysis: object,
-            latency_ms: Date.now() - startedRef.current,
+            latency_ms: latencyMs,
             prompt_version: submittedInput.prompt_version,
             output_language: submittedInput.output_language,
             usage: usageRef.current ?? undefined,
@@ -93,12 +115,22 @@ export default function Home() {
   useEffect(() => () => stop(), [stop]);
 
   function analyze() {
-    submittedInputRef.current = { ...input };
+    const prepared = prepareIncidentSubmission(input);
+    if (!prepared.ok) {
+      const label = prepared.field === "raw_context" ? "home.preflight.context" : `home.field.${prepared.field}`;
+      setInputError(`${t(label)} ${t(prepared.error === "too_long" ? "home.preflight.tooLong" : "home.preflight.tooShort")} (${prepared.limit} ${t("home.characters")})`);
+      return;
+    }
+    const safeInput = prepared.input;
+    setInput(safeInput);
+    setInputError(null);
+    submittedInputRef.current = { ...safeInput };
     usageRef.current = null;
     startedRef.current = Date.now();
     setSaveError(null);
     setGenerationStopped(false);
-    submit(input);
+    setCompletedReport(null);
+    submit(safeInput);
   }
 
   function stopGenerating() {
@@ -106,6 +138,7 @@ export default function Home() {
     submittedInputRef.current = null;
     usageRef.current = null;
     setGenerationStopped(true);
+    setCompletedReport(null);
   }
 
   return (
@@ -134,7 +167,22 @@ export default function Home() {
           generationStopped={generationStopped}
           analysisError={error}
           saveError={saveError}
+          inputError={inputError}
         />
+
+        {completedReport && (
+          <>
+            <AnalysisExport analysis={completedReport.analysis} context={completedReport.input} />
+            {!saving && saveError !== null && (
+              <ResponseWorkspace
+                key={completedReport.workspaceId}
+                workspaceId={completedReport.workspaceId}
+                analysis={completedReport.analysis}
+                context={{ title: completedReport.input.title, service: completedReport.input.service }}
+              />
+            )}
+          </>
+        )}
 
         {object && (
           <div aria-live="polite" aria-busy={isLoading}>

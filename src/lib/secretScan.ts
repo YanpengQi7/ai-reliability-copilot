@@ -12,6 +12,8 @@ export type SecretFinding = {
   line?: number;
 };
 
+export const MAX_SECRET_FINDINGS = 20;
+
 type SecretPattern = { name: string; re: RegExp; accept?: (match: string) => boolean };
 
 function shannonEntropy(value: string): number {
@@ -45,13 +47,23 @@ const PATTERNS: SecretPattern[] = [
   { name: "Google API key",       re: /\bAIza[A-Za-z0-9_-]{35}\b/g },
   { name: "GitLab token",         re: /\bglpat-[A-Za-z0-9_-]{20,}\b/g },
   { name: "Basic auth credential", re: /\bAuthorization\s*:\s*Basic\s+[A-Za-z0-9+/=]{12,}/gi },
+  {
+    name: "Bearer token",
+    re: /\bAuthorization[ \t]*:[ \t]*Bearer[ \t]+[A-Za-z0-9_./+=-]{20,}(?=$|[ \t\r\n"'<>;,])/gi,
+    accept: (match) => looksLikeHighEntropyAssignment(`token=${match.replace(/^Authorization[ \t]*:[ \t]*Bearer[ \t]+/i, "")}`),
+  },
   { name: "Credentialed connection URL", re: /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\/[^\s:/@]+:[^\s/@]+@[^\s]+/gi },
   {
     name: "High-entropy secret assignment",
     re: /\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd)\b\s*[:=]\s*["']?[A-Za-z0-9_./+=-]{20,}["']?/gi,
     accept: looksLikeHighEntropyAssignment,
   },
-  { name: "Private key (PEM)",    re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/g },
+  // An unmatched BEGIN consumes the remaining text: pasted/truncated private
+  // keys must never leave their body behind merely because END is missing.
+  {
+    name: "Private key (PEM)",
+    re: /-----BEGIN ((?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY)-----[\s\S]*?(?:-----END \1-----|$)/g,
+  },
 ];
 
 function redact(match: string): string {
@@ -85,10 +97,16 @@ export function scanForSecrets(text: string): SecretFinding[] {
         acc += lines[i].length + 1;
         if (acc > idx) { lineNum = i + 1; break; }
       }
-      findings.push({ pattern: name, match: redact(m[0]), line: lineNum });
-      if (findings.length >= 20) break; // cap to avoid pathological input
+      findings.push({
+        pattern: name,
+        // Incomplete PEM blocks end in key material, so prefix/suffix previews
+        // would reveal part of the body. Preserve the API with a fixed marker.
+        match: name === "Private key (PEM)" ? "[REDACTED: Private key (PEM)]" : redact(m[0]),
+        line: lineNum,
+      });
+      if (findings.length >= MAX_SECRET_FINDINGS) break;
     }
-    if (findings.length >= 20) break;
+    if (findings.length >= MAX_SECRET_FINDINGS) break;
   }
   return findings;
 }

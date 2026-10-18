@@ -47,9 +47,10 @@ export function createRequestContext(req: Request, operation: string) {
       path,
       duration_ms: Date.now() - startedAt,
     });
-    if (level === "error") console.error(entry);
-    else if (level === "warn") console.warn(entry);
-    else console.log(entry);
+    const redactedEntry = redactSecrets(entry);
+    if (level === "error") console.error(redactedEntry);
+    else if (level === "warn") console.warn(redactedEntry);
+    else console.log(redactedEntry);
   }
 
   return {

@@ -145,7 +145,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       });
     }
   }
-  return ctx.response(NextResponse.json({ ok: true, latency_ms: latency }), {
+  return ctx.response(NextResponse.json({ ok: true, analysis_id: anaRow.id, latency_ms: latency }), {
     incident_id: id,
     prompt_version: version,
     output_language: language,

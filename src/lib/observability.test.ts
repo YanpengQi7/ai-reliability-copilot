@@ -67,6 +67,25 @@ describe("createRequestContext", () => {
     });
     expect(JSON.stringify(entry)).not.toContain("do-not-log");
   });
+
+  it("redacts secret-like custom log fields at the logging boundary", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const secret = "sk-" + "a".repeat(30);
+    const ctx = createRequestContext(new Request("https://example.test"), "test");
+
+    ctx.log("warn", "provider_warning", {
+      detail: `Authorization failed for token ${secret}`,
+    });
+
+    const line = String(warn.mock.calls[0]?.[0]);
+    expect(line).not.toContain(secret);
+    expect(line).toContain("[REDACTED: OpenAI API key]");
+    expect(JSON.parse(line)).toMatchObject({
+      level: "warn",
+      event: "provider_warning",
+      operation: "test",
+    });
+  });
 });
 
 describe("safeErrorDetail", () => {

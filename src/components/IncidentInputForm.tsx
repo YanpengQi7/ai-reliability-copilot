@@ -12,6 +12,9 @@ import {
   validateImageFile,
 } from "@/lib/requestSafety";
 import { readApiError } from "@/lib/http";
+import { ContextFileImport } from "./ContextFileImport";
+import { IncidentCredentialReview } from "./IncidentCredentialReview";
+import { composeImportedContext, type ContextAttachment } from "@/lib/contextFiles";
 
 export type PromptVersion = "v1" | "v2" | "v3";
 
@@ -36,6 +39,7 @@ export function IncidentInputForm({
   generationStopped,
   analysisError,
   saveError,
+  inputError,
 }: {
   value: IncidentInput;
   onChange: Dispatch<SetStateAction<IncidentInput>>;
@@ -46,13 +50,17 @@ export function IncidentInputForm({
   generationStopped: boolean;
   analysisError?: Error;
   saveError: string | null;
+  inputError?: string | null;
 }) {
   const t = useT();
   const [parseNotice, setParseNotice] = useState<string | null>(null);
   const [visionStatus, setVisionStatus] = useState<VisionStatus>({ kind: "idle" });
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const rawRef = useRef(value.raw_context);
   const visionAbortRef = useRef<AbortController | null>(null);
-  const disabled = isLoading || isSaving || visionStatus.kind === "uploading";
+  const externalBusy = isLoading || isSaving || visionStatus.kind === "uploading";
+  const disabled = externalBusy || importBusy;
 
   useEffect(() => {
     rawRef.current = value.raw_context;
@@ -126,12 +134,17 @@ export function IncidentInputForm({
       setParseNotice(t("home.notRecognized"));
       return;
     }
-    update({
-      title: parsed.title ?? value.title,
-      service: parsed.service ?? value.service,
-      symptoms: parsed.symptoms ?? value.symptoms,
+    const fields = {
+      title: typeof parsed.title === "string" ? parsed.title : value.title,
+      service: typeof parsed.service === "string" ? parsed.service : value.service,
+      symptoms: typeof parsed.symptoms === "string" ? parsed.symptoms : value.symptoms,
       raw_context: parsed.raw_context || value.raw_context,
-    });
+    };
+    if ([fields.title, fields.service, fields.symptoms].some((field) => field.length > INPUT_LIMITS.shortText) || fields.raw_context.length > INPUT_LIMITS.rawContext) {
+      setParseNotice(t("home.alertTooLong"));
+      return;
+    }
+    update(fields);
     setParseNotice(`${t("home.parsed")} ${parsed.source}`);
   }
 
@@ -156,8 +169,24 @@ export function IncidentInputForm({
     setParseNotice(`${t("home.parsed")} ${parsed.source}`);
   }
 
+  function applyFiles(attachments: ContextAttachment[], mode: "append" | "replace") {
+    const composed = composeImportedContext(value.raw_context, attachments, mode);
+    if (!composed.ok) {
+      setImportError(t("home.contextTooLong"));
+      return;
+    }
+    onChange((current) => {
+      const result = composeImportedContext(current.raw_context, attachments, mode);
+      return result.ok ? { ...current, raw_context: result.text } : current;
+    });
+    setImportError(null);
+    setParseNotice(null);
+  }
+
   return (
     <section className="grid gap-4 bg-neutral-900 border border-neutral-800 rounded-xl p-5">
+      <ContextFileImport rawContext={value.raw_context} disabled={externalBusy} onApply={applyFiles} onBusyChange={setImportBusy} />
+      {importError && <p role="alert" className="text-sm text-amber-300">{importError}</p>}
       <fieldset disabled={disabled} className="contents disabled:opacity-70">
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-neutral-400">{t("home.field.title")}</span>
@@ -233,7 +262,7 @@ export function IncidentInputForm({
             {value.raw_context.length.toLocaleString()} / {INPUT_LIMITS.rawContext.toLocaleString()} {t("home.characters")}
           </span>
           {parseNotice && (
-            <span className={`text-xs ${parseNotice.includes(t("home.notRecognized")) ? "text-amber-400" : "text-emerald-400"}`}>
+            <span className={`text-xs ${parseNotice === t("home.notRecognized") || parseNotice === t("home.alertTooLong") ? "text-amber-400" : "text-emerald-400"}`}>
               {parseNotice}
             </span>
           )}
@@ -259,6 +288,8 @@ export function IncidentInputForm({
             </span>
           </div>
         </label>
+
+        <IncidentCredentialReview value={value} onChange={onChange} disabled={disabled} />
 
         <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-1 text-xs">
@@ -321,6 +352,7 @@ export function IncidentInputForm({
           {analysisError.message?.includes("MISSING_API_KEY") ? t("home.errorMissingKey") : `${t("common.error")}: ${analysisError.message}`}
         </p>
       )}
+      {inputError && <p role="alert" className="text-sm text-amber-300">{inputError}</p>}
       {saveError && (
         <div role="alert" className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
           <p className="font-medium">{t("home.analysisNotSaved")}</p>

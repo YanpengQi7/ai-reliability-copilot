@@ -5,6 +5,9 @@ import { getIncidentWithAnalyses, hasSupabase, type AnalysisRow } from "@/lib/db
 import { CopyButton } from "@/components/CopyButton";
 import { ReRunButton } from "@/components/ReRunButton";
 import { EvaluateButton } from "@/components/EvaluateButton";
+import { AnalysisComparison } from "@/components/AnalysisComparison";
+import { AnalysisExport } from "@/components/AnalysisExport";
+import { ResponseWorkspace } from "@/components/ResponseWorkspace";
 import { Nav } from "@/components/Nav";
 import { getLocale } from "@/lib/i18n/server";
 import { t } from "@/lib/i18n/messages";
@@ -13,10 +16,16 @@ import { buildSignature } from "@/lib/embeddings";
 import { supabaseAdmin } from "@/lib/supabase";
 import { publicIncidentDataEnabled } from "@/lib/incidentAccess";
 import { createDatabaseQuerySignal } from "@/lib/databaseDeadline";
+import { resolveAnalysisSelection } from "@/lib/analysisSelection";
+import { normalizeAnalysisContent } from "@/lib/analysisReview";
+import { savedResponseWorkspaceId } from "@/lib/responseWorkspaceIdentity";
 
 export const dynamic = "force-dynamic";
 
-export default async function IncidentDetail({ params }: { params: Promise<{ id: string }> }) {
+export default async function IncidentDetail({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ analysis?: string | string[]; compare?: string | string[] }>;
+}) {
   const { id } = await params;
   if (!publicIncidentDataEnabled()) return notFound();
   const locale = await getLocale();
@@ -29,6 +38,8 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
   if (!data) return notFound();
   const { incident, analyses } = data;
   const latest = analyses[0];
+  const { selected, baseline, invalidSelection } = resolveAnalysisSelection(analyses, await searchParams);
+  const workspaceId = selected ? savedResponseWorkspaceId(incident.id, selected) : null;
 
   // Similar incidents — best-effort, never blocks page render
   const similarQuery = buildSignature({
@@ -40,15 +51,15 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
   });
   const similar = await findSimilarIncidents(similarQuery, { excludeId: incident.id, limit: 5, abortSignal: databaseSignal });
 
-  // Knowledge chunks that the latest analysis used (audit trail from analysis_kb_chunks)
+  // Bind the evidence audit to the displayed analysis, including historical runs.
   type UsedChunk = { chunk_id: string; similarity: number; rank: number; kb_chunks: { text: string; kb_documents: { title: string | null; source_path: string; kind: string } } };
   let usedChunks: UsedChunk[] = [];
-  if (latest) {
+  if (selected) {
     const sb = supabaseAdmin();
     const { data } = await sb
       .from("analysis_kb_chunks")
       .select("chunk_id, similarity, rank, kb_chunks(text, kb_documents(title, source_path, kind))")
-      .eq("analysis_id", latest.id)
+      .eq("analysis_id", selected.id)
       .order("rank")
       .abortSignal(databaseSignal);
     usedChunks = (data ?? []) as unknown as UsedChunk[];
@@ -66,19 +77,60 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
       </header>
 
       <Card title={tr("detail.rawContext")}>
-        <pre className="text-xs text-neutral-300 whitespace-pre-wrap font-mono">{incident.raw_context}</pre>
+        <pre className="max-h-80 overflow-auto text-xs text-neutral-300 whitespace-pre-wrap break-words font-mono">{incident.raw_context}</pre>
         <div className="mt-3">
           <ReRunButton incidentId={incident.id} />
         </div>
       </Card>
 
-      {!latest && <p className="text-neutral-400">{tr("detail.noAnalyses")}</p>}
-      {latest && (
+      {!selected && <p className="text-neutral-400">{tr("detail.noAnalyses")}</p>}
+      {selected && (
         <>
+          <Card title={tr("detail.review.title")}>
+            <p className="mb-4 text-sm text-neutral-400">{tr("detail.review.body")}</p>
+            <form key={`${selected.id}:${baseline?.id ?? ""}`} action={`/incidents/${incident.id}`} method="get" className="flex flex-wrap items-end gap-3">
+              <label className="flex min-w-0 flex-1 basis-64 flex-col gap-1 text-sm">
+                <span className="text-neutral-400">{tr("detail.review.selected")}</span>
+                <select name="analysis" defaultValue={selected.id} className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2">
+                  {analyses.map((analysis, index) => (
+                    <option key={analysis.id} value={analysis.id}>
+                      {analysisLabel(analysis, locale)}{index === 0 ? ` · ${tr("detail.review.latest")}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex min-w-0 flex-1 basis-64 flex-col gap-1 text-sm">
+                <span className="text-neutral-400">{tr("detail.review.baseline")}</span>
+                <select name="compare" defaultValue={baseline?.id ?? ""} className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2">
+                  <option value="">{tr("detail.review.none")}</option>
+                  {analyses.map((analysis) => <option key={analysis.id} value={analysis.id}>{analysisLabel(analysis, locale)}</option>)}
+                </select>
+              </label>
+              <button type="submit" className="rounded-md bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-400">{tr("detail.review.open")}</button>
+            </form>
+            {invalidSelection && <p role="status" className="mt-3 text-sm text-amber-300">{tr("detail.review.invalid")}</p>}
+            {selected.id !== latest?.id && (
+              <p className="mt-3 text-sm text-amber-300">
+                {tr("detail.review.previous")} · <Link href={`/incidents/${incident.id}`} className="underline underline-offset-2">{tr("detail.review.backToLatest")}</Link>
+              </p>
+            )}
+          </Card>
+          {baseline && <AnalysisComparison baseline={baseline} current={selected} locale={locale} />}
+          <AnalysisExport key={selected.id} analysis={selected} context={incident} locale={locale} />
+          {workspaceId && (
+            <ResponseWorkspace
+              key={workspaceId}
+              workspaceId={workspaceId}
+              analysis={selected}
+              context={{ id: incident.id, title: incident.title, service: incident.service }}
+              persistenceAvailable
+              locale={locale}
+            />
+          )}
           <div className="flex items-center justify-end">
-            <EvaluateButton analysisId={latest.id} />
+            <EvaluateButton key={selected.id} analysisId={selected.id} />
           </div>
-          <AnalysisCard a={latest} locale={locale} />
+          <AnalysisCard a={selected} locale={locale} />
         </>
       )}
 
@@ -123,30 +175,13 @@ export default async function IncidentDetail({ params }: { params: Promise<{ id:
         </Card>
       )}
 
-      {analyses.length > 1 && (
-        <details className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-sm">
-          <summary className="cursor-pointer text-neutral-300">{analyses.length - 1} {tr("detail.earlierVersions")}</summary>
-          <ul className="mt-3 space-y-2 text-neutral-400">
-            {analyses.slice(1).map((a) => (
-              <li key={a.id} className="flex items-center gap-2">
-                <span className="text-xs px-1.5 py-0.5 rounded border border-neutral-700">{a.prompt_version}</span>
-                {a.output_language && (
-                  <span className="text-xs px-1.5 py-0.5 rounded border border-emerald-500/30 text-emerald-300">{a.output_language}</span>
-                )}
-                <span>{a.severity}</span>
-                <span>·</span>
-                <span>{a.model}</span>
-                <span>·</span>
-                <span>{new Date(a.created_at).toLocaleString()}</span>
-                <span>·</span>
-                <span>{a.latency_ms}ms</span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
     </Shell>
   );
+}
+
+function analysisLabel(analysis: AnalysisRow, locale: "en" | "zh") {
+  const date = new Date(analysis.created_at).toLocaleString(locale === "zh" ? "zh-CN" : "en-US", { timeZone: "UTC" });
+  return [analysis.prompt_version, analysis.output_language, analysis.severity, `${date} UTC`, analysis.id.slice(0, 8)].filter(Boolean).join(" · ");
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
@@ -183,21 +218,13 @@ function SeverityBadge({ s }: { s?: string | null }) {
   return <span className={`inline-block text-xs px-2 py-1 rounded border ${color}`}>{s}</span>;
 }
 
-type RootCause = { hypothesis?: string; evidence?: string; likelihood?: string };
-type Step = { step?: string; command?: string; expected?: string };
-type Mitig = { action?: string; risk?: string; rollback?: string };
-type Follow = { item?: string; owner_role?: string; priority?: string };
-
-function asArr<T>(v: unknown): T[] {
-  return Array.isArray(v) ? (v as T[]) : [];
-}
-
 function AnalysisCard({ a, locale }: { a: AnalysisRow; locale: "en" | "zh" }) {
   const tr = (k: string) => t(locale, k);
-  const rcs = asArr<RootCause>(a.root_causes);
-  const checklist = asArr<Step>(a.investigation_checklist);
-  const mitigation = asArr<Mitig>(a.mitigation_plan);
-  const follow = asArr<Follow>(a.follow_ups);
+  const content = normalizeAnalysisContent(a);
+  const rcs = content.root_causes;
+  const checklist = content.investigation_checklist;
+  const mitigation = content.mitigation_plan;
+  const follow = content.follow_ups;
   // flex+w-full instead of bare `grid gap-4`: eliminates any chance that
   // Tailwind v4's grid without explicit cols sizes children to content,
   // and uses gap-6 to match the page-level `space-y-6` so the AI sub-cards

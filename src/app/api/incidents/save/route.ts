@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   if (!rl.allowed) {
     return ctx.response(withRateLimitHeaders(apiError(429, "RATE_LIMITED", `Retry in ${rl.retryAfterSec}s.`, { requestId: ctx.requestId }), rl));
   }
-  const bodyResult = await readJsonBody(req, INPUT_LIMITS.rawContext * 4);
+  const bodyResult = await readJsonBody(req, INPUT_LIMITS.analysisSaveBytes);
   if (!bodyResult.ok && bodyResult.error === "payload_too_large") {
     return ctx.response(apiError(413, "PAYLOAD_TOO_LARGE", "Request body is too large.", { requestId: ctx.requestId }));
   }

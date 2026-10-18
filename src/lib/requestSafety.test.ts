@@ -77,6 +77,33 @@ describe("bounded request body readers", () => {
     await expect(readTextBody(req, 5)).resolves.toEqual({ ok: false, error: "payload_too_large" });
   });
 
+  it.each(["故", "\u0000"])("accepts a full-length incident containing multibyte or JSON-escaped text: %s", async (character) => {
+    const input = {
+      title: character.repeat(INPUT_LIMITS.shortText),
+      service: character.repeat(INPUT_LIMITS.shortText),
+      symptoms: character.repeat(INPUT_LIMITS.shortText),
+      raw_context: character.repeat(INPUT_LIMITS.rawContext),
+      prompt_version: "v3",
+      output_language: "zh",
+    };
+    const body = JSON.stringify(input);
+    expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(INPUT_LIMITS.rawContext * 2);
+    const req = new Request("https://example.com/api/analyze", { method: "POST", body });
+    await expect(readJsonBody(req, INPUT_LIMITS.analysisRequestBytes)).resolves.toEqual({ ok: true, value: input });
+  });
+
+  it("leaves room to save accepted terminal logs together with a multilingual report", async () => {
+    const payload = {
+      raw_context: "\u001b".repeat(INPUT_LIMITS.rawContext),
+      analysis: { postmortem_draft: "故障复盘".repeat(10_000) },
+      usage: { tokens_in: 1_000, tokens_out: 2_000, cost_usd: 0.002 },
+    };
+    const body = JSON.stringify(payload);
+    expect(new TextEncoder().encode(body).byteLength).toBeGreaterThan(INPUT_LIMITS.rawContext * 4);
+    const req = new Request("https://example.com/api/incidents/save", { method: "POST", body });
+    await expect(readJsonBody(req, INPUT_LIMITS.analysisSaveBytes)).resolves.toEqual({ ok: true, value: payload });
+  });
+
   it("parses valid JSON and classifies malformed JSON", async () => {
     const valid = new Request("https://example.com", { method: "POST", body: JSON.stringify({ ok: true }) });
     const invalid = new Request("https://example.com", { method: "POST", body: "{nope" });
