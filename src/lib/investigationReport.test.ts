@@ -66,14 +66,15 @@ describe("dedicated investigation report", () => {
   });
 
   it("exports a sanitized custom incident identity without exporting its raw context", () => {
-    const reportContext = { scenario_slug: "custom", title: "Checkout latency", service: "checkout", requested_language: "en" as const };
+    const reportContext = { scenario_slug: "custom", title: "Checkout latency", service: "checkout", requested_language: "en" as const, max_steps_requested: 12 };
     const jsonText = buildInvestigationJson(result, reportContext);
     const json = JSON.parse(jsonText);
-    expect(json.context).toMatchObject({ scenario_slug: "custom", title: "Checkout latency", service: "checkout" });
+    expect(json.context).toMatchObject({ scenario_slug: "custom", title: "Checkout latency", service: "checkout", max_steps_requested: 12 });
     expect(jsonText).not.toContain("RAW_EVIDENCE_TEXT_ONLY");
     const markdown = buildInvestigationMarkdown(result, reportContext);
     expect(markdown).toContain("**Incident title:** Checkout latency");
     expect(markdown).toContain("**Service:** checkout");
+    expect(markdown).toContain("**Requested maximum investigation steps:** 12");
   });
 
   it("exports all presentation sections and diagnosis evidence/refutations without filling invented content", () => {

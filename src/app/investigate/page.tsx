@@ -32,7 +32,7 @@ const LABELS = {
   en: {
     title: "Incident investigator", subtitle: "Start with an alert. The investigator gathers metrics, logs, deployment history, and runbooks, then records its checks and the evidence behind its conclusions.",
     scenario: "Investigation scenario", custom: "Custom incident", sample: "Sample scenario", titleField: "Incident title", serviceField: "Service", symptomsField: "Symptoms / alert", contextField: "Incident context", contextHelp: "Paste an alert, timeline, logs, or other evidence. User-provided details are treated as unverified context.",
-    output: "Investigation output language", run: "Run investigation", stop: "Stop investigation", characters: "characters", customReport: "Custom incident", untitled: "Untitled incident", inputTooLong: "is over the allowed length", inputTooShort: "must contain at least 20 characters", finishImport: "Finish or discard the file import before starting the investigation.",
+    output: "Investigation output language", depth: "Investigation depth", focused: "Focused · 3 steps", standard: "Standard · 8 steps", thorough: "Thorough · 12 steps", run: "Run investigation", stop: "Stop investigation", characters: "characters", customReport: "Custom incident", untitled: "Untitled incident", inputTooLong: "is over the allowed length", inputTooShort: "must contain at least 20 characters", finishImport: "Finish or discard the file import before starting the investigation.",
     loading: "Gathering evidence and preparing the report…", stopped: "Investigation stopped. Run again to produce a report.", failed: "Investigation failed",
     trace: "Investigation trace", structured: "Structured response", snapshot: "Report scenario", requested: "Requested output", unknown: "Unknown severity",
     diagnosis: "Diagnosis status", claims: "Claims and citations", noClaims: "No factual claims recorded.",
@@ -46,7 +46,7 @@ const LABELS = {
   zh: {
     title: "故障调查", subtitle: "从告警开始。调查员收集指标、日志、部署历史和运维手册，并记录排查步骤与结论所引用的证据。",
     scenario: "调查场景", custom: "自定义故障", sample: "示例场景", titleField: "故障标题", serviceField: "服务", symptomsField: "症状 / 告警", contextField: "故障上下文", contextHelp: "粘贴告警、时间线、日志或其他证据。用户提供的信息将作为未经独立验证的上下文处理。",
-    output: "调查输出语言", run: "开始调查", stop: "停止调查", characters: "字符", customReport: "自定义故障", untitled: "未命名故障", inputTooLong: "超过允许的长度", inputTooShort: "至少需要 20 个字符", finishImport: "请先完成或丢弃文件导入，再开始调查。",
+    output: "调查输出语言", depth: "调查深度", focused: "快速 · 3 步", standard: "标准 · 8 步", thorough: "深入 · 12 步", run: "开始调查", stop: "停止调查", characters: "字符", customReport: "自定义故障", untitled: "未命名故障", inputTooLong: "超过允许的长度", inputTooShort: "至少需要 20 个字符", finishImport: "请先完成或丢弃文件导入，再开始调查。",
     loading: "正在收集证据并生成报告…", stopped: "调查已停止。请重新运行以生成报告。", failed: "调查失败",
     trace: "调查记录", structured: "结构化响应", snapshot: "报告场景", requested: "请求的输出语言", unknown: "严重等级未知",
     diagnosis: "诊断状态", claims: "结论与引用", noClaims: "未记录事实性结论。",
@@ -222,6 +222,7 @@ export default function InvestigatePage() {
   const [customInput, setCustomInput] = useState<IncidentInput>({ title: "", service: "", symptoms: "", raw_context: "", prompt_version: "v3", output_language: "en" });
   const [importBusy, setImportBusy] = useState(false);
   const [lang, setLang] = useState<"en" | "zh">("en");
+  const [maxSteps, setMaxSteps] = useState(8);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<{ result: InvestigationResult; context: InvestigationReportContext; runId: number } | null>(null);
@@ -241,7 +242,7 @@ export default function InvestigatePage() {
       setError(labels.finishImport);
       return;
     }
-    let requestBody: Record<string, string>;
+    let requestBody: Record<string, string | number>;
     let context: InvestigationReportContext;
     if (mode === "custom") {
       const prepared = prepareIncidentSubmission({ ...customInput, output_language: lang });
@@ -251,11 +252,11 @@ export default function InvestigatePage() {
         return;
       }
       setCustomInput(prepared.input);
-      context = { scenario_slug: "custom", title: prepared.input.title || labels.untitled, service: prepared.input.service, requested_language: lang };
-      requestBody = { title: prepared.input.title, service: prepared.input.service, symptoms: prepared.input.symptoms, raw_context: prepared.input.raw_context, output_language: lang };
+      context = { scenario_slug: "custom", title: prepared.input.title || labels.untitled, service: prepared.input.service, requested_language: lang, max_steps_requested: maxSteps };
+      requestBody = { title: prepared.input.title, service: prepared.input.service, symptoms: prepared.input.symptoms, raw_context: prepared.input.raw_context, output_language: lang, max_steps: maxSteps };
     } else {
-      context = { scenario_slug: slug, requested_language: lang };
-      requestBody = { scenario_slug: slug, output_language: lang };
+      context = { scenario_slug: slug, requested_language: lang, max_steps_requested: maxSteps };
+      requestBody = { scenario_slug: slug, output_language: lang, max_steps: maxSteps };
     }
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -328,6 +329,11 @@ export default function InvestigatePage() {
             <option value="en">Output: English</option>
             <option value="zh">输出：中文</option>
           </select>
+          <select aria-label={labels.depth} value={maxSteps} disabled={loading} onChange={(e) => setMaxSteps(Number(e.target.value))} className="min-w-0 rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-200 disabled:opacity-50">
+            <option value={3}>{labels.focused}</option>
+            <option value={8}>{labels.standard}</option>
+            <option value={12}>{labels.thorough}</option>
+          </select>
           <button
             type="button"
             onClick={loading ? stop : run}
@@ -367,7 +373,7 @@ export default function InvestigatePage() {
 
         {result && snapshot && (
           <div className="flex flex-col gap-6">
-            <p className="text-sm text-neutral-400">{labels.snapshot}: {snapshot.context.scenario_slug === "custom" ? `${labels.customReport}${snapshot.context.title ? ` · ${snapshot.context.title}` : ""}${snapshot.context.service ? ` (${snapshot.context.service})` : ""}` : SCENARIO_OPTIONS.find(option => option.slug === snapshot.context.scenario_slug)?.label[locale] ?? snapshot.context.scenario_slug} · {labels.requested}: {snapshot.context.requested_language}</p>
+            <p className="text-sm text-neutral-400">{labels.snapshot}: {snapshot.context.scenario_slug === "custom" ? `${labels.customReport}${snapshot.context.title ? ` · ${snapshot.context.title}` : ""}${snapshot.context.service ? ` (${snapshot.context.service})` : ""}` : SCENARIO_OPTIONS.find(option => option.slug === snapshot.context.scenario_slug)?.label[locale] ?? snapshot.context.scenario_slug} · {labels.requested}: {snapshot.context.requested_language} · {labels.depth}: {snapshot.context.max_steps_requested}</p>
             <div className="flex flex-wrap gap-x-6 gap-y-1 rounded-xl border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
               <span>{labels.stopReason}: <b className="text-neutral-200">{result.stop_reason}</b></span>
               <span>{labels.steps}: <b className="text-neutral-200">{result.steps}</b></span>
