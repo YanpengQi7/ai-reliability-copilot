@@ -135,6 +135,27 @@ export function IncidentInputForm({
     setParseNotice(`${t("home.parsed")} ${parsed.source}`);
   }
 
+  function loadSample(payload: object) {
+    const rawContext = JSON.stringify(payload, null, 2);
+    const parsed = tryParseAlert(rawContext);
+    if (!parsed) {
+      setParseNotice(t("home.notRecognized"));
+      return;
+    }
+    const fields = {
+      title: typeof parsed.title === "string" ? parsed.title : value.title,
+      service: typeof parsed.service === "string" ? parsed.service : value.service,
+      symptoms: typeof parsed.symptoms === "string" ? parsed.symptoms : value.symptoms,
+      raw_context: parsed.raw_context || rawContext,
+    };
+    if ([fields.title, fields.service, fields.symptoms].some((field) => field.length > INPUT_LIMITS.shortText) || fields.raw_context.length > INPUT_LIMITS.rawContext) {
+      setParseNotice(t("home.alertTooLong"));
+      return;
+    }
+    update(fields);
+    setParseNotice(`${t("home.parsed")} ${parsed.source}`);
+  }
+
   return (
     <section className="grid gap-4 bg-neutral-900 border border-neutral-800 rounded-xl p-5">
       <fieldset disabled={disabled} className="contents disabled:opacity-70">
@@ -175,10 +196,7 @@ export function IncidentInputForm({
             <button
               key={sample.label}
               type="button"
-              onClick={() => {
-                update({ raw_context: JSON.stringify(sample.payload, null, 2) });
-                setParseNotice(null);
-              }}
+              onClick={() => loadSample(sample.payload)}
               className="px-2 py-1 rounded border border-neutral-700 text-neutral-300 hover:border-neutral-500"
             >
               {sample.label}
